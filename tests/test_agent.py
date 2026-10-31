@@ -1,15 +1,18 @@
 """The agent loop, driven by a scripted model that misbehaves on purpose."""
 
+import re
+from datetime import timedelta
+
 import pytest
 from sqlalchemy import func, select
 
 from jalboot.agent.loop import MAX_STEPS, SupportAgent
-from jalboot.db.models import Order, Refund
+from jalboot.db.models import Customer, Order, Refund
 from jalboot.kb.store import KnowledgeBase, load_passages
 from jalboot.llm.cache import BudgetExhausted
 from jalboot.llm.client import LLMError, LLMReply, RateLimited, ToolCall
-from jalboot.llm.mock import MockPlanner
-from tests.conftest import make_conversation, tools_for
+from jalboot.llm.mock import MockPlanner, Turn
+from tests.conftest import ANCHOR, make_conversation, tools_for
 
 KB = KnowledgeBase(load_passages())
 
@@ -349,3 +352,50 @@ def test_a_cancelled_order_can_be_called_cancelled_after_tracking_it(db, layla):
     db.commit()
     script = Script(call("track_order", order_id="JB-700101"), LLMReply("Your order was cancelled."))
     assert run(script, layla, "where is JB-700101").reply == "Your order was cancelled."
+
+
+@pytest.mark.parametrize("source,reply", [
+    ("- **Missing item:** paid for but not in the bag. Refund the net price.", "Missing item: paid for but not in the bag. [1]"),
+    ("**Allowed once per order, before `picked_up`,** if the pin is close.", "Allowed once per order, before picked_up, if the pin is close. [1]"),
+    ("1. Tell them to contact emergency services at once.\n2. Stop any refund.", "Tell them to contact emergency services at once. [1]"),
+])
+def test_mock_mode_quotes_a_source_without_its_markdown(source, reply):
+    assert MockPlanner()._plan_question(Turn(sources=[{"text": source}]), None, "").content == reply
+
+
+def test_mock_mode_never_quotes_markdown_from_the_real_policy():
+    for passage in KB.all_passages:
+        content = MockPlanner()._plan_question(Turn(sources=[{"text": passage.text}]), None, "").content
+        assert "**" not in content and "`" not in content, passage.id
+        assert not re.match(r"\d+\.", content), passage.id
+
+
+def test_mock_mode_does_not_claim_credit_on_a_delay_too_old_to_pay(db):
+    tools = tools_for(db, make_conversation(db), now=ANCHOR + timedelta(hours=30))
+    wallet = db.get(Customer, "C-1001").wallet_dh
+    for text, language in (("JB-700104 was so late", "en"), ("طلبي JB-700104 تأخر كثير", "ar")):
+        result = run(MockPlanner(), tools, text, language=language)
+        assert "added" not in result.reply and "أضفنا" not in result.reply
+        assert "QAR" not in result.reply and "ر.ق" not in result.reply
+    assert db.get(Customer, "C-1001").wallet_dh == wallet
+
+
+@pytest.mark.parametrize("language,expected,claimed", [
+    ("en", "That is outside the reporting window", "I added"),
+    ("ar", "انتهت مهلة الإبلاغ", "أضفنا"),
+])
+def test_mock_mode_gives_the_reason_a_credit_was_refused(language, expected, claimed):
+    first = {"order_id": "JB-1", "minutes_late": 45, "late_credit_due_qar": 10.0}
+    refused_credit = {"ok": False, "error": "outside_reporting_window"}
+    turn = Turn(language=language, results=[("explain_delay", first), ("issue_credit", refused_credit)])
+    text = MockPlanner()._late_text(turn, first)
+    assert expected in text
+    assert claimed not in text
+
+
+def test_mock_mode_does_not_call_a_credit_under_review_unqualified():
+    first = {"order_id": "JB-1", "minutes_late": 45, "late_credit_due_qar": 10.0}
+    pending = {"ok": True, "status": "pending_approval", "amount_qar": 10.0}
+    text = MockPlanner()._late_text(Turn(results=[("explain_delay", first), ("issue_credit", pending)]), first)
+    assert "does not qualify" not in text
+    assert "A person will decide" in text
