@@ -240,5 +240,5 @@
   "model": "mock",
   "stopped_early": null,
   "sampled": false,
-  "retrieval_note": "Mock mode: a keyword planner, not a model."
+  "note": "Mock mode: a keyword planner, not a model."
 }

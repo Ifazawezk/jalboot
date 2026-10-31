@@ -107,7 +107,11 @@ def main(argv: list[str] | None = None) -> int:
 
     model = "mock" if args.mode == "mock" else llm.model.replace("/", "-")
     name = f"{args.split}-{args.system}-{model}"
-    path = RUNS / f"{name}.jsonl"
+    # Records are only resumed for the same version. A run must never mix results
+    # from code that has since changed.
+    path = RUNS / f"{name}-v{args.version}.jsonl"
+    if args.mode == "mock" and path.exists():
+        path.unlink()
     if args.split == "test":
         note_test_run(args.version, args.why)
     done, stopped = run_cases(runner, cases, path, lambda case_id: print("done", case_id, flush=True))
@@ -118,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     report.update(
         system=args.system, mode=args.mode, model=model, stopped_early=stopped, sampled=bool(args.sample),
-        retrieval_note="" if args.mode == "llm" else "Mock mode: a keyword planner, not a model.",
+        note="" if args.mode == "llm" else "Mock mode: a keyword planner, not a model.",
     )
     RESULTS.mkdir(parents=True, exist_ok=True)
     out = RESULTS / f"{name}.json"
