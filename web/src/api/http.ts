@@ -178,7 +178,10 @@ export function createHttpApi(
           }
         } catch (error) {
           if (controller.signal.aborted) return;
-          if (error instanceof ApiError && error.status >= 400 && error.status < 500) return;
+          // A 4xx will not change by trying again, except too many streams, which passes.
+          if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 429) {
+            return;
+          }
         }
         const delay = backoffMs(attempt);
         attempt += 1;

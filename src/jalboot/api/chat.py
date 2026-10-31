@@ -98,6 +98,12 @@ def publish_refund(runtime: Runtime, session: Session, approval: Approval, event
     })
 
 
+def conversation_open(runtime: Runtime, conversation_id: str) -> bool:
+    with runtime.sessions() as session:
+        conversation = session.get(Conversation, conversation_id)
+        return conversation is not None and conversation.status != "closed"
+
+
 def last_audit_seq(session: Session) -> int:
     return session.scalar(select(AuditEvent.seq).order_by(AuditEvent.seq.desc()).limit(1)) or 0
 

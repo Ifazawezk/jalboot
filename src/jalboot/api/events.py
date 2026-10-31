@@ -14,20 +14,30 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from collections import deque
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 QUEUE_LIMIT = 256
 HISTORY_LIMIT = 200
 KEEPALIVE_SECONDS = 15.0
+# A page needs one stream. The extra room covers a reconnect that arrives before the
+# server has noticed the old connection dropped.
+MAX_STREAMS_PER_CONVERSATION = 3
+MAX_STREAMS_PER_CLIENT = 20
 CLOSED = object()
 
 
+class TooManyStreams(Exception):
+    pass
+
+
 class Subscription:
-    def __init__(self, broker: "Broker", topic: str, loop: asyncio.AbstractEventLoop):
+    def __init__(self, broker: "Broker", topic: str, loop: asyncio.AbstractEventLoop, client: str | None = None):
         self.broker = broker
         self.topic = topic
         self.loop = loop
+        self.client = client
         self.queue: asyncio.Queue[Any] = asyncio.Queue(QUEUE_LIMIT)
 
     def _put(self, item: Any) -> None:
@@ -52,12 +62,21 @@ class Broker:
         self._topics: dict[str, set[Subscription]] = {}
         self._history: dict[str, deque[tuple[int, dict[str, Any]]]] = {}
         self._counters: dict[str, int] = {}
+        self._clients: dict[str, int] = {}
 
-    def subscribe(self, topic: str, after: int | None = None) -> Subscription:
+    def subscribe(
+        self, topic: str, after: int | None = None, *, client: str | None = None, topic_limit: int | None = None,
+    ) -> Subscription:
         """Registers first and replays second, under the lock, so an event published in
-        between is neither lost nor sent twice."""
-        subscription = Subscription(self, topic, asyncio.get_running_loop())
+        between is neither lost nor sent twice. Raises TooManyStreams at a limit."""
+        subscription = Subscription(self, topic, asyncio.get_running_loop(), client)
         with self._lock:
+            if topic_limit is not None and len(self._topics.get(topic, ())) >= topic_limit:
+                raise TooManyStreams
+            if client is not None:
+                if self._clients.get(client, 0) >= MAX_STREAMS_PER_CLIENT:
+                    raise TooManyStreams
+                self._clients[client] = self._clients.get(client, 0) + 1
             self._topics.setdefault(topic, set()).add(subscription)
             if after is not None:
                 for event_id, event in self._history.get(topic, ()):
@@ -68,10 +87,17 @@ class Broker:
     def unsubscribe(self, subscription: Subscription) -> None:
         with self._lock:
             members = self._topics.get(subscription.topic)
-            if members is not None:
-                members.discard(subscription)
-                if not members:
-                    del self._topics[subscription.topic]
+            if members is None or subscription not in members:
+                return
+            members.discard(subscription)
+            if not members:
+                del self._topics[subscription.topic]
+            if subscription.client is not None:
+                left = self._clients[subscription.client] - 1
+                if left:
+                    self._clients[subscription.client] = left
+                else:
+                    del self._clients[subscription.client]
 
     def publish(self, topic: str, event: dict[str, Any]) -> int:
         with self._lock:
@@ -91,6 +117,10 @@ class Broker:
         with self._lock:
             return len(self._topics.get(topic, ()))
 
+    def client_count(self, client: str) -> int:
+        with self._lock:
+            return self._clients.get(client, 0)
+
 
 def sse_frame(event: dict[str, Any], event_id: int | None = None) -> str:
     """The event name goes on the event line, and the data line holds the rest."""
@@ -101,15 +131,25 @@ def sse_frame(event: dict[str, Any], event_id: int | None = None) -> str:
     return f"{head}event: {name}\ndata: {body}\n\n"
 
 
-async def stream_events(subscription: Subscription) -> AsyncIterator[str]:
-    """Yields SSE text until the client leaves. Comment lines keep proxies from
-    closing an idle connection."""
+async def stream_events(
+    subscription: Subscription, still_allowed: Callable[[], Awaitable[bool]] | None = None,
+) -> AsyncIterator[str]:
+    """Yields SSE text until the client leaves or loses access. Comment lines keep
+    proxies from closing an idle connection. Access is rechecked on a timer, not only
+    when idle, because a busy stream is never idle and would never be rechecked."""
+    recheck_at = time.monotonic() + KEEPALIVE_SECONDS
     try:
         yield ": connected\n\n"
         while True:
             try:
-                item = await asyncio.wait_for(subscription.queue.get(), KEEPALIVE_SECONDS)
+                item = await asyncio.wait_for(subscription.queue.get(), max(recheck_at - time.monotonic(), 0))
             except asyncio.TimeoutError:
+                item = None
+            if time.monotonic() >= recheck_at:
+                recheck_at = time.monotonic() + KEEPALIVE_SECONDS
+                if still_allowed is not None and not await still_allowed():
+                    return
+            if item is None:
                 yield ": ping\n\n"
                 continue
             if item is CLOSED:

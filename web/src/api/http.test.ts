@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { backoffMs, createHttpApi, parseEvent, readError } from './http';
 import { ApiError, STREAM_EVENT_TYPES } from './types';
 
@@ -184,6 +184,32 @@ describe('customer calls', () => {
   it('gives null policy when the call fails, so the UI states no limits', async () => {
     const { fetchImpl } = stubFetch(() => json(500, {}));
     expect(await createHttpApi('/api/v1', fetchImpl).getPolicy()).toBeNull();
+  });
+});
+
+describe('event streams', () => {
+  const answerWith = async (status: number, code: string) => {
+    vi.useFakeTimers();
+    const { calls, fetchImpl } = stubFetch(() =>
+      json(status, { error: { code, message: 'No', retryable: status === 429 } }),
+    );
+    const stop = createHttpApi('/api/v1', fetchImpl).subscribeConversation('cv-1', () => undefined);
+    await vi.advanceTimersByTimeAsync(1_500);
+    stop();
+    vi.useRealTimers();
+    return calls.length;
+  };
+
+  it('tries again when the server has too many streams, because that passes', async () => {
+    expect(await answerWith(429, 'too_many_streams')).toBeGreaterThan(1);
+  });
+
+  it('stops for good when the conversation has closed', async () => {
+    expect(await answerWith(409, 'conversation_closed')).toBe(1);
+  });
+
+  it('stops for good when the session has ended', async () => {
+    expect(await answerWith(401, 'unauthorized')).toBe(1);
   });
 });
 

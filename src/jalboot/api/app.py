@@ -20,7 +20,9 @@ from starlette.exceptions import HTTPException
 from jalboot import audit
 from jalboot.api import chat, identity, metrics, views
 from jalboot.api.errors import ApiError, install_handlers, language_of
-from jalboot.api.events import SSE_HEADERS, sse_frame, stream_events
+from jalboot.api.events import (
+    MAX_STREAMS_PER_CONVERSATION, SSE_HEADERS, Subscription, TooManyStreams, sse_frame, stream_events,
+)
 from jalboot.api.guards import BrowserGuards
 from jalboot.api.runtime import Runtime, build_runtime
 from jalboot.config import Settings, load_settings
@@ -37,6 +39,7 @@ COOKIE = "jalboot_desk"
 Locale = Literal["en", "ar"]
 SHIFT_HOURS = 12
 AUDIT_PAGE = 20
+STREAM_RETRY_SECONDS = 30
 ALLOWED_HEADERS = ["Authorization", "Content-Type", "Accept-Language", "Last-Event-ID", "X-CSRF-Token"]
 
 
@@ -95,6 +98,10 @@ def conversation_for_token(session: Session, secret: str, conversation_id: str, 
         raise ApiError(401, "unauthorized")
     if not secrets.compare_digest(conversation.token_hash, tokens.hash_token(secret, token)):
         raise ApiError(401, "unauthorized")
+    # Closing ends what the token can do. It gets this answer rather than 401 so that
+    # a page still open can tell the customer the truth.
+    if conversation.status == "closed":
+        raise ApiError(409, "conversation_closed")
     return conversation
 
 
@@ -137,6 +144,23 @@ def desk_stream_role(request: Request, runtime: Runtime = Depends(get_runtime)) 
     """The desk version of customer_stream_auth, which keeps only the role."""
     with runtime.sessions() as session:
         return active_staff(session, web_session_for(session, runtime.settings.secret_key, request)).role
+
+
+def still_signed_in(runtime: Runtime, cookie: str | None) -> bool:
+    with runtime.sessions() as session:
+        row = tokens.find_session(session, runtime.settings.secret_key, cookie, "staff")
+        staff = session.get(StaffUser, row.staff_id) if row else None
+        return bool(staff and staff.active)
+
+
+def open_events(
+    request: Request, runtime: Runtime, topic: str, last_event_id: str | None, topic_limit: int | None = None,
+) -> Subscription:
+    client = request.client.host if request.client else ""
+    try:
+        return runtime.broker.subscribe(topic, resume_id(last_event_id), client=client, topic_limit=topic_limit)
+    except TooManyStreams:
+        raise ApiError(429, "too_many_streams", retryable=True, retryAfterSeconds=STREAM_RETRY_SECONDS) from None
 
 
 def desk_session(
@@ -310,13 +334,22 @@ def resume_id(last_event_id: str | None) -> int | None:
 
 @api.get("/conversations/{conversation_id}/events")
 async def conversation_events(
+    request: Request,
     conversation_id: str,
     _authorized: None = Depends(customer_stream_auth),
     last_event_id: str | None = Header(default=None),
     runtime: Runtime = Depends(get_runtime),
 ) -> StreamingResponse:
-    subscription = runtime.broker.subscribe(chat.conversation_topic(conversation_id), resume_id(last_event_id))
-    return StreamingResponse(stream_events(subscription), media_type="text/event-stream", headers=SSE_HEADERS)
+    subscription = open_events(
+        request, runtime, chat.conversation_topic(conversation_id), last_event_id, MAX_STREAMS_PER_CONVERSATION,
+    )
+
+    async def still_open() -> bool:
+        return await run_in_threadpool(chat.conversation_open, runtime, conversation_id)
+
+    return StreamingResponse(
+        stream_events(subscription, still_open), media_type="text/event-stream", headers=SSE_HEADERS,
+    )
 
 
 @api.post("/desk/session")
@@ -625,9 +658,13 @@ async def desk_events(
     last_event_id: str | None = Header(default=None),
     runtime: Runtime = Depends(get_runtime),
 ) -> StreamingResponse:
-    topic = chat.desk_topic(role, language_of(request))
-    subscription = runtime.broker.subscribe(topic, resume_id(last_event_id))
-    return StreamingResponse(stream_events(subscription), media_type="text/event-stream", headers=SSE_HEADERS)
+    subscription = open_events(request, runtime, chat.desk_topic(role, language_of(request)), last_event_id)
+    cookie = request.cookies.get(COOKIE)
+
+    async def signed_in() -> bool:
+        return await run_in_threadpool(still_signed_in, runtime, cookie)
+
+    return StreamingResponse(stream_events(subscription, signed_in), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 class WebApp(StaticFiles):

@@ -15,6 +15,7 @@ MESSAGES: dict[str, tuple[str, str]] = {
     "code_expired": ("That code has expired. Ask for a new one.", "انتهت صلاحية الرمز. اطلب رمزا جديدا."),
     "invalid_phone": ("That phone number is not valid.", "رقم الهاتف غير صحيح."),
     "too_many_attempts": ("Too many attempts. Please try again later.", "محاولات كثيرة. يرجى المحاولة لاحقا."),
+    "too_many_streams": ("Too many open connections. Please close another page and try again.", "الاتصالات المفتوحة كثيرة. يُرجى إغلاق صفحة أخرى والمحاولة مرة أخرى."),
     "unauthorized": ("Please sign in.", "يرجى تسجيل الدخول."),
     "invalid_credentials": ("Wrong email or password.", "البريد الإلكتروني أو كلمة المرور غير صحيحة."),
     "csrf_failed": ("Your session needs refreshing. Please reload the page.", "يلزم تحديث الجلسة. يرجى إعادة تحميل الصفحة."),
