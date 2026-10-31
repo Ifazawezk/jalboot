@@ -16,7 +16,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, Sequence
 
-from jalboot.agent import checks, prompts, replies
+from jalboot.agent import checks, consent, prompts, replies
 from jalboot.agent.triage import triage_message
 from jalboot.llm.client import LLMClient, LLMError, ToolCall
 
@@ -33,7 +33,7 @@ MIN_SIMILARITY = 0.085
 MAX_STEPS = 6
 MAX_TOOL_CALLS = 8
 HISTORY_TURNS = 8
-SEARCH_TOOL = "search_knowledge"
+SEARCH_TOOL = consent.SEARCH_TOOL
 CITATION_FIELDS = ("id", "doc", "doc_title", "title", "text", "updated")
 
 
@@ -160,6 +160,15 @@ class SupportAgent:
         emit({"type": "tool.end", "id": call.id, "tool": call.name, "result": outcome})
         return outcome
 
+    def _refuse_tool(self, result: TurnResult, call: ToolCall, emit: Emit) -> dict[str, Any]:
+        """The customer did not ask for this action, so it never reaches the tools."""
+        emit({"type": "tool.start", "id": call.id, "tool": call.name, "arguments": call.arguments})
+        outcome = {"ok": False, "error": consent.NEEDS_REQUEST, "next_step": consent.ASK_THE_CUSTOMER}
+        result.tool_log.append({"tool": call.name, "arguments": call.arguments, "result": outcome})
+        emit({"type": "tool.end", "id": call.id, "tool": call.name, "result": outcome})
+        result.flags.append(f"blocked_action: {call.name}")
+        return outcome
+
     def _plan(self, result, text, tools, history, passages, customer_label, emit) -> None:
         system = prompts.system_prompt(result.language, self.canary)
         messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
@@ -172,6 +181,7 @@ class SupportAgent:
 
         repaired = False
         calls_made = 0
+        outside_text = False
         for _step in range(MAX_STEPS):
             try:
                 reply = self.llm.chat(messages, tools.specs())
@@ -190,7 +200,13 @@ class SupportAgent:
                         result.flags.append("too_many_tool_calls")
                         self._fall_back(result, text, tools, history, customer_label, emit)
                         return
-                    outcome = self._run_tool(result, tools, call, emit)
+                    # A malformed call goes on to the tools, which refuse it and audit that.
+                    gated = consent.needs_request(call.name) and not call.malformed
+                    if gated and not consent.customer_asked(call.name, text, history, outside_text):
+                        outcome = self._refuse_tool(result, call, emit)
+                    else:
+                        outcome = self._run_tool(result, tools, call, emit)
+                    outside_text = outside_text or consent.reads_outside_text(call.name, outcome)
                     shown = _add_sources(outcome, passages) if call.name == SEARCH_TOOL and outcome.get("ok") else outcome
                     messages.append(prompts.tool_result_message(call.id, call.name, shown))
                     if outcome.get("error") == "identity_required":

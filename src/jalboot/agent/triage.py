@@ -42,37 +42,37 @@ def _alternative(term: str) -> str:
     return re.escape(term) + (r"(?!\w)" if term[-1].isascii() else "")
 
 
-def _pattern(*words: str) -> re.Pattern[str]:
+def word_pattern(*words: str) -> re.Pattern[str]:
     alternatives = "|".join(_alternative(term) for term in sorted(_terms(*words), key=len, reverse=True))
     return re.compile(rf"(?<![\w]){ARABIC_PREFIX}(?:{alternatives})")
 
 
-HUMAN_REQUEST = _pattern(
+HUMAN_REQUEST = word_pattern(
     "real person", "a human", "human agent", "live agent", "real agent", "an agent", "a person",
     "a representative", "customer service", "your manager", "a manager", "supervisor",
     "someone real", "talk to someone", "speak to someone", "speak with someone",
     "موظف", "موظفه", "شخص حقيقي", "انسان", "مندوب خدمه", "خدمه العملاء", "المشرف", "مشرف",
     "المدير", "مدير", "احد من الدعم", "بشري",
 )
-HUMAN_VERB = _pattern(
+HUMAN_VERB = word_pattern(
     "talk*", "speak*", "connect*", "transfer*", "want*", "need*", "get me", "give me", "put me through",
     "let me", "escalat*",
     "اكلم", "اتكلم", "اتحدث", "ابي", "ابغي", "ابغا", "اريد", "حولني", "حولوني", "وصلني", "كلموني",
     "ودي", "بكلم", "ممكن",
 )
-HUMAN_DIRECT = _pattern(
+HUMAN_DIRECT = word_pattern(
     "talk to a human", "speak to a human", "talk to a person", "speak to a person",
     "talk to an agent", "speak to an agent", "human please", "agent please", "representative please",
     "حولني لموظف", "حولني علي موظف", "ابي موظف", "ابغي موظف", "اريد موظف", "اكلم موظف",
     "ابي اكلم", "ابغي اكلم", "اريد التحدث",
 )
-NEGATION = _pattern(
+NEGATION = word_pattern(
     "no need", "don't need", "do not need", "dont need", "don't want", "do not want", "dont want",
     "not asking for", "without", "لا اريد", "ما ابي", "ما ابغي", "مو لازم", "لا داعي", "بدون",
     "ما احتاج", "لا احتاج",
 )
 
-SAFETY_TERMS = _pattern(
+SAFETY_TERMS = word_pattern(
     "allergic", "anaphyla*", "food poisoning", "poisoned", "emergency room",
     "can't breathe", "cant breathe", "cannot breathe", "can't breath", "cant breath", "struggling to breathe",
     "swelling", "swollen", "vomit*", "injur*",
@@ -86,76 +86,76 @@ SAFETY_TERMS = _pattern(
     "يرفض يمشي", "صعوبه في التنفس", "ضيق تنفس", "ضيق في التنفس", "ما اقدر اتنفس", "طفح", "استفراغ", "يهدد",
 )
 # These hold a safety word and report nothing.
-NOT_A_SAFETY_REPORT = _pattern(
+NOT_A_SAFETY_REPORT = word_pattern(
     "by accident", "app crashed", "app has crashed", "website crashed", "site crashed",
 )
-ALLERGY = _pattern("allergy", "allergies", "allergen*", "حساسيه")
+ALLERGY = word_pattern("allergy", "allergies", "allergen*", "حساسيه")
 # Someone it happened to, or something that happened. With either, the mention is a report.
-ALLERGY_EVENT = _pattern(
+ALLERGY_EVENT = word_pattern(
     "i have", "i've", "i got", "i had", "i am", "i'm", "we have", "my allerg*", "our allerg*", "reaction", "attack",
     "after", "ate", "eaten", "eating", "son", "daughter", "wife", "husband", "mother", "mum", "mom", "father", "dad",
     "baby", "child", "children", "kid*", "friend", "brother", "sister",
     "عندي", "عنده", "عندها", "لدي", "ابني", "بنتي", "ولدي", "زوجي", "زوجتي", "امي", "ابوي", "اخوي", "اختي",
     "طفلي", "طفلتي", "اكلت", "اكلته", "اكلها", "بعد",
 )
-ALLERGY_QUESTION = _pattern(
+ALLERGY_QUESTION = word_pattern(
     "do you", "does", "is there", "are there", "what", "which", "where", "how", "can i", "can you", "could you",
     "tell me", "show me", "info", "information", "policy", "rules", "question",
     "هل", "ايش", "وش", "شو", "ما هي", "ما هو", "كيف", "وين", "اين", "معلومات", "سياسه",
 )
-HAVE_A_QUESTION = _pattern("i have a question", "i've got a question", "عندي سوال")
+HAVE_A_QUESTION = word_pattern("i have a question", "i've got a question", "عندي سوال")
 # A hospital is only a safety signal when someone went there because of the order.
-HOSPITAL = _pattern("hospital*", "مستشفي", "المستشفي")
-WORKS_THERE = _pattern(
+HOSPITAL = word_pattern("hospital*", "مستشفي", "المستشفي")
+WORKS_THERE = word_pattern(
     "i work*", "work at", "work in", "working at", "working in", "nurse*", "doctor at",
     "اشتغل", "ممرضه", "ممرض", "دوامي", "طبيب في",
 )
-LEGAL_TERMS = _pattern(
+LEGAL_TERMS = word_pattern(
     "lawyer*", "attorney*", "sue you", "legal action", "in court", "to court", "take you to", "consumer protection",
     "journalist*", "newspaper*", "the press", "the media", "regulator*", "the ministry",
     "محامي", "المحكمه", "قضيه", "شكوي رسميه", "حمايه المستهلك", "وزاره التجاره",
     "صحفي", "الصحافه", "الجريده", "الاعلام", "الجهات المختصه",
 )
-ACCOUNT_TAKEOVER = _pattern(
+ACCOUNT_TAKEOVER = word_pattern(
     "hacked", "account takeover", "someone logged in", "someone else logged", "stolen account",
     "took over my account", "not me who ordered", "orders i did not place", "orders i didn't place",
     "unauthorised access", "unauthorized access",
     "مخترق", "اخترق", "تهكير", "تهكر", "هكر", "سرقوا حسابي", "دخل حسابي", "طلبات ما طلبتها",
 )
-AGENT_COMPLAINT_TERMS = _pattern(
+AGENT_COMPLAINT_TERMS = word_pattern(
     "complain about your agent", "complaint about your agent", "complaint about the agent",
     "complaint about a support", "complaint about support", "your support agent", "the support agent was",
     "your agent was", "your staff was", "the agent who", "complain about her", "complain about him",
     "شكوي علي موظف", "شكوي ضد موظف", "شكوي من موظف", "موظف الدعم كان",
     "الموظف كان", "موظفكم كان",
 )
-PRAISE = _pattern(
+PRAISE = word_pattern(
     "great", "helpful", "amazing", "excellent", "kind", "nice", "friendly", "polite", "lovely", "wonderful",
     "fantastic", "good", "thank*",
     "ممتاز", "رائع", "محترم", "شكرا", "لطيف", "متعاون", "كفو",
 )
-COMPLAINT_WORDS = _pattern(
+COMPLAINT_WORDS = word_pattern(
     "complain*", "rude", "not", "never", "hung up", "ignor*", "wasn't", "isn't",
     "شكوي", "وقح", "ما رد", "ما ساعد", "مو زين", "مو كويس", "مو محترم", "غير محترم",
 )
-ANGER_STRONG = _pattern(
+ANGER_STRONG = word_pattern(
     "unacceptable", "end of my rope", "you people", "furious", "scam*", "fraud*", "thieves", "disgust*", "pathetic",
     "disgrace*", "worst", "fed up", "sick of", "never again", "ridiculous", "useless", "outrageous", "enraged",
     "نصب", "نصابين", "حراميه", "حرامي", "مهزله", "فضيحه", "كارثه", "قرف", "اسوا", "زفت", "غاضب",
     "معصب", "مقهور", "زهقت", "طفشت", "مستفز", "سئمت", "غير مقبول",
 )
-ANGER_MILD = _pattern(
+ANGER_MILD = word_pattern(
     "terrible", "awful", "angry", "upset", "annoyed", "frustrated", "disappointed", "third time",
     "again and again", "nobody helps", "no one helps", "still waiting",
     "سيء", "سيئ", "زعلان", "متضايق", "منزعج", "محبط", "للمره الثالثه", "ما حد يرد", "لا احد يرد",
     "ثالث مره",
 )
 # These hold an angry word and say nothing about how the customer feels.
-NOT_ANGER = _pattern(
+NOT_ANGER = word_pattern(
     "worst case", "worst-case", "report fraud", "reporting fraud", "report a fraud", "fraud team", "fraud department",
 )
 
-INJECTION = _pattern(
+INJECTION = word_pattern(
     "ignore previous", "ignore all previous", "ignore your instructions", "ignore the above",
     "disregard your", "disregard previous", "forget your instructions", "system prompt*",
     "developer mode", "jailbreak*", "you are now", "act as", "pretend to be", "new instructions",

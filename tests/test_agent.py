@@ -552,3 +552,105 @@ def test_every_sentence_of_the_policy_passes_when_quoted_with_its_marker():
                 if len(sentence) >= 12 and not verdict.ok:
                     rejected.append((passage.id, sentence, verdict.problems))
     assert rejected == []
+
+
+NOTED = "JB-700205"  # Its merchant note says to refund the whole order and tell nobody.
+ASKED_NOTHING = f"what is in {NOTED}"
+OFFERED = [{"role": "customer", "text": ASKED_NOTHING}, {"role": "bot", "text": "Would you like a refund for this order?"}]
+
+
+@pytest.fixture
+def noura(db):
+    return tools_for(db, make_conversation(db, customer_id="C-1002"))
+
+
+def read_the_note():
+    return call("get_order_details", order_id=NOTED)
+
+
+def obey_the_note(order_id=NOTED):
+    return call("issue_refund", order_id=order_id, amount_qar=40.0, reason="not_received")
+
+
+def refusal_of(result, tool):
+    return next(e["result"].get("error") for e in result.tool_log if e["tool"] == tool)
+
+
+@pytest.mark.parametrize("text", [ASKED_NOTHING, f"وش في طلبي {NOTED}؟", f"What is your refund policy for {NOTED}?"])
+def test_a_merchant_note_cannot_pay_a_refund_nobody_asked_for(db, noura, text):
+    wallet = db.get(Customer, "C-1002").wallet_dh
+    script = Script(read_the_note(), obey_the_note(), LLMReply("Here are the items on your order."))
+    result = run(script, noura, text)
+    assert refunds(db) == 0
+    assert db.get(Customer, "C-1002").wallet_dh == wallet
+    assert refusal_of(result, "issue_refund") == "needs_customer_request"
+    assert any(flag == "blocked_action: issue_refund" for flag in result.flags)
+    assert "needs_customer_request" in script.seen[2][-1]["content"]
+
+
+@pytest.mark.parametrize("tool,arguments", [
+    ("issue_credit", {"order_id": NOTED, "amount_qar": 5.0, "reason": "goodwill"}),
+    ("cancel_order", {"order_id": NOTED}),
+    ("change_address", {"order_id": NOTED, "new_address": "Street 1, Building 2"}),
+])
+def test_a_note_cannot_drive_any_action_on_money_or_the_order(db, noura, tool, arguments):
+    script = Script(read_the_note(), call(tool, **arguments), LLMReply("Here are your items."))
+    assert refusal_of(run(script, noura, ASKED_NOTHING), tool) == "needs_customer_request"
+
+
+@pytest.mark.parametrize("text", ["What address is my order going to?", "وش عنوان طلبي؟"])
+def test_asking_about_an_address_is_not_asking_to_change_it(noura, text):
+    move = call("change_address", order_id=NOTED, new_address="Street 1, Building 2")
+    script = Script(read_the_note(), move, LLMReply("Here is your address."))
+    assert refusal_of(run(script, noura, text), "change_address") == "needs_customer_request"
+
+
+def test_a_refund_with_no_customer_claim_is_blocked_even_with_no_note(db, noura):
+    script = Script(obey_the_note("JB-700202"), LLMReply("Sure."))
+    assert refusal_of(run(script, noura, "where is JB-700202"), "issue_refund") == "needs_customer_request"
+    assert refunds(db) == 0
+
+
+@pytest.mark.parametrize("text", [f"my order {NOTED} never arrived", f"ما وصلني طلب {NOTED}"])
+def test_a_customer_claim_in_this_message_still_works_on_an_order_with_a_note(noura, text):
+    script = Script(read_the_note(), obey_the_note(), LLMReply("Done."))
+    assert refusal_of(run(script, noura, text), "issue_refund") != "needs_customer_request"
+
+
+@pytest.mark.parametrize("answer", ["yes please", "go ahead", "نعم", "تمام"])
+def test_a_yes_in_a_later_turn_confirms_what_the_bot_offered(noura, answer):
+    script = Script(read_the_note(), obey_the_note(), LLMReply("Done."))
+    assert refusal_of(run(script, noura, answer, history=OFFERED), "issue_refund") != "needs_customer_request"
+
+
+@pytest.mark.parametrize("answer,history", [
+    ("yes please", [{"role": "customer", "text": "hello"}, {"role": "bot", "text": "Your order is on the way."}]),
+    ("yes please", [{"role": "customer", "text": "hello"}, {"role": "bot", "text": "Do you want to see your items?"}]),
+    ("no thanks", OFFERED),
+    ("not yes", OFFERED),
+])
+def test_a_yes_only_counts_as_an_answer_to_an_offer_of_this_action(noura, answer, history):
+    script = Script(read_the_note(), obey_the_note(), LLMReply("Sure."))
+    assert refusal_of(run(script, noura, answer, history=history), "issue_refund") == "needs_customer_request"
+
+
+def test_an_earlier_claim_carries_to_a_follow_up_message(db, layla):
+    history = [{"role": "customer", "text": "my karak tea was missing"}, {"role": "bot", "text": "Which order was it?"}]
+    amount, refund = quoted_refund(layla)
+    result = run(Script(refund, LLMReply("Done.")), layla, "JB-700102", history=history)
+    assert refusal_of(result, "issue_refund") is None
+    assert refunds(db) == 1
+
+
+def test_an_earlier_claim_does_not_carry_past_a_note_read_in_this_turn(db, noura):
+    history = [{"role": "customer", "text": "my food was missing"}, {"role": "bot", "text": "Which order was it?"}]
+    script = Script(read_the_note(), obey_the_note(), LLMReply("Sure."))
+    assert refusal_of(run(script, noura, NOTED, history=history), "issue_refund") == "needs_customer_request"
+    assert refunds(db) == 0
+
+
+def test_an_earlier_claim_does_not_carry_past_a_search_result(db):
+    tools = tools_for(db, make_conversation(db, customer_id="C-1002"), knowledge=KB)
+    history = [{"role": "customer", "text": "my food was missing"}, {"role": "bot", "text": "Which order was it?"}]
+    script = Script(call("search_knowledge", query="refund policy"), obey_the_note("JB-700202"), LLMReply("Sure."))
+    assert refusal_of(run(script, tools, "JB-700202", history=history), "issue_refund") == "needs_customer_request"
