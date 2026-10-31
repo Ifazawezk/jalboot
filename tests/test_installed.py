@@ -97,7 +97,12 @@ def test_a_real_install_starts_and_answers(tmp_path):
     subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
     scripts = venv / ("Scripts" if os.name == "nt" else "bin")
     python = scripts / ("python.exe" if os.name == "nt" else "python")
-    subprocess.run([str(python), "-m", "pip", "install", "--quiet", "--no-input", str(source)], check=True, timeout=600)
+    # The same command as the Dockerfile, so this also proves the lock file can be met.
+    subprocess.run(
+        [str(python), "-m", "pip", "install", "--quiet", "--no-input", "--constraint", str(REPO / "requirements.lock"),
+         f"{source}[postgres]"],
+        check=True, timeout=600,
+    )
 
     where = subprocess.run(
         [str(python), "-c", "import jalboot; print(jalboot.__file__)"], cwd=tmp_path,

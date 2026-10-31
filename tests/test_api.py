@@ -7,7 +7,6 @@ e2e/, because a passing test client proves nothing about cookies, CORS or forms.
 import json
 import re
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,6 +19,7 @@ from jalboot.api import chat as chat_api, identity
 from jalboot.config import Settings
 from jalboot.db.base import utcnow
 from jalboot.db.models import Conversation, Message, Refund, WebSession
+from jalboot.env import ROOT
 from jalboot.llm.client import LLMError, LLMReply, ToolCall
 from jalboot.tools.executor import ToolExecutor
 from jalboot.tools.specs import MAX_TEXT
@@ -103,7 +103,7 @@ def test_routes_are_really_registered(client):
 
 def test_policy_comes_from_the_rules_file(client):
     body = client.get(f"{V1}/policy").json()
-    rules = json.loads(Path("knowledge/rules.json").read_text(encoding="utf-8"))
+    rules = json.loads((ROOT / "knowledge" / "rules.json").read_text(encoding="utf-8"))
     assert body["refund"]["cardBusinessDays"] == rules["refunds"]["timing"]["card_business_days"]
     assert body["policyVersion"] == rules["meta"]["policy_version"]
 
@@ -123,7 +123,7 @@ def test_internal_limits_need_a_desk_session(client):
 
 def test_signed_in_staff_can_read_the_internal_limits(client):
     signed_in(client)
-    rules = json.loads(Path("knowledge/rules.json").read_text(encoding="utf-8"))
+    rules = json.loads((ROOT / "knowledge" / "rules.json").read_text(encoding="utf-8"))
     body = client.get(f"{V1}/desk/policy").json()
     assert body["refund"]["automatedLimitQar"] == rules["refunds"]["approval_limits_qar"]["automated"]
     assert body["refund"]["supervisorLimitQar"] == rules["refunds"]["approval_limits_qar"]["supervisor"]
