@@ -59,8 +59,3 @@ def tools_for(session, conversation, turn="t1", now=None, **kwargs):
 @pytest.fixture
 def layla(db):
     return tools_for(db, make_conversation(db))
-
-
-@pytest.fixture
-def later():
-    return ANCHOR + timedelta(minutes=5)

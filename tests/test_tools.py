@@ -197,7 +197,7 @@ def test_a_refused_refund_leaves_the_wallet_alone(db, layla):
 def test_late_credit_is_computed_by_policy_and_cannot_be_inflated(layla):
     assert layla.execute("issue_credit", {
         "order_id": "JB-700104", "amount_qar": 30.0, "reason": "late_delivery",
-    })["error"] == "above_late_credit_due"
+    })["error"] == "above_credit_due"
     assert layla.execute("issue_credit", {
         "order_id": "JB-700104", "amount_qar": 20.0, "reason": "late_delivery",
     })["status"] == "done"

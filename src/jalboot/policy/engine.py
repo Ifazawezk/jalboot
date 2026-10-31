@@ -10,7 +10,7 @@ Section ids in comments point at the policy documents in knowledge/.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Sequence
@@ -156,8 +156,6 @@ class ClaimFacts:
     # must not use up the delivery fee refund.
     late_credit_on_order_dh: int = 0
     late_fee_refunded_dh: int = 0
-    # Older credit with no reason on record.
-    unnamed_credit_dh: int = 0
 
 
 @dataclass(frozen=True)
@@ -166,7 +164,6 @@ class Decision:
     code: str
     required_role: str = ""
     limit_dh: int = 0
-    detail: dict[str, Any] = field(default_factory=dict)
 
 
 def hours_since(moment: datetime | None, now: datetime) -> float | None:
@@ -199,7 +196,7 @@ def in_window(rules: Rules, reason: str, order: OrderFacts, now: datetime) -> bo
     since = hours_since(order.delivered_at, now)
     if limit is None or since is None:
         return False
-    return since <= limit  # window_end_inclusive
+    return since <= limit  # GEN-02: a limit includes its last moment.
 
 
 def approval_role(rules: Rules, total_dh: int) -> str:
@@ -476,11 +473,8 @@ def late_entitlement(rules: Rules, order: OrderFacts, now: datetime) -> dict[str
 
 def late_credit_due_dh(rules: Rules, order: OrderFacts, claims: ClaimFacts, now: datetime) -> int:
     """The late credit still owed. It shares the per order cap with other credit (REF-07),
-    but only late credit already paid reduces it. An older credit with no reason on
-    record, of exactly this amount, is taken to be this same credit."""
+    but only late credit already paid reduces it."""
     tier = late_entitlement(rules, order, now)["credit_dh"]
-    if tier == 0 or claims.unnamed_credit_dh == tier:
-        return 0
     room = rules.dh("compensation_credit_cap_per_order_qar") - claims.credit_on_order_dh
     return max(min(tier - claims.late_credit_on_order_dh, room), 0)
 
@@ -533,7 +527,7 @@ def decide_credit(
         if due == 0:
             return Decision(DENY, "late_credit_already_issued")
         if amount_dh > due:
-            return Decision(DENY, "above_late_credit_due", limit_dh=due)
+            return Decision(DENY, "above_credit_due", limit_dh=due)
         return _by_total(rules, claims, amount_dh, "late_credit_due", due)
 
     if reason == "cancellation_credit":
@@ -547,7 +541,7 @@ def decide_credit(
             return Decision(DENY, "no_cancellation_credit_due")
         limit = rules.dh("cancellations.merchant_cancel_credit_qar")
         if amount_dh > limit:
-            return Decision(DENY, "above_late_credit_due", limit_dh=limit)
+            return Decision(DENY, "above_credit_due", limit_dh=limit)
         return Decision(EXECUTE, "cancellation_credit_due")
 
     if reason == "expired_item_credit":
@@ -558,7 +552,7 @@ def decide_credit(
             return Decision(DENY, "no_expired_item_credit_due")
         limit = rules.dh("grocery.expired_item_credit_qar")
         if amount_dh > limit:
-            return Decision(DENY, "above_late_credit_due", limit_dh=limit)
+            return Decision(DENY, "above_credit_due", limit_dh=limit)
         if not photo_provided:
             return Decision(APPROVAL, "photo_needed", "agent")
         return _by_total(rules, claims, amount_dh, "expired_item_credit_due")

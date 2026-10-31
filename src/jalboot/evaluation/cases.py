@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import json
+import zlib
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from functools import lru_cache
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from jalboot.db.models import (
-    Address, Conversation, Customer, Driver, Merchant, Message, Order, OrderItem, PromoRedemption, Ticket,
+    Address, Conversation, Customer, Driver, Merchant, Message, Order, OrderItem, PromoRedemption, Refund, Ticket,
 )
 from jalboot.env import ROOT
+from jalboot.policy import engine
+from jalboot.policy.rules import Rules
+from jalboot.text.normalize import normalize
+from jalboot.tools.facts import COMPENSATION, order_facts
 
 EVAL_DIR = ROOT / "eval"
 SETS = ("support", "knowledge", "handoff", "redteam")
@@ -41,39 +46,38 @@ def _time(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value).astimezone(timezone.utc) if value else None
 
 
-def _customer(row: dict[str, Any], now: datetime, claims: dict[str, Any] | None = None) -> Customer:
-    extra = dict(row.get("extra") or {})
-    if claims:
-        extra.update(
-            prior_claims_30d=claims.get("claims_30d", 0),
-            prior_claims_90d=claims.get("claims_90d", 0),
-            prior_claims_total_30d_dh=claims.get("claims_total_30d_dh", 0),
-            prior_not_received_90d=claims.get("not_received_90d", 0),
-            prior_goodwill_30d_dh=claims.get("goodwill_30d_dh", 0),
-        )
+@lru_cache(maxsize=1)
+def _rules() -> Rules:
+    return Rules.load()
+
+
+def _customer(row: dict[str, Any], now: datetime) -> Customer:
+    # crc32 and not hash(): Python salts hash() per process, so a phone number would
+    # change between runs.
     return Customer(
         id=row["id"],
         name=row.get("name", row["id"]),
         name_ar=row.get("name_ar", ""),
-        phone=row.get("phone") or f"+974 0999 {abs(hash(row['id'])) % 10000:04d}",
+        phone=row.get("phone") or f"+974 0999 {zlib.crc32(row['id'].encode()) % 10000:04d}",
         email=row.get("email") or f"{row['id'].lower()}@sim.jalboot.example",
         language=row.get("language", "en"),
         tier=row.get("tier", "standard"),
         wallet_dh=row.get("wallet_dh", 0),
         created_at=now - timedelta(days=int(row.get("account_age_days", 365))),
-        extra=extra,
+        extra=dict(row.get("extra") or {}),
     )
 
 
 def _order(row: dict[str, Any], state: dict[str, Any], now: datetime) -> Order:
     extra = dict(row.get("extra") or {})
-    claims = state.get("claims") or {}
     fee_keys = ("service_fee_dh", "small_order_fee_dh", "peak_fee_dh", "weather_fee_dh")
     if (state.get("flags") or {}).get("severe_weather"):
         extra["severe_weather"] = True
-    extra["prior_refunded_dh"] = (claims.get("refunded_on_order_dh") or {}).get(row["id"], 0)
-    extra["prior_credit_dh"] = (claims.get("credit_on_order_dh") or {}).get(row["id"], 0)
     extra["pin_lat"], extra["pin_lng"] = ORIGIN_PIN
+    # GEN-02: a first report made before this conversation stands.
+    first_report = (state.get("session") or {}).get("first_report_at")
+    if first_report:
+        extra["first_report_at"] = first_report
     order = Order(
         id=row["id"],
         customer_id=row["customer_id"],
@@ -105,12 +109,81 @@ def _order(row: dict[str, Any], state: dict[str, Any], now: datetime) -> Order:
     return order
 
 
+def _history_row(order_id: str, owner: str, amount: int, reason: str, at: datetime, number: int, **extra: Any) -> Refund:
+    return Refund(
+        id=f"H-{number}", order_id=order_id, customer_id=owner, amount_dh=amount, reason=reason, created_at=at,
+        method=extra.pop("method", "original"), approved_by="history", idempotency_key=f"history-{number}", **extra,
+    )
+
+
+def _seed_history(session: Session, state: dict[str, Any], owner: str, now: datetime) -> None:
+    """Turns a case's claim counts into real refund rows, so the tools read history the
+    same way they do in the live system. A case gives totals with no detail, so what the
+    rows must have been is inferred here, in the test harness and not in the tools."""
+    claims = state.get("claims") or {}
+    long_ago = now - timedelta(days=120)
+    rows: list[Refund] = []
+    orders = {row["id"]: row for row in state.get("orders") or []}
+
+    def add(*args: Any, **kwargs: Any) -> None:
+        rows.append(_history_row(*args, number=len(rows), **kwargs))
+
+    for order_id, amount in (claims.get("refunded_on_order_dh") or {}).items():
+        if amount:
+            add(order_id, owner, amount, "missing_item", long_ago, items=_item_worth(session, order_id, amount))
+    for order_id, amount in (claims.get("credit_on_order_dh") or {}).items():
+        if amount:
+            add(order_id, owner, amount, _credit_reason(session, order_id, amount, now), long_ago, method=COMPENSATION)
+
+    count_30 = int(claims.get("claims_30d", 0))
+    total_30 = int(claims.get("claims_total_30d_dh", 0))
+    not_received = int(claims.get("not_received_90d", 0))
+    older = max(int(claims.get("claims_90d", 0)) - count_30 - not_received, 0)
+    goodwill = int(claims.get("goodwill_30d_dh", 0))
+    if count_30 or total_30 or not_received or older or goodwill:
+        history = "JB-HISTORY"
+        if history not in orders:
+            session.add(Order(
+                id=history, customer_id=owner, category="food", status="delivered", subtotal_dh=0,
+                placed_at=now - timedelta(days=200), address_text="",
+            ))
+            session.flush()
+        count_30 = max(count_30, 1 if total_30 else 0)
+        for index in range(count_30):
+            share = total_30 // count_30 + (total_30 % count_30 if index == 0 else 0)
+            add(history, owner, share or 100, "missing_item", now - timedelta(days=10))
+        for _ in range(not_received):
+            add(history, owner, 100, "not_received", now - timedelta(days=40))
+        for _ in range(older):
+            add(history, owner, 100, "missing_item", now - timedelta(days=60))
+        if goodwill:
+            add(history, owner, goodwill, "goodwill", now - timedelta(days=10), method=COMPENSATION)
+    session.add_all(rows)
+    session.flush()
+
+
+def _item_worth(session: Session, order_id: str, amount: int) -> list[dict[str, Any]]:
+    """The item an old refund of this value must have been for, if one fits exactly."""
+    order = session.get(Order, order_id)
+    facts = order_facts(order)
+    for item in facts.items:
+        if engine.net_item_refund_dh(facts, item, item.quantity) == amount:
+            return [{"name": normalize(item.name).strip(), "units": item.quantity}]
+    return []
+
+
+def _credit_reason(session: Session, order_id: str, amount: int, now: datetime) -> str:
+    """A credit equal to this order's late tier is taken to be that late credit."""
+    tier = engine.late_entitlement(_rules(), order_facts(session.get(Order, order_id)), now)["credit_dh"]
+    return "late_delivery" if tier == amount else "goodwill"
+
+
 def load_state(session: Session, case: dict[str, Any], conversation_id: str = "case") -> Conversation:
     """Writes one case's state to an empty database and returns its conversation."""
     now = case_now(case)
     state = case.get("state") or {}
     owner = state.get("customer") or {"id": "C-GUEST"}
-    session.add(_customer(owner, now, state.get("claims")))
+    session.add(_customer(owner, now))
 
     known_customers = {owner["id"]}
     merchants: dict[str, Merchant] = {}
@@ -135,6 +208,7 @@ def load_state(session: Session, case: dict[str, Any], conversation_id: str = "c
     session.flush()
     session.add_all(_order(row, state, now) for row in orders)
     session.flush()
+    _seed_history(session, state, owner["id"], now)
 
     for index, row in enumerate(state.get("addresses") or []):
         distance = float(row.get("distance_km_from_order_pin", 0.0))
@@ -176,7 +250,6 @@ def load_state(session: Session, case: dict[str, Any], conversation_id: str = "c
         verified_at=now if verified else None,
         language=session_state.get("language", case.get("lang", "en")),
         failures=int(session_state.get("failures", 0)),
-        first_report_at=_time(session_state.get("first_report_at")),
         created_at=now,
         updated_at=now,
     )

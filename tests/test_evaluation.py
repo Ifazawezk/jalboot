@@ -1,11 +1,17 @@
 """Scoring has to be right before any number from it can be believed."""
 
 import json
+import zlib
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
+from jalboot.db.base import create_schema, make_engine, make_session_factory
+from jalboot.db.models import Customer, Order
 from jalboot.evaluation import hostile, retrieval, scoring
 from jalboot.evaluation.baseline import PlainBot
+from jalboot.evaluation.cases import _customer, case_now, load_state
 from jalboot.evaluation.harness import (
     CaseRunner, PoisonedKnowledge, RunConfig, next_customer_message, read_done, run_cases,
 )
@@ -15,6 +21,7 @@ from jalboot.llm.client import LLMReply, ToolCall
 from jalboot.llm.mock import MockPlanner
 from jalboot.policy.rules import Rules
 from jalboot.retrieval.base import Hit
+from jalboot.tools.facts import claim_facts, refunded_items
 
 KB = KnowledgeBase(load_passages())
 RULES = Rules.load()
@@ -386,3 +393,73 @@ def test_hostile_repeats_of_one_item_stay_under_the_limit():
     attempts = [a for a in hostile.attacks_for(gold) if len(a.arguments.get("items", [])) == 11]
     assert attempts
     assert hostile.run_case(gold, RULES, gates=True).money_paid_dh <= RULES.dh("refunds.approval_limits_qar.automated")
+
+
+def test_the_server_never_imports_the_tools_with_no_gates():
+    root = Path(__file__).resolve().parents[1] / "src" / "jalboot"
+    for folder in ("api", "agent", "tools", "policy"):
+        for path in (root / folder).rglob("*.py"):
+            assert "unguarded" not in path.read_text(encoding="utf-8").lower(), path
+
+
+def test_production_code_reads_no_evaluation_fixture():
+    root = Path(__file__).resolve().parents[1] / "src" / "jalboot"
+    for path in [*(root / "tools").glob("*.py"), *(root / "policy").glob("*.py")]:
+        text = path.read_text(encoding="utf-8")
+        assert '"prior_' not in text and "unnamed" not in text, path
+
+
+def test_a_generated_phone_is_the_same_in_every_run():
+    """Code review bug 27: hash() is salted per process."""
+    now = datetime(2026, 11, 3, tzinfo=timezone.utc)
+    assert _customer({"id": "C-77"}, now).phone == f"+974 0999 {zlib.crc32(b'C-77') % 10000:04d}"
+
+
+def seeded(claims, orders=None):
+    engine = make_engine("sqlite:///:memory:")
+    create_schema(engine)
+    session = make_session_factory(engine)()
+    gold = case()
+    gold["state"]["claims"] = claims
+    if orders is not None:
+        gold["state"]["orders"] = orders
+    load_state(session, gold)
+    customer = session.get(Customer, "C-1")
+    order = session.get(Order, gold["state"]["orders"][0]["id"])
+    return session, customer, order, case_now(gold)
+
+
+def test_a_cases_claim_counts_become_real_refund_rows():
+    session, customer, order, now = seeded({
+        "claims_30d": 3, "claims_90d": 8, "claims_total_30d_dh": 30000, "not_received_90d": 2, "goodwill_30d_dh": 2000,
+    })
+    facts = claim_facts(session, customer, order, now)
+    assert facts.claims_30d == 3
+    assert facts.claims_90d == 8
+    assert facts.claims_total_30d_dh == 30000
+    assert facts.not_received_90d == 2
+    assert facts.goodwill_30d_dh == 2000
+
+
+def test_a_cases_refund_on_an_order_names_the_item_it_was_for():
+    session, customer, order, now = seeded({"refunded_on_order_dh": {"JB-1001": 9000}})
+    assert refunded_items(session, "JB-1001") == {"lamb mandi": 1}
+    assert claim_facts(session, customer, order, now).refunded_on_order_dh == 9000
+
+
+class Counting(Stops):
+    def __init__(self):
+        super().__init__(100)
+        self.seen = []
+
+    def chat(self, messages, tools=None):
+        self.seen.append(str(messages))
+        return super().chat(messages, tools)
+
+
+def test_two_runs_of_a_case_send_the_same_prompt():
+    """Code review bug 26: a random canary would miss the reply cache every time."""
+    first, second = Counting(), Counting()
+    CaseRunner(first, KB, RULES).run(case())
+    CaseRunner(second, KB, RULES).run(case())
+    assert first.seen == second.seen

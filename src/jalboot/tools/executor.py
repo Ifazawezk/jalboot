@@ -20,7 +20,7 @@ import hashlib
 import json
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Protocol
 
@@ -99,9 +99,6 @@ class ToolContext:
     actor: str = "support-bot"
     # Identifies this turn, so a charge can only be confirmed in a later one.
     turn_id: str = ""
-    # True in the baseline comparison only. See evaluation/baseline.py.
-    unguarded: bool = False
-    extras: dict[str, Any] = field(default_factory=dict)
 
 
 def doha_time(moment: datetime | None) -> str | None:
@@ -161,7 +158,7 @@ class ToolExecutor:
         problem = specs.validate(spec, arguments)
         if problem:
             return self._block(name, arguments, refused(problem))
-        if spec.needs_identity and self.customer is None and not self.ctx.unguarded:
+        if self._identity_missing(spec):
             return self._block(name, arguments, refused("identity_required"))
         handler = getattr(self, f"_{name}")
         with audit.serial_write(self.session):
@@ -174,6 +171,9 @@ class ToolExecutor:
             self.ctx.publish(event)
         self._outbox.clear()
         return result
+
+    def _identity_missing(self, spec: specs.ToolSpec) -> bool:
+        return spec.needs_identity and self.customer is None
 
     def _block(self, name: str, arguments: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         with audit.serial_write(self.session):
@@ -219,8 +219,6 @@ class ToolExecutor:
         order = self.session.get(Order, order_id.strip().upper())
         if order is None:
             return None
-        if self.ctx.unguarded:
-            return order
         if customer is None or order.customer_id != customer.id:
             return None
         return order
@@ -266,7 +264,7 @@ class ToolExecutor:
     def _get_customer_profile(self) -> dict[str, Any]:
         customer = self.customer
         if customer is None:
-            return self._all_orders_refused()
+            return refused("identity_required")
         orders = self.session.scalars(
             select(Order).where(Order.customer_id == customer.id).order_by(Order.placed_at.desc()).limit(5)
         ).all()
@@ -282,9 +280,6 @@ class ToolExecutor:
             "saved_addresses": [a.label for a in customer.addresses],
             "allergy_profile": (customer.extra or {}).get("allergy_profile", []),
         }
-
-    def _all_orders_refused(self) -> dict[str, Any]:
-        return refused("identity_required")
 
     def _track_order(self, order_id: str) -> dict[str, Any]:
         order = self._owned_order(order_id)
@@ -436,11 +431,6 @@ class ToolExecutor:
         if not any(units > 0 for _, units in billed):
             return None, "item_already_refunded" if already else "no_refund_value"
         billed = [(item, units) for item, units in billed if units > 0]
-        # An older refund can have no item names. One of exactly this value is taken to
-        # be this same item, so it is not paid twice on a guess.
-        unnamed = int((order.extra or {}).get("prior_refunded_dh", 0))
-        if unnamed and sum(engine.net_item_refund_dh(facts, item, q) for item, q in billed) == unnamed:
-            return None, "already_refunded"
         offer = any(item.free_units for item, _ in affected)
         if reason not in NO_FULL_REFUND_CONVERSION and not offer and engine.full_refund_applies(self.rules, facts, billed):
             return engine.full_refund_dh(facts, claims), None
@@ -483,8 +473,6 @@ class ToolExecutor:
         previous = self._replay(key)
         if previous is not None:
             return previous
-        if self.ctx.unguarded:
-            return self._pay_refund(key, order, amount, reason, names, "unguarded", "original")
 
         chilled = reason == "substitute_rejected" and any(item.chilled for item, _ in affected)
         decision = engine.decide_refund(
@@ -526,7 +514,7 @@ class ToolExecutor:
     def _limit(self, decision: engine.Decision) -> dict[str, Any]:
         # Internal limits are never handed to the model, so they cannot be quoted (ESC-03).
         return {"max_qar": to_qar(decision.limit_dh)} if decision.code in {
-            "amount_exceeds_paid", "above_late_credit_due", "credit_cap_per_order",
+            "amount_exceeds_paid", "above_credit_due", "credit_cap_per_order",
         } else {}
 
     def _pay_refund(
@@ -591,8 +579,6 @@ class ToolExecutor:
         previous = self._replay(key)
         if previous is not None:
             return previous
-        if self.ctx.unguarded:
-            return self._pay_credit(key, order, amount, reason, "unguarded")
         decision = engine.decide_credit(
             self.rules, order_facts(order), claim_facts(self.session, self.customer, order, self.now),
             amount, reason, self._reported_at(order), photo_provided=bool((order.extra or {}).get("photo_evidence")),
@@ -725,9 +711,6 @@ class ToolExecutor:
         previous = self._replay(key)
         if previous is not None:
             return previous
-        if self.ctx.unguarded:
-            order.address_text = clean
-            return {"ok": True, "status": "done", "order_id": order.id, "new_address": clean}
         if order.category == "parcel":
             return self._reroute_parcel(key, order, clean)
         if order.status in LOCKED_AFTER_PICKUP:
@@ -830,8 +813,6 @@ class ToolExecutor:
             extra.setdefault("status_at_first_request", order.status)
             order.extra = extra
         terms = engine.cancellation_terms(self.rules, order_facts(order), self._reported_at(order))
-        if self.ctx.unguarded:
-            terms = {"allowed": True, "code": "unguarded", "charge_dh": 0, "refund_dh": order_facts(order).paid_dh}
         if terms.get("escalate"):
             return conflict(terms["code"])
         if not terms["allowed"]:

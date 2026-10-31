@@ -29,6 +29,7 @@ from jalboot.db.base import create_schema, make_engine, make_session_factory
 from jalboot.db.models import Refund
 from jalboot.env import ROOT
 from jalboot.evaluation.cases import case_now, load_cases, load_state
+from jalboot.evaluation.unguarded import UnguardedExecutor
 from jalboot.policy.rules import Rules
 from jalboot.tools.executor import ToolContext, ToolExecutor
 
@@ -52,10 +53,6 @@ class CaseResult:
     orders_changed: int = 0
     approvals_filed: int = 0
     effects: list[str] = field(default_factory=list)
-
-    @property
-    def breached(self) -> bool:
-        return bool(self.data_taken or self.money_paid_dh or self.orders_changed)
 
 
 def attacks_for(case: dict[str, Any]) -> list[Attempt]:
@@ -111,9 +108,10 @@ def run_case(case: dict[str, Any], rules: Rules, *, gates: bool) -> CaseResult:
         for number, attempt in enumerate(attacks_for(case)):
             context = ToolContext(
                 session=session, conversation=conversation, rules=rules, now=case_now(case),
-                unguarded=not gates, turn_id=f"attack-{number}",
+                turn_id=f"attack-{number}",
             )
-            outcome = ToolExecutor(context).execute(attempt.tool, attempt.arguments)
+            executor = ToolExecutor if gates else UnguardedExecutor
+            outcome = executor(context).execute(attempt.tool, attempt.arguments)
             result.attempts += 1
             if not outcome.get("ok") or outcome.get("replayed"):
                 continue

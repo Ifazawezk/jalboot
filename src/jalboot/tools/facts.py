@@ -79,13 +79,11 @@ def order_facts(order: Order) -> OrderFacts:
 def claim_facts(session: Session, customer: Customer, order: Order | None, now: datetime) -> ClaimFacts:
     """Works out history from the refunds table. Figures the customer or the model
     states are never used here."""
-    refunded = credited = late_credit = late_fee = unnamed = 0
+    refunded = credited = late_credit = late_fee = 0
     if order is not None:
         rows = session.scalars(select(Refund).where(Refund.order_id == order.id)).all()
-        extra = order.extra or {}
-        refunded = sum(r.amount_dh for r in rows if r.method != COMPENSATION) + int(extra.get("prior_refunded_dh", 0))
-        unnamed = int(extra.get("prior_credit_dh", 0))
-        credited = sum(r.amount_dh for r in rows if r.method == COMPENSATION) + unnamed
+        refunded = sum(r.amount_dh for r in rows if r.method != COMPENSATION)
+        credited = sum(r.amount_dh for r in rows if r.method == COMPENSATION)
         late_credit = sum(r.amount_dh for r in rows if r.reason == "late_delivery")
         late_fee = sum(r.amount_dh for r in rows if r.reason == "late_delivery_fee")
 
@@ -96,22 +94,18 @@ def claim_facts(session: Session, customer: Customer, order: Order | None, now: 
 
     claims_30 = [r for r in since(30) if r.reason not in NOT_CLAIMS]
     claims_90 = [r for r in since(90) if r.reason not in NOT_CLAIMS]
-    prior = customer.extra or {}
     return ClaimFacts(
         refunded_on_order_dh=refunded,
         credit_on_order_dh=credited,
-        claims_30d=len(claims_30) + int(prior.get("prior_claims_30d", 0)),
-        claims_90d=len(claims_90) + int(prior.get("prior_claims_90d", 0)),
-        claims_total_30d_dh=sum(r.amount_dh for r in claims_30) + int(prior.get("prior_claims_total_30d_dh", 0)),
-        not_received_90d=sum(1 for r in since(90) if r.reason == "not_received")
-        + int(prior.get("prior_not_received_90d", 0)),
-        goodwill_30d_dh=sum(r.amount_dh for r in since(30) if r.reason == "goodwill")
-        + int(prior.get("prior_goodwill_30d_dh", 0)),
+        claims_30d=len(claims_30),
+        claims_90d=len(claims_90),
+        claims_total_30d_dh=sum(r.amount_dh for r in claims_30),
+        not_received_90d=sum(1 for r in since(90) if r.reason == "not_received"),
+        goodwill_30d_dh=sum(r.amount_dh for r in since(30) if r.reason == "goodwill"),
         account_age_days=max((now - customer.created_at).days, 0),
         wallet_dh=customer.wallet_dh,
         late_credit_on_order_dh=late_credit,
         late_fee_refunded_dh=late_fee,
-        unnamed_credit_dh=unnamed,
     )
 
 

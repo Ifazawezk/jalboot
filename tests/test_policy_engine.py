@@ -270,13 +270,6 @@ def test_goodwill_does_not_use_up_late_credit():
     assert engine.late_credit_due_dh(RULES, order, ClaimFacts(credit_on_order_dh=500), NOW) == 500
 
 
-def test_an_older_credit_of_the_same_amount_is_taken_as_the_same_credit():
-    start = NOW - timedelta(hours=3)
-    order = base_order(promised_at=start, delivered_at=start + timedelta(minutes=25))
-    claims = ClaimFacts(credit_on_order_dh=500, unnamed_credit_dh=500)
-    assert engine.late_credit_due_dh(RULES, order, claims, NOW) == 0
-
-
 def test_lat05_failed_contact_amounts():
     food = base_order(status="failed_customer")
     assert engine.failed_contact_refund_dh(RULES, food) == 500
@@ -319,7 +312,7 @@ def test_late_credit_cannot_be_more_than_is_due():
     start = NOW - timedelta(hours=3)
     order = base_order(promised_at=start, delivered_at=start + timedelta(minutes=25))
     assert engine.decide_credit(RULES, order, ClaimFacts(), 500, "late_delivery", NOW).outcome == EXECUTE
-    assert engine.decide_credit(RULES, order, ClaimFacts(), 600, "late_delivery", NOW).code == "above_late_credit_due"
+    assert engine.decide_credit(RULES, order, ClaimFacts(), 600, "late_delivery", NOW).code == "above_credit_due"
 
 
 def test_wallet_at_its_limit_is_not_paid():
