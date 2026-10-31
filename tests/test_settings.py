@@ -1,6 +1,6 @@
 import pytest
 
-from jalboot.config import ConfigError, load_settings
+from jalboot.config import ConfigError, Settings, load_settings
 from jalboot.env import load_env_file, parse_env
 from jalboot.text.normalize import detect_language, normalize
 
@@ -74,3 +74,25 @@ def test_the_dev_server_is_allowed_outside_production_only():
 
 def test_named_origins_replace_the_dev_default():
     assert load_settings({"ALLOWED_ORIGINS": "https://a.example"}).allowed_origins == ("https://a.example",)
+
+
+@pytest.mark.parametrize("value", ["prod", "staging", "live", "dev", "productionn"])
+def test_an_unknown_environment_refuses_to_start(value):
+    """A typo must not skip every production check and run with the dev secret."""
+    with pytest.raises(ConfigError, match="ENVIRONMENT"):
+        load_settings({"ENVIRONMENT": value})
+
+
+def test_production_is_recognised_whatever_its_case_or_spacing():
+    with pytest.raises(ConfigError, match="SECRET_KEY"):
+        load_settings({"ENVIRONMENT": " Production "})
+
+
+@pytest.mark.parametrize("value", ["development", "test", "DEVELOPMENT", " test ", ""])
+def test_known_environments_start(value):
+    assert load_settings({"ENVIRONMENT": value}).environment in {"development", "test"}
+
+
+def test_settings_built_in_code_are_checked_too():
+    with pytest.raises(ConfigError, match="ENVIRONMENT"):
+        Settings(environment="prod").validate()

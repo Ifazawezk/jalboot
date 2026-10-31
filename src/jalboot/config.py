@@ -18,6 +18,7 @@ from typing import Mapping
 from jalboot.env import ROOT
 
 DEV_SECRET = "dev-only-secret-change-me"
+ENVIRONMENTS = ("development", "test", "production")
 # The Vite dev server, only outside production and only when nothing else is set.
 DEV_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 
@@ -61,6 +62,9 @@ class Settings:
         return self.environment == "production"
 
     def validate(self) -> None:
+        # A typo such as prod must stop the server, not quietly skip the checks below.
+        if self.environment not in ENVIRONMENTS:
+            raise ConfigError(f"ENVIRONMENT must be one of: {', '.join(ENVIRONMENTS)}")
         if self.llm_mode not in {"mock", "llm"}:
             raise ConfigError("LLM_MODE must be mock or llm")
         if self.cookie_samesite not in {"lax", "strict", "none"}:
