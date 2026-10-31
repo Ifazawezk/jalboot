@@ -10,10 +10,10 @@ Section ids in comments point at the policy documents in knowledge/.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from jalboot.policy.rules import Rules, percent_of, to_dh
 
@@ -48,6 +48,8 @@ REASON_WINDOWS: dict[str, str | None] = {
 }
 # These have their own rules for when they can be claimed, handled below.
 OWN_WINDOW_REASONS = {"duplicate_charge", "failed_contact_refund", "driver_change_short"}
+# PCL-04 covers delay, loss and damage. A parcel has no menu to get wrong.
+PARCEL_REASONS = {"damaged_item", "not_received", "late_delivery_fee"}
 ALL_REFUND_REASONS = set(REASON_WINDOWS) | OWN_WINDOW_REASONS
 CATEGORY_WINDOWS = {
     "food": "food_standard",
@@ -70,7 +72,7 @@ NOT_CLAIMS = {
     "broken_seal", "customer_cancelled", "substitute_rejected", "driver_change_short",
     "failed_contact_refund",
 }
-CREDIT_REASONS = {"late_delivery", "goodwill", "cancellation_credit", "expired_item_credit"}
+CREDIT_REASONS = ("late_delivery", "goodwill", "cancellation_credit", "expired_item_credit")
 
 
 @dataclass(frozen=True)
@@ -82,6 +84,7 @@ class ItemFact:
     # WRG-03: units of a buy-one-get-one pair that were free.
     free_units: int = 0
     approved_substitute: bool = False
+    substituted: bool = False
     chilled: bool = False
     cold_chain: bool = False
 
@@ -156,6 +159,11 @@ class ClaimFacts:
     # must not use up the delivery fee refund.
     late_credit_on_order_dh: int = 0
     late_fee_refunded_dh: int = 0
+    # Claims waiting for a person count at filing, so the level is right from the start.
+    pending_on_order_dh: int = 0
+    pending_goodwill_dh: int = 0
+    # Paid and pending. Money with one cause is owed once, however the claim is worded.
+    by_reason_dh: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -245,14 +253,17 @@ def duplicate_in_window(rules: Rules, order: OrderFacts, now: datetime) -> bool:
     return latest is not None and now - latest <= timedelta(days=days)
 
 
-def _decide_duplicate(rules: Rules, order: OrderFacts, amount_dh: int, now: datetime) -> Decision:
+def _decide_duplicate(
+    rules: Rules, order: OrderFacts, claims: ClaimFacts, amount_dh: int, now: datetime,
+) -> Decision:
     extra = duplicate_amount_dh(order)
     if extra == 0:
         return Decision(DENY, "no_duplicate_charge_found")
     if not duplicate_in_window(rules, order, now):
         return Decision(DENY, "outside_reporting_window")
-    if amount_dh > extra:
-        return Decision(DENY, "amount_exceeds_paid", limit_dh=extra)
+    room = max(extra - claims.by_reason_dh.get("duplicate_charge", 0), 0)
+    if amount_dh > room:
+        return Decision(DENY, "amount_exceeds_paid", limit_dh=room)
     # A pharmacy refund always needs a person, yet PAY-03 automates a confirmed
     # duplicate. The documents do not say which wins.
     if order.category == "pharmacy":
@@ -261,6 +272,14 @@ def _decide_duplicate(rules: Rules, order: OrderFacts, amount_dh: int, now: date
     if amount_dh <= rules.dh("payments.duplicate_charge.automated_limit_qar"):
         return Decision(EXECUTE, "confirmed_duplicate")
     return Decision(APPROVAL, "above_duplicate_limit", approval_role(rules, amount_dh))
+
+
+def claim_reason(order: OrderFacts, reason: str) -> str:
+    """LAT-05: "not received" on a failed delivery is that failed delivery. The two names
+    are one claim, so one cannot be paid on top of the other."""
+    if reason == "not_received" and order.status == "failed_customer" and order.category != "parcel":
+        return "failed_contact_refund"
+    return reason
 
 
 def decide_refund(
@@ -278,22 +297,23 @@ def decide_refund(
         return Decision(DENY, "amount_must_be_positive")
     if reason not in ALL_REFUND_REASONS:
         return Decision(DENY, "reason_not_refundable")
+    reason = claim_reason(order, reason)
     # GEN-04 step 2: a block stops a refund before any other rule is looked at.
     if order.open_bank_dispute:
         return Decision(DENY, "bank_dispute_open")
     if reason == "duplicate_charge":
-        return _decide_duplicate(rules, order, amount_dh, now)
-    if order.category == "parcel" and reason != "failed_contact_refund":
-        return _decide_parcel(rules, order, amount_dh, reason, now)
-
+        return _decide_duplicate(rules, order, claims, amount_dh, now)
     if reason == "driver_change_short":
         if order.payment_method != "cash" or order.change_short_dh == 0:
             return Decision(DENY, "no_change_shortfall_recorded")
-        if amount_dh > order.change_short_dh:
-            return Decision(DENY, "amount_exceeds_paid", limit_dh=order.change_short_dh)
+        room = max(order.change_short_dh - claims.by_reason_dh.get(reason, 0), 0)
+        if amount_dh > room:
+            return Decision(DENY, "amount_exceeds_paid", limit_dh=room)
         return Decision(EXECUTE, "change_shortfall")
+    if order.category == "parcel" and reason != "failed_contact_refund":
+        return _decide_parcel(rules, order, claims, amount_dh, reason, now)
 
-    if reason == "failed_contact_refund" or (reason == "not_received" and order.status == "failed_customer"):
+    if reason == "failed_contact_refund":
         if order.status != "failed_customer":
             return Decision(DENY, "order_not_failed")
     elif order.status != "delivered":
@@ -313,7 +333,7 @@ def decide_refund(
     if claims.claims_90d >= int(rules.get("refunds.trust_review.from_prior_claims")) and not safety:
         return Decision(ESCALATE, "trust_review_pause")
 
-    total = claims.refunded_on_order_dh + claims.credit_on_order_dh + amount_dh
+    total = _total_with_pending(claims, amount_dh)
     role = approval_role(rules, total)
 
     # Always a person, at any amount (REF-05).
@@ -335,7 +355,7 @@ def decide_refund(
 
     # REF-06: the photo may follow up to a day after the report, so a missing photo
     # never refuses a claim. The claim waits with a person until it arrives.
-    if photo_needed(rules, reason, claims.refunded_on_order_dh + amount_dh) and not photo_provided:
+    if photo_needed(rules, reason, claims.refunded_on_order_dh + claims.pending_on_order_dh + amount_dh) and not photo_provided:
         return Decision(APPROVAL, "photo_needed", role)
 
     repeat_count = int(rules.get("refunds.repeat_claims.agent_review_from_prior_claims"))
@@ -350,9 +370,11 @@ def decide_refund(
     return Decision(APPROVAL, "above_automated_limit", role, limit_dh=limit)
 
 
-def _decide_parcel(rules: Rules, order: OrderFacts, amount_dh: int, reason: str, now: datetime) -> Decision:
+def _decide_parcel(
+    rules: Rules, order: OrderFacts, claims: ClaimFacts, amount_dh: int, reason: str, now: datetime,
+) -> Decision:
     """PCL-04: a support agent handles every parcel claim. A payout follows the cover in
-    PCL-03, not the amount paid, so it is not held to the order total."""
+    PCL-03, not the amount paid, so what is left of the cover limits it."""
     promised = order.promised_at
     if reason == "damaged_item":
         if order.status != "delivered":
@@ -369,7 +391,13 @@ def _decide_parcel(rules: Rules, order: OrderFacts, amount_dh: int, reason: str,
     elif reason == "late_delivery_fee":
         if parcel_delay_refund_dh(rules, order, now) == 0:
             return Decision(DENY, "no_fee_refund_due")
-    return Decision(APPROVAL, "parcel_needs_person", approval_role(rules, amount_dh))
+    else:
+        return Decision(DENY, "reason_not_for_parcels")
+    if reason != "late_delivery_fee":
+        room = parcel_room_dh(rules, order, claims)
+        if amount_dh > room:
+            return Decision(DENY, "above_parcel_cover", limit_dh=room)
+    return Decision(APPROVAL, "parcel_needs_person", approval_role(rules, _total_with_pending(claims, amount_dh)))
 
 
 def parcel_delay_refund_dh(rules: Rules, order: OrderFacts, now: datetime) -> int:
@@ -395,6 +423,12 @@ def parcel_cover_dh(rules: Rules, order: OrderFacts) -> int:
     return cover if order.declared_value_dh is None else min(order.declared_value_dh, cover)
 
 
+def parcel_room_dh(rules: Rules, order: OrderFacts, claims: ClaimFacts) -> int:
+    """PCL-03: what is left of the cover. A delay refund is a fee coming back, not a payout."""
+    paid = claims.refunded_on_order_dh - claims.late_fee_refunded_dh + claims.pending_on_order_dh
+    return max(parcel_cover_dh(rules, order) - paid, 0)
+
+
 def contact_fell_short(rules: Rules, order: OrderFacts) -> bool:
     """LAT-05: a short wait or too few calls means the failure is not the customer's.
     DRV-04: a driver who left because they felt unsafe is not a short wait."""
@@ -411,39 +445,37 @@ def failed_contact_refund_dh(rules: Rules, order: OrderFacts, claims: "ClaimFact
         return order.credit_paid_dh
     if contact_fell_short(rules, order):
         return full_refund_dh(order, claims or ClaimFacts(), delivered=False)
-    net = order.net_items_dh
-    if order.category == "food":
-        return order.tip_dh
-    if order.category == "grocery":
-        charge = percent_of(net, rules.get("cancellations.grocery.picking_charge_pct"))
-        charge = max(charge, rules.dh("cancellations.grocery.picking_charge_min_qar"))
-        charge = min(charge, rules.dh("cancellations.grocery.picking_charge_max_qar"), net)
-        return net - charge + order.tip_dh
-    if order.category == "pharmacy":
-        # Cold-chain items are not refunded once they have been out for delivery.
-        cold = sum(net_item_refund_dh(order, item, item.quantity) for item in order.items if item.cold_chain)
-        return max(net - cold - rules.dh("cancellations.pharmacy.packed_charge_qar"), 0) + order.tip_dh
-    return 0
+    if order.category == "parcel":
+        return 0
+    return _goods_back_dh(rules, order) + order.tip_dh
 
 
 def failed_cash_balance_dh(rules: Rules, order: OrderFacts) -> int:
     """LAT-05 and CAN-05: on a failed cash order the amount owed becomes a balance."""
     if order.payment_method != "cash" or order.status != "failed_customer" or contact_fell_short(rules, order):
         return 0
-    owed = max(order.paid_dh - order.tip_dh - failed_contact_refund_dh_card(rules, order), 0)
+    owed = max(order.paid_dh - order.tip_dh - _goods_back_dh(rules, order), 0)
     return min(owed, rules.dh("payments.cod.outstanding_balance_cap_qar"))
 
 
-def failed_contact_refund_dh_card(rules: Rules, order: OrderFacts) -> int:
-    """What a card order would get back, which leaves what a cash order still owes."""
+def _goods_back_dh(rules: Rules, order: OrderFacts) -> int:
+    """LAT-05: what comes back for the goods on a failed delivery, before the tip.
+    A cash order still owes the rest."""
     net = order.net_items_dh
     if order.category == "grocery":
-        charge = percent_of(net, rules.get("cancellations.grocery.picking_charge_pct"))
-        charge = max(charge, rules.dh("cancellations.grocery.picking_charge_min_qar"))
-        return net - min(charge, rules.dh("cancellations.grocery.picking_charge_max_qar"), net)
+        return net - picking_charge_dh(rules, net)
     if order.category == "pharmacy":
-        return max(net - rules.dh("cancellations.pharmacy.packed_charge_qar"), 0)
+        # Cold-chain items are not refunded once they have been out for delivery.
+        cold = sum(net_item_refund_dh(order, item, item.quantity) for item in order.items if item.cold_chain)
+        return max(net - cold - rules.dh("cancellations.pharmacy.packed_charge_qar"), 0)
     return 0
+
+
+def picking_charge_dh(rules: Rules, net_dh: int) -> int:
+    """CAN-01: a percentage held between a floor and a ceiling, and never above the items."""
+    charge = percent_of(net_dh, rules.get("cancellations.grocery.picking_charge_pct"))
+    charge = max(charge, rules.dh("cancellations.grocery.picking_charge_min_qar"))
+    return min(charge, rules.dh("cancellations.grocery.picking_charge_max_qar"), net_dh)
 
 
 def late_entitlement(rules: Rules, order: OrderFacts, now: datetime) -> dict[str, int]:
@@ -479,9 +511,14 @@ def late_credit_due_dh(rules: Rules, order: OrderFacts, claims: ClaimFacts, now:
     return max(min(tier - claims.late_credit_on_order_dh, room), 0)
 
 
+def _total_with_pending(claims: ClaimFacts, amount_dh: int) -> int:
+    """REF-05: the total value on the order, counting claims still waiting for a person."""
+    return claims.refunded_on_order_dh + claims.credit_on_order_dh + claims.pending_on_order_dh + amount_dh
+
+
 def _by_total(rules: Rules, claims: ClaimFacts, amount_dh: int, code: str, limit_dh: int = 0) -> Decision:
     """REF-05: who may approve depends on the total value on the order."""
-    total = claims.refunded_on_order_dh + claims.credit_on_order_dh + amount_dh
+    total = _total_with_pending(claims, amount_dh)
     if total <= automated_limit_dh(rules, claims.account_age_days):
         return Decision(EXECUTE, code, limit_dh=limit_dh)
     return Decision(APPROVAL, "above_automated_limit", approval_role(rules, total))
@@ -560,7 +597,7 @@ def decide_credit(
     # Goodwill (REF-07).
     if claims.claims_90d >= int(rules.get("refunds.trust_review.from_prior_claims")):
         return Decision(DENY, "trust_review")
-    if claims.goodwill_30d_dh + amount_dh > rules.dh("goodwill.max_per_customer_30d_qar"):
+    if claims.goodwill_30d_dh + claims.pending_goodwill_dh + amount_dh > rules.dh("goodwill.max_per_customer_30d_qar"):
         return Decision(DENY, "goodwill_cap_30d")
     if amount_dh > rules.dh("goodwill.automated_max_qar"):
         return Decision(APPROVAL, "goodwill_above_automated", "agent")
@@ -636,10 +673,7 @@ def _status_charge(rules: Rules, order: OrderFacts, status: str) -> int | None:
         if status in {"placed", "accepted"}:
             return 0
         if status == "picking":
-            charge = percent_of(net, rules.get("cancellations.grocery.picking_charge_pct"))
-            charge = max(charge, rules.dh("cancellations.grocery.picking_charge_min_qar"))
-            charge = min(charge, rules.dh("cancellations.grocery.picking_charge_max_qar"))
-            return min(charge, net)
+            return picking_charge_dh(rules, net)
         return all_but_tip
     if category == "pharmacy":
         if status in {"placed", "accepted"}:

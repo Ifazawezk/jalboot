@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from jalboot.db.models import Approval, Customer, Order, OrderItem, Refund
 from jalboot.policy.engine import NOT_CLAIMS, ClaimFacts, ItemFact, OrderFacts
+from jalboot.policy.rules import Rules
 
 COMPENSATION = "compensation"
+MONEY_KINDS = ("refund", "credit")
+LATE_REASONS = {"late_delivery", "late_delivery_fee"}
 
 
 def _item_fact(item: OrderItem) -> ItemFact:
@@ -21,6 +26,7 @@ def _item_fact(item: OrderItem) -> ItemFact:
     return ItemFact(
         item.name, item.quantity, item.unit_price_dh, not extra.get("prescription"),
         free_units=max(free, 0), approved_substitute=bool(extra.get("customer_approved")),
+        substituted=bool(extra.get("substitute_for")),
         chilled=bool(extra.get("chilled")), cold_chain=bool(extra.get("cold_chain")),
     )
 
@@ -76,37 +82,71 @@ def order_facts(order: Order) -> OrderFacts:
     )
 
 
-def claim_facts(session: Session, customer: Customer, order: Order | None, now: datetime) -> ClaimFacts:
+def claim_facts(
+    session: Session, customer: Customer, order: Order | None, now: datetime, rules: Rules | None = None,
+    *, excluding: str | None = None,
+) -> ClaimFacts:
     """Works out history from the refunds table. Figures the customer or the model
-    states are never used here."""
+    states are never used here. `excluding` leaves out the approval being decided."""
+    rules = rules or Rules.load()
+    session.refresh(customer, ["wallet_dh"])
     refunded = credited = late_credit = late_fee = 0
+    by_reason: Counter[str] = Counter()
     if order is not None:
         rows = session.scalars(select(Refund).where(Refund.order_id == order.id)).all()
         refunded = sum(r.amount_dh for r in rows if r.method != COMPENSATION)
         credited = sum(r.amount_dh for r in rows if r.method == COMPENSATION)
         late_credit = sum(r.amount_dh for r in rows if r.reason == "late_delivery")
         late_fee = sum(r.amount_dh for r in rows if r.reason == "late_delivery_fee")
+        for row in rows:
+            by_reason[row.reason] += row.amount_dh
+
+    waiting = [
+        approval for approval in session.scalars(select(Approval).where(
+            Approval.customer_id == customer.id, Approval.status == "pending", Approval.kind.in_(MONEY_KINDS),
+        ))
+        if approval.id != excluding
+    ]
+    on_order = [approval for approval in waiting if order is not None and approval.order_id == order.id]
+    for approval in on_order:
+        by_reason[approval.reason] += approval.amount_dh
 
     history = session.scalars(select(Refund).where(Refund.customer_id == customer.id)).all()
 
     def since(days: int) -> list[Refund]:
         return [r for r in history if r.created_at >= now - timedelta(days=days)]
 
-    claims_30 = [r for r in since(30) if r.reason not in NOT_CLAIMS]
-    claims_90 = [r for r in since(90) if r.reason not in NOT_CLAIMS]
+    repeat_window = since(int(rules.get("refunds.repeat_claims.window_days")))
+    trust_window = since(int(rules.get("refunds.trust_review.window_days")))
+    claims_30 = [r for r in repeat_window if r.reason not in NOT_CLAIMS]
+    claims_90 = [r for r in trust_window if r.reason not in NOT_CLAIMS]
     return ClaimFacts(
         refunded_on_order_dh=refunded,
         credit_on_order_dh=credited,
         claims_30d=len(claims_30),
         claims_90d=len(claims_90),
         claims_total_30d_dh=sum(r.amount_dh for r in claims_30),
-        not_received_90d=sum(1 for r in since(90) if r.reason == "not_received"),
+        not_received_90d=sum(
+            1 for r in since(int(rules.get("not_received.window_days"))) if r.reason == "not_received"
+        ),
         goodwill_30d_dh=sum(r.amount_dh for r in since(30) if r.reason == "goodwill"),
         account_age_days=max((now - customer.created_at).days, 0),
         wallet_dh=customer.wallet_dh,
         late_credit_on_order_dh=late_credit,
         late_fee_refunded_dh=late_fee,
+        pending_on_order_dh=sum(approval.amount_dh for approval in on_order),
+        pending_goodwill_dh=sum(approval.amount_dh for approval in waiting if approval.reason == "goodwill"),
+        by_reason_dh=by_reason,
     )
+
+
+def report_issues(reason: str, names: list[dict[str, Any]]) -> list[str]:
+    """GEN-02: what a report is about. Each order line is its own issue, so a report about
+    the tea does not hold the window open for the soup. Late credit and the late fee
+    refund are one delay."""
+    if names:
+        return [f"item:{entry['name']}" for entry in names]
+    return ["late" if reason in LATE_REASONS else reason]
 
 
 def refunded_items(session: Session, order_id: str, *, include_pending: bool = True) -> dict[str, int]:

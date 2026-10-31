@@ -22,6 +22,7 @@ from jalboot.tools.facts import COMPENSATION, order_facts
 EVAL_DIR = ROOT / "eval"
 SETS = ("support", "knowledge", "handoff", "redteam")
 ORIGIN_PIN = (25.0, 51.0)
+HISTORY_ORDER = "JB-HISTORY"
 KM_PER_DEGREE = 111.195
 DEFAULT_NOW = "2026-11-03T19:00:00+03:00"
 UNKNOWN = {"en": "I don't know, can you check?", "ar": "ما أعرف، ممكن تتأكد؟"}
@@ -74,10 +75,13 @@ def _order(row: dict[str, Any], state: dict[str, Any], now: datetime) -> Order:
     if (state.get("flags") or {}).get("severe_weather"):
         extra["severe_weather"] = True
     extra["pin_lat"], extra["pin_lng"] = ORIGIN_PIN
-    # GEN-02: a first report made before this conversation stands.
+    # GEN-02: a first report made before this conversation stands. A case does not say
+    # which issue it was about, so it stands for all of them.
     first_report = (state.get("session") or {}).get("first_report_at")
     if first_report:
-        extra["first_report_at"] = first_report
+        lines = [f"item:{normalize(item['name']).strip()}" for item in row.get("items") or []]
+        reasons = [*engine.ALL_REFUND_REASONS, *engine.CREDIT_REASONS, "late", "cancel"]
+        extra["first_reports"] = {issue: first_report for issue in (*lines, *reasons)}
     order = Order(
         id=row["id"],
         customer_id=row["customer_id"],
@@ -141,7 +145,7 @@ def _seed_history(session: Session, state: dict[str, Any], owner: str, now: date
     older = max(int(claims.get("claims_90d", 0)) - count_30 - not_received, 0)
     goodwill = int(claims.get("goodwill_30d_dh", 0))
     if count_30 or total_30 or not_received or older or goodwill:
-        history = "JB-HISTORY"
+        history = HISTORY_ORDER
         if history not in orders:
             session.add(Order(
                 id=history, customer_id=owner, category="food", status="delivered", subtotal_dh=0,

@@ -657,6 +657,25 @@ def test_lat05_cold_chain_items_are_not_refunded():
     assert engine.failed_contact_refund_dh(RULES, order) == 500
 
 
+def test_lat05_a_failed_cash_order_owes_for_the_cold_chain_items_a_card_would_lose():
+    cold = ItemFact("Insulin", 1, 1000, cold_chain=True)
+    plain = ItemFact("Vitamin D3", 1, 1000)
+    order = failed(
+        category="pharmacy", payment_method="cash", subtotal_dh=2000, discount_dh=0, delivery_fee_dh=0,
+        other_fees_dh=0, tip_dh=0, items=(cold, plain),
+    )
+    packed = RULES.dh("cancellations.pharmacy.packed_charge_qar")
+    assert engine.failed_cash_balance_dh(RULES, order) == 1000 + packed
+
+
+def test_can01_the_picking_charge_stays_inside_its_floor_and_ceiling_and_the_items():
+    floor = RULES.dh("cancellations.grocery.picking_charge_min_qar")
+    ceiling = RULES.dh("cancellations.grocery.picking_charge_max_qar")
+    assert engine.picking_charge_dh(RULES, 100) == 100
+    assert engine.picking_charge_dh(RULES, floor) == floor
+    assert engine.picking_charge_dh(RULES, 10_000_000) == ceiling
+
+
 def test_gen03_the_final_subtotal_sets_the_amount_paid_and_the_seventy_percent_rule():
     order = base_order(subtotal_dh=20000, final_subtotal_dh=15000, discount_dh=0)
     assert order.paid_dh == 15000 + 800 + 300 + 500

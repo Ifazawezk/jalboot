@@ -12,9 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from jalboot.db.models import Order, Refund
+from jalboot.db.models import Customer, Order, Refund
 from jalboot.policy import engine
 from jalboot.policy.rules import Rules
 from jalboot.tools.facts import COMPENSATION, order_facts
@@ -22,6 +23,15 @@ from jalboot.tools.facts import COMPENSATION, order_facts
 
 def new_id(prefix: str) -> str:
     return f"{prefix}-{secrets.token_hex(4).upper()}"
+
+
+def add_to_wallet(session: Session, customer: Customer, amount_dh: int) -> None:
+    """In SQL, so two credits at once cannot overwrite each other."""
+    session.execute(
+        update(Customer).where(Customer.id == customer.id).values(wallet_dh=Customer.wallet_dh + amount_dh)
+        .execution_options(synchronize_session=False)
+    )
+    session.refresh(customer, ["wallet_dh"])
 
 
 class WalletFull(Exception):
@@ -51,6 +61,7 @@ def settle_refund(
 ) -> Settlement:
     """Splits a refund under REF-04, records it and credits the wallet."""
     customer = order.customer
+    session.refresh(customer, ["wallet_dh"])
     original, credit, overflow = engine.refund_split(
         rules, order_facts(order), amount_dh, customer.wallet_dh, to_credit=method == "refund_credit",
     )
@@ -62,7 +73,8 @@ def settle_refund(
         approved_by=approved_by, approval_id=approval_id, created_at=now, idempotency_key=key,
     )
     session.add(refund)
-    customer.wallet_dh += credit
+    if credit:
+        add_to_wallet(session, customer, credit)
     return Settlement(refund, original, credit)
 
 
@@ -84,5 +96,5 @@ def settle_credit(
         created_at=now, idempotency_key=key,
     )
     session.add(refund)
-    order.customer.wallet_dh += amount_dh
+    add_to_wallet(session, order.customer, amount_dh)
     return refund
