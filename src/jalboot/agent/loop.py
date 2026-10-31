@@ -106,9 +106,14 @@ class SupportAgent:
         }), emit)
         if outcome.get("ok"):
             result.handoff = {"reason": reason, "summary": summary, "priority": outcome.get("priority", "P4")}
-        result.reply = replies.handoff_reply(reason, result.language)
+        result.reply = self._handoff_text(result, reason)
         result.finish = "handoff"
         result.confidence = 1.0
+
+    def _handoff_text(self, result: TurnResult, reason: str) -> str:
+        return " ".join([
+            *replies.action_lines(result.tool_log, result.language), replies.handoff_reply(reason, result.language),
+        ])
 
     def _run_tool(self, result: TurnResult, tools: Tools, call: ToolCall, emit: Emit) -> dict[str, Any]:
         emit({"type": "tool.start", "id": call.id, "tool": call.name, "arguments": call.arguments})
@@ -181,7 +186,7 @@ class SupportAgent:
         arguments = entry["arguments"]
         reason = str(arguments.get("reason") or "low_confidence")
         result.handoff = {"reason": reason, "summary": arguments.get("summary", ""), "priority": entry["result"].get("priority", "P4")}
-        result.reply = replies.handoff_reply(reason, result.language)
+        result.reply = self._handoff_text(result, reason)
         result.finish = "handoff"
         result.confidence = 0.5
 
@@ -202,7 +207,8 @@ class SupportAgent:
         )
 
     def _accept(self, result, reply, verdict, passages, text, emit) -> None:
-        result.reply = reply.strip()
+        unsaid = replies.action_lines(result.tool_log, result.language, skip=checks.claimed_actions(reply))
+        result.reply = " ".join([reply.strip(), *unsaid])
         for number in verdict.citations:
             passage = passages[number - 1]
             citation = {"n": number, **{k: passage[k] for k in ("id", "title", "text") if k in passage}}

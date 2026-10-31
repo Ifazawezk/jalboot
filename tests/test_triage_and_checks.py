@@ -333,3 +333,8 @@ def test_a_quote_can_be_offered_but_not_claimed():
 @pytest.mark.parametrize("reply", ["تم ترتيب إعادة التوصيل لطلبك.", "We will redeliver your fries."])
 def test_redelivery_cannot_be_claimed_in_any_form(reply):
     assert not run(reply).ok
+
+
+def test_a_cited_promise_of_a_specific_amount_still_needs_a_tool():
+    assert not run("You will get QAR 25 back [1].", used_tools=False).ok
+    assert run("You will be refunded within 48 hours [1].", used_tools=False).ok

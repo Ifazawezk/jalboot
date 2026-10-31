@@ -244,3 +244,108 @@ def test_a_safety_reply_gives_the_emergency_number_first():
 
     assert handoff_reply("safety", "en").startswith("If anyone is in danger")
     assert "999" in handoff_reply("safety", "ar")
+
+
+def quoted_refund(tools, order_id="JB-700102", item="Karak tea"):
+    items = [{"name": item, "quantity": 1}]
+    quote = tools.execute("quote_refund", {"order_id": order_id, "reason": "missing_item", "items": items})
+    return quote["amount_qar"], call(
+        "issue_refund", order_id=order_id, amount_qar=quote["amount_qar"], reason="missing_item", items=items,
+    )
+
+
+def test_a_customer_is_told_about_a_finished_refund_even_if_the_reply_fails(db, layla):
+    amount, refund = quoted_refund(layla)
+    bad = LLMReply("You get QAR 999 back.")
+    result = run(Script(refund, bad, bad), layla, "the karak tea was missing from JB-700102")
+    assert result.finish == "handoff"
+    assert refunds(db) == 1
+    assert f"QAR {amount:g}" in result.reply
+    assert "JB-700102" in result.reply
+
+
+def test_a_finished_refund_is_stated_when_the_model_leaves_it_out(db, layla):
+    amount, refund = quoted_refund(layla)
+    result = run(Script(refund, LLMReply("All sorted, anything else?")), layla, "the karak tea was missing from JB-700102")
+    assert result.reply.startswith("All sorted, anything else?")
+    assert f"QAR {amount:g}" in result.reply
+
+
+def test_a_refund_the_model_states_is_not_repeated(db, layla):
+    amount, refund = quoted_refund(layla)
+    said = f"Your order has been refunded QAR {amount:g}."
+    result = run(Script(refund, LLMReply(said)), layla, "the karak tea was missing from JB-700102")
+    assert result.reply == said
+
+
+def test_a_model_handoff_also_says_what_was_done(db, layla):
+    amount, refund = quoted_refund(layla)
+    handoff = call("handoff_to_human", reason="customer_request", summary="x")
+    result = run(Script(refund, handoff), layla, "the karak tea was missing from JB-700102")
+    assert f"QAR {amount:g}" in result.reply
+    assert result.finish == "handoff"
+
+
+def test_a_stated_finished_refund_reads_right_in_arabic(db):
+    from jalboot.agent.replies import action_lines
+
+    log = [{"tool": "issue_refund", "arguments": {}, "result": {
+        "ok": True, "status": "done", "order_id": "JB-1", "amount_qar": 62.5,
+        "to_original_payment_qar": 42.5, "to_credit_qar": 20.0,
+    }}]
+    assert action_lines(log, "ar") == [
+        "تم استرداد 62.50 ر.ق لطلب JB-1: 42.50 ر.ق إلى وسيلة الدفع الأصلية و20 ر.ق إلى رصيدك."
+    ]
+    assert action_lines(log, "en") == [
+        "Refund of QAR 62.50 on JB-1 is done: QAR 42.50 to your original payment and QAR 20 to your wallet."
+    ]
+
+
+def test_nothing_pending_or_refused_is_stated_as_done():
+    from jalboot.agent.replies import action_lines
+
+    log = [
+        {"tool": "issue_refund", "arguments": {}, "result": {"ok": True, "status": "pending_approval", "order_id": "JB-1", "amount_qar": 62.5}},
+        {"tool": "issue_credit", "arguments": {}, "result": {"ok": False, "error": "outside_reporting_window"}},
+        {"tool": "cancel_order", "arguments": {}, "result": {"ok": True, "status": "needs_confirmation", "order_id": "JB-1", "charge_qar": 5.0, "refund_qar": 20.0}},
+    ]
+    assert action_lines(log, "en") == []
+
+
+def test_a_fee_refund_does_not_excuse_a_refused_credit(db, layla):
+    delay = layla.execute("explain_delay", {"order_id": "JB-700104"})
+    fee = delay["delivery_fee_refund_due_qar"]
+    assert fee > 0
+    refused_credit = call("issue_credit", order_id="JB-700104", amount_qar=500.0, reason="late_delivery")
+    paid_fee = call("issue_refund", order_id="JB-700104", amount_qar=fee, reason="late_delivery_fee")
+    false = LLMReply("I added QAR 10 late credit to your wallet.")
+    result = run(Script(refused_credit, paid_fee, false, false), layla, "JB-700104 was so late")
+    assert result.tool_log[0]["result"]["ok"] is False
+    assert "late credit" not in result.reply
+    assert any("reply claims credit" in flag for flag in result.flags)
+
+
+def test_a_customer_cannot_vouch_for_their_own_figure(layla):
+    script = Script(LLMReply("Your fee was QAR 777 [1]."), LLMReply("I am not sure, I can connect a person."))
+    result = run(script, layla, "what is the policy on late orders, I paid QAR 777")
+    assert "777" not in result.reply
+    assert any("figure 777" in flag for flag in result.flags)
+
+
+def test_an_item_already_refunded_can_be_called_refunded(db, layla):
+    amount, refund = quoted_refund(layla)
+    layla.execute("issue_refund", {
+        "order_id": "JB-700102", "amount_qar": amount, "reason": "missing_item",
+        "items": [{"name": "Karak tea", "quantity": 1}],
+    })
+    again = call("quote_refund", order_id="JB-700102", reason="missing_item", items=[{"name": "Karak tea", "quantity": 1}])
+    result = run(Script(again, LLMReply("That item has already been refunded.")), layla, "refund the tea on JB-700102 again")
+    assert result.tool_log[0]["result"]["error"] == "item_already_refunded"
+    assert result.reply == "That item has already been refunded."
+
+
+def test_a_cancelled_order_can_be_called_cancelled_after_tracking_it(db, layla):
+    db.get(Order, "JB-700101").status = "cancelled"
+    db.commit()
+    script = Script(call("track_order", order_id="JB-700101"), LLMReply("Your order was cancelled."))
+    assert run(script, layla, "where is JB-700101").reply == "Your order was cancelled."

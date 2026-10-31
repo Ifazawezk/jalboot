@@ -323,14 +323,16 @@ def check_claims(
     asking = "?" in _fold(reply)
     failed: set[str] = set()
     for claim in claims_in(reply):
-        if claim.promised and not used_tools and CITATION.search(claim.sentence):
+        figures = list(_figures(claim.sentence))
+        policy_answer = not used_tools and CITATION.search(claim.sentence) and not any(money for _, money in figures)
+        if claim.promised and policy_answer:
             continue
         if claim.action not in done and not (claim.promised and asking and claim.action in offered):
             if claim.action not in failed:
                 result.fail(f"reply claims {claim.action} but no tool result shows it")
             failed.add(claim.action)
             continue
-        for value, is_money in _figures(claim.sentence):
+        for value, is_money in figures:
             if is_money and value not in amounts:
                 result.fail(f"reply claims {claim.action} of {value:g} but the tool result shows another amount")
 
