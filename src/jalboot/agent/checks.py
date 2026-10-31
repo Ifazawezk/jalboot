@@ -46,6 +46,18 @@ CLAIM_WORDS = {
 }
 
 
+# Models like typographic hyphens and spaces. An order number holding one cannot be
+# searched or copied, and it slips past every pattern here.
+LOOKALIKES = str.maketrans({
+    "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-", "\u2014": "-",
+    "\u00a0": " ", "\u202f": " ", "\u2009": " ", "\u2007": " ",
+})
+
+
+def tidy_reply(reply: str) -> str:
+    return reply.translate(LOOKALIKES).strip()
+
+
 @dataclass
 class CheckResult:
     ok: bool = True

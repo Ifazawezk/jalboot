@@ -155,3 +155,11 @@ def test_another_persons_email_fails():
 
 def test_an_order_number_is_not_a_phone_number():
     assert run("Your order JB-500007 is on the way.").ok
+
+
+def test_lookalike_hyphens_and_spaces_become_plain_ones():
+    assert checks.tidy_reply("JB\u2011900101 at 16:15\u202fUTC") == "JB-900101 at 16:15 UTC"
+
+
+def test_an_iso_date_is_not_a_phone_number():
+    assert run("It expired on 2026-09-30.").ok

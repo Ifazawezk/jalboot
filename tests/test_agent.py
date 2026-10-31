@@ -146,7 +146,7 @@ def test_malformed_tool_arguments_do_not_run(db, layla):
 def test_a_model_error_falls_back_to_a_person_in_a_live_chat(layla):
     result = run(Script(LLMError("boom")), layla)
     assert result.finish == "handoff"
-    assert "llm_error" in result.flags
+    assert any(flag.startswith("llm_error") for flag in result.flags)
 
 
 def test_an_evaluation_stops_instead_of_scoring_a_fallback(layla):

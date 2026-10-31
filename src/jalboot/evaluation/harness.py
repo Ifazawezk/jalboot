@@ -103,6 +103,7 @@ class CaseRunner:
         tool_log: list[dict[str, Any]] = []
         replies: list[str] = []
         citations: list[str] = []
+        flags: list[str] = []
         queue = [turn["text"] for turn in case.get("conversation", []) if turn.get("role") == "customer"]
         if case.get("set") == "knowledge":
             queue = [case["question"]]
@@ -123,6 +124,7 @@ class CaseRunner:
                     self._log(tool_log, result, turn_number)
             replies.append(result.reply)
             citations.extend(c["id"] for c in result.citations)
+            flags.extend(result.flags)
             conversation.failures = conversation.failures + 1 if result.failed else 0
             session.add(Message(conversation_id=conversation.id, role="customer", text=redact(text)[0], created_at=now))
             session.add(Message(conversation_id=conversation.id, role="bot", text=result.reply, created_at=now))
@@ -141,6 +143,7 @@ class CaseRunner:
             "citations": citations,
             "mode": agent.mode,
             "canary": getattr(agent, "canary", ""),
+            "flags": flags,
         }
 
     def _turn(self, session, conversation, agent, text, now, number):

@@ -22,7 +22,7 @@ import math
 import re
 import secrets
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Protocol
 
 from sqlalchemy import select
@@ -55,6 +55,7 @@ LABEL_WORDS = {
     "work": ("work", "office", "دوامي", "الدوام", "عملي", "العمل", "مكتبي", "المكتب"),
 }
 EARTH_KM = 6371.0
+DOHA = timezone(timedelta(hours=3))
 PREPICKUP_LOCKED = {"picked_up", "on_the_way", "delivered", "cancelled", "failed_customer"}
 DELAY_TEXT = {
     "merchant_backlog": {"en": "the merchant had a backlog of orders", "ar": "كان لدى المتجر طلبات كثيرة قيد التحضير"},
@@ -84,6 +85,11 @@ class ToolContext:
     # True in the baseline comparison only. See evaluation/baseline.py.
     unguarded: bool = False
     extras: dict[str, Any] = field(default_factory=dict)
+
+
+def doha_time(moment: datetime | None) -> str | None:
+    """GEN-02: every time is Doha time. A model handed UTC will repeat UTC to the customer."""
+    return None if moment is None else moment.astimezone(DOHA).strftime("%Y-%m-%d %H:%M Doha time")
 
 
 def refused(code: str, **details: Any) -> dict[str, Any]:
@@ -228,9 +234,9 @@ class ToolExecutor:
             "vertical": order.category,
             "status": order.status,
             "store": (merchant.name_ar if arabic and merchant.name_ar else merchant.name) if merchant else "",
-            "placed_at": order.placed_at,
-            "promised_at": order.promised_at,
-            "delivered_at": order.delivered_at,
+            "placed_at": doha_time(order.placed_at),
+            "promised_at": doha_time(order.promised_at),
+            "delivered_at": doha_time(order.delivered_at),
             # A driver's first name only: their record is not the customer's to read.
             "rider": driver.name.split()[0] if driver else None,
         }
@@ -250,7 +256,7 @@ class ToolExecutor:
             "tier": customer.tier,
             "wallet_qar": to_qar(customer.wallet_dh),
             "recent_orders": [
-                {"order_id": o.id, "status": o.status, "vertical": o.category, "placed_at": o.placed_at}
+                {"order_id": o.id, "status": o.status, "vertical": o.category, "placed_at": doha_time(o.placed_at)}
                 for o in orders
             ],
             "saved_addresses": [a.label for a in customer.addresses],

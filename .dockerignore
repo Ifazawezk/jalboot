@@ -1,0 +1,17 @@
+# Keys must never reach an image layer.
+.env
+.env.*
+!.env.example
+
+.git
+.venv
+var
+models
+eval/runs
+eval/.cache
+**/__pycache__
+**/.pytest_cache
+web/node_modules
+web/dist
+web/dist-*
+docs/images

@@ -425,3 +425,8 @@ def test_a_cash_refund_goes_to_credit(db):
     result = tools.execute("issue_refund", MISSING)
     assert result["to_credit_qar"] == 4.0
     assert db.get(Customer, "C-1001").wallet_dh == before + 400
+
+
+def test_tool_results_give_doha_time_so_a_model_cannot_quote_utc(layla):
+    result = layla.execute("track_order", {"order_id": "JB-700101"})
+    assert result["promised_at"] == "2026-11-03 18:20 Doha time"
