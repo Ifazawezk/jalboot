@@ -55,7 +55,7 @@ def top_issues(session: Session, now: datetime, window: int, language: str) -> l
             "count": count,
             "changePct": change,
         })
-    return issues
+    return sorted(issues, key=lambda issue: (-issue["count"], issue["id"]))
 
 
 def _bot_share(tickets: Sequence[Ticket]) -> float:
