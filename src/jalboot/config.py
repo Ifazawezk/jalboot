@@ -18,6 +18,8 @@ from typing import Mapping
 from jalboot.env import ROOT
 
 DEV_SECRET = "dev-only-secret-change-me"
+# The Vite dev server, only outside production and only when nothing else is set.
+DEV_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 
 
 class ConfigError(ValueError):
@@ -79,12 +81,16 @@ class Settings:
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     env = os.environ if env is None else env
     defaults = Settings()
+    environment = env.get("ENVIRONMENT", "").strip().lower() or defaults.environment
+    origins = _list(env.get("ALLOWED_ORIGINS"))
+    if not origins and environment != "production":
+        origins = DEV_ORIGINS
     settings = Settings(
         database_url=env.get("DATABASE_URL", "").strip() or defaults.database_url,
         llm_mode=env.get("LLM_MODE", "").strip().lower() or defaults.llm_mode,
         secret_key=env.get("SECRET_KEY", "").strip() or defaults.secret_key,
-        environment=env.get("ENVIRONMENT", "").strip().lower() or defaults.environment,
-        allowed_origins=_list(env.get("ALLOWED_ORIGINS")),
+        environment=environment,
+        allowed_origins=origins,
         cookie_secure=_flag(env.get("COOKIE_SECURE"), False),
         cookie_samesite=env.get("COOKIE_SAMESITE", "").strip().lower() or defaults.cookie_samesite,
         seed=int(env.get("WORLD_SEED", "").strip() or defaults.seed),

@@ -13,7 +13,7 @@ The TypeScript source of truth is `src/api/types.ts`. Jalboot is a fictional com
 | Times | ISO 8601 in UTC, for example `2026-11-02T15:40:00Z`. The UI shows them in Asia/Qatar. |
 | Money | Numbers in QAR, 2 decimals at most. Field names end in `Qar`. |
 | IDs | Opaque strings. |
-| CORS | When the site and API are on different origins, allow the headers `Authorization`, `Content-Type`, `Accept-Language`, `Last-Event-ID`, `X-CSRF-Token`. Desk routes also need `Access-Control-Allow-Credentials: true` and an exact origin, never `*`. |
+| CORS | When the site and API are on different origins, allow the headers `Authorization`, `Content-Type`, `Accept-Language`, `Last-Event-ID`, `X-CSRF-Token`. Desk routes also need `Access-Control-Allow-Credentials: true` and an exact origin, never `*`. Outside production, `http://localhost:5173` and `http://127.0.0.1:5173` are allowed by default. |
 
 ### Authentication
 
@@ -56,13 +56,17 @@ are optional and only used by the identity endpoints.
 | Status | `code` | When |
 | --- | --- | --- |
 | 400 | `invalid_code` | Wrong identity code. Include `attemptsLeft`. |
-| 401 | `unauthorized` | Missing or expired token. The desk shows its sign-in form. |
+| 401 | `unauthorized` | Missing or expired token, or an unknown conversation. A customer route answers the same for both, so that conversation ids cannot be probed. The desk shows its sign-in form. |
+| 401 | `invalid_credentials` | Wrong email or password. The answer is the same whether or not the email has an account. |
 | 403 | `approval_limit_exceeded` | The signed-in person may not decide this refund. |
+| 403 | `origin_not_allowed` | A state-changing request came from an origin that is not on the list. |
 | 403 | `csrf_failed` | `X-CSRF-Token` is missing or stale. The client calls `GET /desk/me` for a fresh token and retries once. |
-| 404 | `not_found` | Unknown conversation, refund or similar. |
+| 404 | `not_found` | Unknown refund, or a conversation looked up from the desk. |
 | 409 | `turn_in_progress` | A reply is already streaming in this conversation. |
 | 409 | `duplicate_message` | Same `clientMessageId` as a turn that already completed. |
 | 409 | `refund_already_decided` | Stale `version`, or the refund is no longer pending. |
+| 409 | `amount_exceeds_paid` | Approving would pay more than is left on the order. It is checked again at decision time. |
+| 409 | `conversation_closed` | A message was sent to a closed conversation. |
 | 410 | `code_expired` | Identity code expired. |
 | 422 | `invalid_phone` | The phone number is not valid. |
 | 422 | `validation_error` | Any other malformed body. |
@@ -149,6 +153,8 @@ Sends a customer message and streams the reply as SSE.
 { "clientMessageId": "c0a1", "text": "Where is my order?", "locale": "en" }
 ```
 
+`text` is 2000 characters at most, and `clientMessageId` is 64.
+
 `clientMessageId` makes the call safe to repeat. A repeat with the same ID must not store a second customer
 message. It re-runs the turn if the earlier run ended in `identity.required` or `error`, and returns 409
 `duplicate_message` if the earlier run completed.
@@ -161,7 +167,7 @@ message. It re-runs the turn if the earlier run ended in `identity.required` or 
 | --- | --- | --- |
 | `message.start` | `{ "messageId": "m1" }` | Opens the reply. Always first. A held turn that runs again repeats its `messageId`, and the UI opens a new reply. |
 | `tool.start` | `{ "toolCallId": "t1", "tool": "track_order", "label": "Checking your order" }` | A tool began. **The UI shows `label` as written**, and has no list of tools. `label` is required, in plain language, in the conversation language. |
-| `tool.end` | `{ "toolCallId": "t1", "status": "ok", "label": "Checked your order" }` | `status` is `ok` or `error`. `label` is optional and replaces the shown text. Use it for the past tense. |
+| `tool.end` | `{ "toolCallId": "t1", "status": "ok", "label": "Checked your order" }` | `status` is `ok` or `error`. `label` is optional and replaces the shown text. Use it for the past tense. A refusal by the rules or the identity check is `ok`: `error` means a call was broken. |
 | `text.delta` | `{ "delta": "Your order " }` | Append to the reply. |
 | `order.card` | `{ "order": Order }` | Show an order card. A repeat with the same `order.id` replaces it. |
 | `citation` | `{ "citation": Citation }` | Registers source `[n]`. Send it **before** the text that uses the marker. |
@@ -333,7 +339,12 @@ customer `handoff.update` with `status: "joined"`.
 
 ### `POST /desk/conversations/{id}/reply`
 
-Request `{ "text": "..." }`. Response 204. Sends the customer `agent.message`.
+Request `{ "text": "..." }`, 2000 characters at most. Response 204. Sends the customer `agent.message`.
+
+### `POST /desk/conversations/{id}/close`
+
+No body. Response 200 is the `LiveConversation` with `state: "closed"`. Sends the customer `conversation.closed`.
+A later customer message gets 409 `conversation_closed`.
 
 ### `GET /desk/refunds`
 
@@ -346,7 +357,7 @@ and sorts them.
 { "action": "approve", "note": "", "version": 3 }
 ```
 
-`action` is `approve` or `reject`. `note` is required on `reject` and the customer sees it. `version` is the value the
+`action` is `approve` or `reject`. `note` is at most 1000 characters. It is required on `reject`, at least 8 characters, and the customer sees it. `version` is the value the
 agent was looking at. Response 200 is the updated `Refund`. Errors: 409 `refund_already_decided`,
 403 `approval_limit_exceeded`.
 

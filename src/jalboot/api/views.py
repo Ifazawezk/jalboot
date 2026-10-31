@@ -35,6 +35,12 @@ TOOL_LABELS = {
     "explain_delay": (("Finding out what caused the delay", "جارٍ معرفة سبب التأخير"), ("Found out what caused the delay", "تمت معرفة سبب التأخير")),
 }
 TOOL_FAILED = ("That step did not work", "لم تنجح هذه الخطوة")
+# A refusal is the rules working, not a failure, so the customer never sees it as an error.
+TOOL_REFUSED = ("Checked the rules", "تم التحقق من القواعد")
+IDENTITY_NEEDED = ("Need to confirm it is you", "نحتاج إلى التأكد من هويتك")
+BROKEN_CALLS = {
+    "unknown_tool", "arguments_not_valid_json", "unknown_argument", "missing_argument", "invalid_argument",
+}
 # Stated in the API as a single reason the desk has a label for.
 REASON_GROUPS = {
     "missing_item": "missing_item", "wrong_item": "wrong_item", "whole_wrong_order": "wrong_item",
@@ -66,6 +72,18 @@ def pick(pair: tuple[str, str], language: str) -> str:
 def tool_label(tool: str, stage: int, language: str) -> str:
     labels = TOOL_LABELS.get(tool)
     return pick(labels[stage], language) if labels else tool
+
+
+def tool_end_view(tool: str, result: dict[str, Any], language: str) -> tuple[str, str]:
+    """The status and label for tool.end. Only a broken call is an error."""
+    if result.get("ok"):
+        return "ok", tool_label(tool, 1, language)
+    error = result.get("error")
+    if error == "identity_required":
+        return "ok", pick(IDENTITY_NEEDED, language)
+    if error in BROKEN_CALLS:
+        return "error", pick(TOOL_FAILED, language)
+    return "ok", pick(TOOL_REFUSED, language)
 
 
 def order_card(order: Order, language: str) -> dict[str, Any]:
