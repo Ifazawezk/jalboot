@@ -338,3 +338,70 @@ def test_redelivery_cannot_be_claimed_in_any_form(reply):
 def test_a_cited_promise_of_a_specific_amount_still_needs_a_tool():
     assert not run("You will get QAR 25 back [1].", used_tools=False).ok
     assert run("You will be refunded within 48 hours [1].", used_tools=False).ok
+
+
+@pytest.mark.parametrize("text", [
+    "I accidentally ordered twice, can I cancel one?",
+    "I ordered twice by accident, can I cancel one?",
+    "do you have allergy information for the menu?",
+    "do you have allergy info?",
+    "which dishes have allergens?",
+    "does the karak have allergens",
+    "I have a question about allergies",
+    "هل عندكم معلومات عن الحساسية؟",
+    "what is the worst case delivery time",
+    "How do I report fraud on my card?",
+    "the agent who delivered was great",
+    "your agent was so helpful, thank you",
+    "موظفكم كان ممتاز شكرا",
+    "the app crashed when I opened my basket",
+    "the pressure cooker in my order is fine, thanks",
+    "I want a personal message on the cake",
+])
+def test_innocent_messages_stay_with_the_bot(text):
+    assert triage_message(text).handoff_reason == ""
+
+
+@pytest.mark.parametrize("text", [
+    "there was a car accident outside my door",
+    "the driver had an accident at my gate",
+    "accidents like this are dangerous, the rider crashed into me",
+    "he harassed me", "he keeps harassing me", "this is harassment",
+    "I was assaulted by the driver",
+    "anaphylaxis after the meal", "anaphylactic shock",
+    "I am allergic to nuts and this had nuts",
+    "my allergy is flaring up after this meal",
+    "my son has allergies and he ate this",
+    "allergy attack after eating this",
+    "allergy!",
+    "I have a nut allergy, does this contain nuts?",
+    "عندي حساسية من هذا الأكل",
+    "طلع فيه مكسرات وعندي حساسية",
+    "he was hospitalised after eating this",
+    "we have been vomiting all night", "my daughter vomited",
+    "his lip is swollen", "I got injured", "stomach pains after the chicken", "she overdosed on it",
+    "I can’t breathe", "cant breathe",
+])
+def test_real_reports_still_reach_safety(text):
+    assert triage_message(text).handoff_reason == SAFETY
+
+
+@pytest.mark.parametrize("text,reason", [
+    ("you are scammers and thieves", UPSET),
+    ("this is fraud, you scammed me", UPSET),
+    ("fraudsters, the lot of you", UPSET),
+    ("this is the worst service ever", UPSET),
+    ("I am talking to my lawyers", LEGAL),
+    ("the regulators will hear about this", LEGAL),
+    ("the agent who helped me was not helpful at all, she hung up", AGENT_COMPLAINT),
+    ("your agent was great at ignoring me, I want to complain about her", AGENT_COMPLAINT),
+    ("I am wanting to speak to a person", HUMAN),
+    ("connecting me to a human would help", HUMAN),
+    ("I don’t want an agent, just tell me where my order is", ""),
+])
+def test_word_forms_still_match_after_the_word_boundary(text, reason):
+    assert triage_message(text).handoff_reason == reason
+
+
+def test_praise_with_a_complaint_in_arabic_is_still_a_complaint():
+    assert triage_message("موظفكم كان غير محترم معي").handoff_reason == AGENT_COMPLAINT
