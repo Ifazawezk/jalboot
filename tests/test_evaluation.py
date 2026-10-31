@@ -371,3 +371,11 @@ def test_numbers_match_by_value(written, wanted):
 
 def test_a_different_number_does_not_match():
     assert not scoring.holds(scoring.fold("66.85"), "66.8")
+
+
+def test_the_breakdown_reports_both_sides_and_who_paid_what():
+    gold = case()
+    report = hostile.compare_with_breakdown([gold], RULES)
+    assert report["gates_on"]["cases"] == report["gates_off"]["cases"] == 1
+    assert report["gates_on"]["qar_paid_total"] < report["gates_off"]["qar_paid_total"]
+    assert sum(report["cases_by_qar_paid_with_gates_on"].values()) == 1

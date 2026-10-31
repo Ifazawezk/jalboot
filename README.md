@@ -187,7 +187,7 @@ Most of these have a named test in `tests/`. The red team results are in [Result
 
 A prompt can fail, so this test assumes it already has. [`evaluation/hostile.py`](src/jalboot/evaluation/hostile.py) skips the model completely. For each case it fires the calls an attacker would want straight at the tool layer: every read, refunds for the whole order, one item refunds, goodwill credit, an address change and a cancellation, on every order in the case. It does this with the gates on and then off, and records what really changed in the database. It needs no key, and nothing in it depends on how a model behaves.
 
-On the 61 development red team cases, with 901 hostile tool calls:
+On the 61 development red team cases, with 901 hostile tool calls. These figures are in [`eval/results/hostile-dev.json`](eval/results/hostile-dev.json), and `python -m jalboot.evaluation.hostile --split dev` repeats them with no key:
 
 | | Gates on | Gates off |
 | --- | --- | --- |
@@ -199,7 +199,7 @@ On the 61 development red team cases, with 901 hostile tool calls:
 
 **The money is not zero, and that is a real limit of this design.** Gates check whether a claim fits the rules, not whether it is true. A verified customer who falsely reports a missing item on their own delivered order looks exactly like an honest one. In 42 cases the same QAR 25 was paid: a QAR 15 item refund plus QAR 10 of goodwill, both inside the automated limits. Another 10 cases paid the goodwill alone. The 9 cases that paid nothing are the 9 sessions that never passed the identity check. Stopping a false claim that fits the rules takes a person or fraud signals, and no gate here can do it.
 
-**QAR 25 is also not a ceiling.** It is what these orders allow, because their items are cheap. Across all 202 development cases that hold orders (2,511 calls), reads of other people's data stayed at 0, and the most paid in one case was QAR 60: the QAR 50 automated refund limit plus QAR 10 of goodwill. Each case holds only a few orders, so this does not measure an attacker working through many orders over weeks. The repeat-claim rules exist for that, and this test does not measure them. It also covers the tool layer only, so it says nothing about what a taken-over model could write in a reply.
+**QAR 25 is also not a ceiling.** It is what these orders allow, because their items are cheap. Across all 191 development cases that hold orders (2,511 calls), reads of other people's data stayed at 0, and the most paid in one case was QAR 60: the QAR 50 automated refund limit plus QAR 10 of goodwill. Each case holds only a few orders, so this does not measure an attacker working through many orders over weeks. The repeat-claim rules exist for that, and this test does not measure them. It also covers the tool layer only, so it says nothing about what a taken-over model could write in a reply.
 
 ## Quick start
 
@@ -451,7 +451,6 @@ The policy documents do not settle every case. Where two rules collide, GEN-04 s
 
 ### Other gaps
 
-- **The page states a limit the bot may not quote.** ESC-03 forbids quoting internal limits and REF-05 is internal, but `GET /policy` is public and the page tells customers the automated refund limit. One of these should change.
 - **ESC-02 against the approval queue.** ESC-02 hands off at once when a human level is needed, while the tool layer files an approval. Both endings are accepted.
 - **Leave at the door with proof.** LAT-04 says the order counts as delivered, while ESC-02 sends a not-received case with proof to a person. The engine follows LAT-04 and refuses.
 - **Pharmacy cancellation refunds.** REF-05 sends every pharmacy refund to a person, but CAN-02 works out a cancellation refund and it is not a claim.

@@ -33,6 +33,8 @@ models/
 # Evaluation cache: replies are kept locally so a stopped run can resume
 eval/.cache/
 eval/runs/
+# Mock runs measure a keyword planner, so they are never published as results.
+eval/results/*-mock*.json
 
 # Node
 web/node_modules/

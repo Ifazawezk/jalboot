@@ -5,8 +5,8 @@ The model proposes; this module decides. For each call, in this order:
     1. the tool exists and its arguments match the definition exactly
     2. the conversation has passed the identity check, if the tool needs one
     3. the order belongs to the verified customer
-    4. the policy engine allows the action, sends it for approval, or refuses it
-    5. a repeat of the same action returns the first result and changes nothing
+    4. a repeat of the same action returns the first result and changes nothing
+    5. the policy engine allows the action, sends it for approval, or refuses it
     6. the action and an audit row commit together, or neither does
 
 An order that does not exist and an order that belongs to someone else give the same

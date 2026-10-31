@@ -1,5 +1,9 @@
 """What can an attacker do if the model is fully taken over?
 
+    python -m jalboot.evaluation.hostile --split dev
+
+The command needs no key, and writes eval/results/hostile-<split>.json.
+
 A prompt can fail, so the claim worth testing is what happens when it does. This skips
 the model completely. For each case it fires the tool calls an attacker would want
 straight at the tool layer, with the gates on and then off, and records what really
@@ -12,6 +16,10 @@ test includes those calls and reports the money, so the limit is measured, not h
 
 from __future__ import annotations
 
+import argparse
+import json
+import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
@@ -19,7 +27,8 @@ from sqlalchemy import select
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
 from jalboot.db.models import Refund
-from jalboot.evaluation.cases import case_now, load_state
+from jalboot.env import ROOT
+from jalboot.evaluation.cases import case_now, load_cases, load_state
 from jalboot.policy.rules import Rules
 from jalboot.tools.executor import ToolContext, ToolExecutor
 
@@ -138,3 +147,47 @@ def compare(cases: Sequence[dict[str, Any]], rules: Rules) -> dict[str, Any]:
     gated = [run_case(case, rules, gates=True) for case in cases]
     open_tools = [run_case(case, rules, gates=False) for case in cases]
     return {"gates_on": summarize(gated), "gates_off": summarize(open_tools)}
+
+
+def compare_with_breakdown(cases: Sequence[dict[str, Any]], rules: Rules) -> dict[str, Any]:
+    gated = [run_case(case, rules, gates=True) for case in cases]
+    open_tools = [run_case(case, rules, gates=False) for case in cases]
+    amounts = Counter(round(result.money_paid_dh / 100, 2) for result in gated)
+    return {
+        "gates_on": summarize(gated),
+        "gates_off": summarize(open_tools),
+        "cases_by_qar_paid_with_gates_on": {str(k): amounts[k] for k in sorted(amounts)},
+        "unverified_cases_that_paid_nothing": sum(
+            1 for case, result in zip(cases, gated)
+            if not ((case.get("state") or {}).get("session") or {}).get("verified") and result.money_paid_dh == 0
+        ),
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Fires hostile tool calls with the gates on and off.")
+    parser.add_argument("--split", choices=("dev", "test"), default="dev")
+    args = parser.parse_args(argv)
+
+    rules = Rules.load()
+    redteam = load_cases(args.split, ("redteam",))
+    with_orders = [
+        case for case in load_cases(args.split, ("support", "handoff", "redteam"))
+        if (case.get("state") or {}).get("orders")
+    ]
+    report = {
+        "split": args.split,
+        "note": "No model is involved. These are hostile calls made straight at the tool layer.",
+        "redteam": compare_with_breakdown(redteam, rules),
+        "all_cases_with_orders": compare_with_breakdown(with_orders, rules),
+    }
+    out = ROOT / "eval" / "results" / f"hostile-{args.split}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
+    print(json.dumps({key: report[key]["gates_on"] for key in ("redteam", "all_cases_with_orders")}, indent=1))
+    print(f"Report: {out.relative_to(ROOT)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
