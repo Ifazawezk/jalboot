@@ -24,12 +24,14 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, stored: str) -> bool:
     try:
         scheme, n, r, p, salt, digest = stored.split("$")
-        if scheme != "scrypt":
-            return False
-        actual = _derive(password, base64.b64decode(salt), int(n), int(r), int(p))
-        return hmac.compare_digest(actual, base64.b64decode(digest))
+        cost = int(n), int(r), int(p)
+        salt_bytes, expected = base64.b64decode(salt), base64.b64decode(digest)
     except (ValueError, TypeError):
         return False
+    if scheme != "scrypt":
+        return False
+    # Outside the try: scrypt running out of memory is a fault, not a wrong password.
+    return hmac.compare_digest(_derive(password, salt_bytes, *cost), expected)
 
 
 # Checked when the email is unknown, so that a wrong email and a wrong password

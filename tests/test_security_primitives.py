@@ -6,6 +6,7 @@ from jalboot import audit
 from jalboot.db.base import create_schema, make_engine, make_session_factory, utcnow
 from jalboot.db.models import AuditEvent, WebSession
 from jalboot.security import throttle, tokens
+from jalboot.security import passwords
 from jalboot.security.passwords import hash_password, verify_password
 
 SECRET = "unit-test-secret"
@@ -145,3 +146,23 @@ def test_known_limit_deleting_the_newest_audit_rows_is_not_detected():
     session.execute(text("DELETE FROM audit_events WHERE seq=3"))
     session.commit()
     assert audit.verify_chain(session) == (True, None)
+
+
+def test_a_memory_error_from_scrypt_is_not_mistaken_for_a_wrong_password(monkeypatch):
+    stored = passwords.hash_password("right")
+
+    def out_of_memory(*_args):
+        raise ValueError("memory limit exceeded")
+
+    monkeypatch.setattr(passwords, "_derive", out_of_memory)
+    try:
+        passwords.verify_password("right", stored)
+    except ValueError as error:
+        assert "memory" in str(error)
+    else:
+        raise AssertionError("the error was swallowed")
+
+
+def test_a_stored_value_that_cannot_be_parsed_is_still_just_a_failed_check():
+    assert not passwords.verify_password("x", "scrypt$not-a-number$8$1$AAAA$AAAA")
+    assert not passwords.verify_password("x", "scrypt$16384$8$1$!!!$AAAA")
