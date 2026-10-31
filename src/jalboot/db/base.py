@@ -12,6 +12,13 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.types import TypeDecorator
 
 
+# Columns that a database made by an earlier version may not have.
+ADDED_COLUMNS = {
+    "login_throttle": {"window_start": "TIMESTAMP"},
+    "drivers": {"name_ar": "VARCHAR(120) NOT NULL DEFAULT ''"},
+}
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -76,10 +83,17 @@ def create_schema(engine: Engine) -> None:
 def _upgrade_schema(engine: Engine) -> None:
     """create_all adds missing tables but never changes one that exists, so a database
     from an earlier version needs its columns brought up to date here."""
-    columns = {column["name"] for column in inspect(engine).get_columns("login_throttle")}
-    if "window_start" not in columns:
+    inspector = inspect(engine)
+    missing = [
+        f"ALTER TABLE {table} ADD COLUMN {name} {kind}"
+        for table, columns in ADDED_COLUMNS.items()
+        for name, kind in columns.items()
+        if name not in {column["name"] for column in inspector.get_columns(table)}
+    ]
+    if missing:
         with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE login_throttle ADD COLUMN window_start TIMESTAMP"))
+            for statement in missing:
+                connection.execute(text(statement))
 
 
 def utcnow() -> datetime:

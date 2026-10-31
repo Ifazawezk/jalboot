@@ -6,7 +6,7 @@ from datetime import timedelta
 from sqlalchemy import text
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
-from jalboot.db.models import LoginThrottle
+from jalboot.db.models import Driver, LoginThrottle
 from jalboot.security import throttle
 from tests.conftest import ANCHOR
 
@@ -81,4 +81,18 @@ def test_upgrading_twice_changes_nothing(tmp_path):
     engine = make_engine(f"sqlite:///{(tmp_path / 'new.sqlite3').as_posix()}")
     create_schema(engine)
     create_schema(engine)
+    engine.dispose()
+
+
+def test_a_database_from_before_arabic_driver_names_is_upgraded(tmp_path):
+    engine = make_engine(f"sqlite:///{(tmp_path / 'old.sqlite3').as_posix()}")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE drivers (id VARCHAR(32) PRIMARY KEY, name VARCHAR(120) NOT NULL, "
+            "vehicle VARCHAR(16) NOT NULL, zone VARCHAR(60) NOT NULL, rating FLOAT NOT NULL)"
+        ))
+        connection.execute(text("INSERT INTO drivers VALUES ('D-1', 'Saad Nair', 'car', 'Al Sadd', 4.5)"))
+    create_schema(engine)
+    with make_session_factory(engine)() as session:
+        assert session.get(Driver, "D-1").name_ar == ""
     engine.dispose()
