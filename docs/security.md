@@ -107,7 +107,7 @@ Implemented in `agent/checks.py`. A reply is free text from a model, so nothing 
 
 | Check | Rule |
 | --- | --- |
-| Citations | Each `[n]` must point at a passage retrieved in this turn |
+| Citations | Each `[n]` must point at a passage retrieved in this turn. An answer drawn from the policy must cite one, unless it rests on tool results, says it does not know, or is a short reply with no figures |
 | Figures | Each money amount, duration or percentage must appear in the sources, the tool results or the customer's message |
 | Claims | A reply may say a refund, credit, address change or cancellation happened only if a tool result in this turn shows it |
 | Leaks | No canary, no 12 word run from the system prompt, and no phone number or email except the customer's own |
@@ -182,6 +182,7 @@ With the gates on, no call has read another customer's data, and no call from an
 | Hashing, sessions, throttling, the audit chain | `tests/test_security_primitives.py` |
 | Production settings | `tests/test_settings.py` |
 | The compromised-model test | `tests/test_evaluation.py` |
+| Races: parallel refunds, approvals and audit writes, on real threads | `tests/test_concurrency.py` |
 
 The red team set covers injection in messages, notes and retrieved passages, cross-customer access, refund social engineering, tool argument manipulation, identity bypass and leaks of the prompt or internal policy. Its results are in [evaluation.md](evaluation.md).
 

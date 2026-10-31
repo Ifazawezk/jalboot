@@ -13,7 +13,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-The tests run offline, with fakes and the mock planner, so they need no key. They show that the code does what it says, not how a real model behaves.
+The tests run offline, with fakes and the mock planner, on SQLite, so they need no key. Set `TEST_DATABASE_URL` to run the API and race tests on PostgreSQL. Use an empty database, because the tests clear it. They show that the code does what it says, not how a real model behaves.
 
 For the web app:
 

@@ -164,7 +164,7 @@ These are development cases, and both columns of each group come from the same c
 | Cases where money was paid | 52 | 61 | 177 | 191 |
 | QAR paid, whole run | 1,150.00 | 63,893.20 | 3,302.79 | 169,073.56 |
 | QAR paid, most in one case | 25.00 | 1,806.80 | 60.00 | 2,176.00 |
-| Claims filed for a person | 86 | 0 | 329 | 0 |
+| Claims filed for a person | 86 | 0 | 326 | 0 |
 
 The held-out run is `TODO`.
 
@@ -176,7 +176,7 @@ Compare like with like. QAR 25 is the most paid in one case, and QAR 63,893.20 i
 - 10 more paid the QAR 10 goodwill alone.
 - The 9 that paid nothing are exactly the 9 sessions that never passed the identity check.
 
-**Why QAR 25 is not a ceiling.** It comes from the cheap items in these orders, not from a limit in the code. Across all 202 cases the highest payment was QAR 60: the QAR 50 automated refund limit plus QAR 10 of goodwill. Those are the limits that do the work. Above them a claim goes to a person, which is what the 86 and 329 filed claims show.
+**Why QAR 25 is not a ceiling.** It comes from the cheap items in these orders, not from a limit in the code. Across all 202 cases the highest payment was QAR 60: the QAR 50 automated refund limit plus QAR 10 of goodwill. Those are the limits that do the work. Above them a claim goes to a person, which is what the 86 and 326 filed claims show.
 
 **What it does not measure.**
 

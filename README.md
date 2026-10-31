@@ -176,7 +176,7 @@ Every tool call passes these gates in order, in [`tools/executor.py`](src/jalboo
 | Invented sources or figures | Each `[n]` must match a retrieved passage, and each figure must appear in the evidence | `agent/checks.py` |
 | Leaking approval limits or the prompt | Internal sections are not indexed for customers, a canary and a repeat check guard the prompt | `kb/store.py`, `agent/checks.py` |
 | One-time codes in chat | Redacted before storage or any model, with a fixed reply | `security/redact.py`, `api/chat.py` |
-| Paying twice | An idempotency key per action, plus a per item check across conversations | `tools/executor.py` |
+| Paying twice | An idempotency key per action, a per item check across conversations, and one writer at a time | `tools/executor.py`, `audit.py` |
 | Staff acting above their level | Role limits are enforced on the server, and limits are rechecked at decision time | `tools/approvals.py` |
 | Another site driving the desk | HttpOnly cookie, SameSite, an Origin check and a CSRF token | `api/guards.py`, `api/app.py` |
 | Quietly editing history | A SHA-256 hash chain on the audit log finds an edited or removed row | `audit.py` |
@@ -382,7 +382,7 @@ From [`eval/results/retrieval-dev.json`](eval/results/retrieval-dev.json): searc
 - [ ] Multi-factor sign-in for staff
 - [ ] A shared event broker, to run more than one server process
 - [ ] Build and run the Docker image
-- [ ] Automated tests against PostgreSQL
+- [ ] Run the tests on PostgreSQL as a matter of routine
 
 ## FAQ
 
@@ -425,7 +425,7 @@ No. They come from simulated tickets, and they are not the evaluation results. T
 - **It runs as one server process.** The event broker is in memory, so several processes would need a shared one, and recent events are lost on restart.
 - **Conversation tokens do not expire.** Staff sessions last 8 hours, but a customer's token works for as long as the conversation row exists, and nothing closes a conversation yet.
 - **Staff sign in with a password only**, with no second factor. The development password is public, so never expose a server running development settings.
-- **Docker has never been run**, and PostgreSQL has no automated tests. The code has a path for PostgreSQL, and no test here runs against it. A reverse proxy has not been tested either.
+- **Docker has never been run**, and PostgreSQL gets less testing than SQLite. The default test run uses SQLite. The API and race tests also run on PostgreSQL when `TEST_DATABASE_URL` names a server. A reverse proxy has not been tested.
 - **False claims that fit the rules get paid.** See [If the model is taken over](#if-the-model-is-taken-over). The gates limit this. They cannot end it.
 - **Triage misses what nobody listed**, and it can fire on a word used innocently. It is a floor under the model, not a classifier.
 - **The reply checks are narrow.** A citation check proves the passage was retrieved, not that it supports the sentence. A figure check matches values, so a real number from the wrong rule passes. The claim check is a phrase list in two languages.
@@ -453,7 +453,7 @@ The policy documents do not settle every case. Where two rules collide, GEN-04 s
 
 - **The page states a limit the bot may not quote.** ESC-03 forbids quoting internal limits and REF-05 is internal, but `GET /policy` is public and the page tells customers the automated refund limit. One of these should change.
 - **ESC-02 against the approval queue.** ESC-02 hands off at once when a human level is needed, while the tool layer files an approval. Both endings are accepted.
-- **Leave at the door with proof.** LAT-04 says the order counts as delivered, while ESC-02 sends a not-received case with proof to a person.
+- **Leave at the door with proof.** LAT-04 says the order counts as delivered, while ESC-02 sends a not-received case with proof to a person. The engine follows LAT-04 and refuses.
 - **Pharmacy cancellation refunds.** REF-05 sends every pharmacy refund to a person, but CAN-02 works out a cancellation refund and it is not a claim.
 - **Parcel delays and late reports.** PCL-04 gives a fixed delay refund and says a person handles every claim, and it is unclear whether a delay is a claim. REF-01 refuses a late report while PCL-04 sends it to a person.
 - **Goodwill on a zero value item.** WRG-03 says an agent can offer goodwill and REF-07 lets automation give a little, so whether the bot may offer it is arguable.
