@@ -14,6 +14,8 @@ export const en = {
   'mode.demo.body': 'Scripted examples played in your browser, not real conversations. Nothing here is live.',
   'mode.mock.title': 'Sample data',
   'mode.mock.body': 'Runs in your browser with no backend.',
+  'mode.replies.title': 'Mock replies',
+  'mode.replies.body': 'This server is in mock mode, so replies follow fixed rules and no AI model is used. All data is simulated.',
 
   'chat.heading': 'Order late? Something missing?',
   'chat.headingMark': 'Ask here.',

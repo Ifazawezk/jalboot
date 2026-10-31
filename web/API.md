@@ -98,6 +98,7 @@ value is null, the UI leaves that sentence out, so it can never state a limit th
 {
   "policyVersion": "2026.11",
   "currency": "QAR",
+  "assistant": "mock",
   "refund": {
     "automatedLimitQar": 50,
     "newAccountAutomatedLimitQar": 25,
@@ -120,6 +121,9 @@ Serve these from `knowledge/rules.json`:
 | `refund.cardBusinessDays` | `refunds.timing.card_business_days` |
 | `refund.creditMinutes` | `refunds.timing.credit_minutes` |
 
+`assistant` is `mock` when replies come from fixed rules and `live` when they come from a real model. It does not come
+from `rules.json`. `POST /conversations` sends it too. While it is `mock`, the page shows a "Mock replies" label.
+
 ## Customer chat
 
 ### `POST /conversations`
@@ -132,7 +136,8 @@ No auth. Request `{ "locale": "ar" }`. Response 201:
   "token": "opaque-conversation-token",
   "locale": "ar",
   "createdAt": "2026-11-02T15:40:00Z",
-  "verified": false
+  "verified": false,
+  "assistant": "mock"
 }
 ```
 
@@ -154,7 +159,7 @@ message. It re-runs the turn if the earlier run ended in `identity.required` or 
 
 | Event | Data | Meaning |
 | --- | --- | --- |
-| `message.start` | `{ "messageId": "m1" }` | Opens the reply. Always first. |
+| `message.start` | `{ "messageId": "m1" }` | Opens the reply. Always first. A held turn that runs again repeats its `messageId`, and the UI opens a new reply. |
 | `tool.start` | `{ "toolCallId": "t1", "tool": "track_order", "label": "Checking your order" }` | A tool began. **The UI shows `label` as written**, and has no list of tools. `label` is required, in plain language, in the conversation language. |
 | `tool.end` | `{ "toolCallId": "t1", "status": "ok", "label": "Checked your order" }` | `status` is `ok` or `error`. `label` is optional and replaces the shown text. Use it for the past tense. |
 | `text.delta` | `{ "delta": "Your order " }` | Append to the reply. |
@@ -169,8 +174,8 @@ message. It re-runs the turn if the earlier run ended in `identity.required` or 
 Reply text refers to sources with markers such as `[1]`, ASCII digits in square brackets. A marker with no matching
 `citation` event is shown as plain text.
 
-When a person has taken over, the backend stores the message, forwards it to them, and answers with a single
-`message.end` with `finish: "forwarded"`.
+When a person has taken over, the backend stores the message, forwards it to them, and answers with `message.start`
+and `message.end` with `finish: "forwarded"`. There is no text, so the UI shows no reply.
 
 #### Example
 
@@ -203,8 +208,8 @@ data: {"finish":"complete"}
 The backend refuses order tools until the conversation is verified. **The phone number and the code travel only
 through the two endpoints below. They must never enter chat text, the conversation history or the model's context.**
 
-1. A turn needs an order tool and the conversation is not verified. The backend streams `message.start`, optional
-   text such as "I need to confirm it is you first", `identity.required`, and `message.end` with
+1. A turn needs an order tool and the conversation is not verified. The backend streams `message.start`,
+   `identity.required`, text such as "I need to confirm it is you first", and `message.end` with
    `finish: "identity_required"`. It keeps the customer message.
 2. The UI locks the chat box, so nothing typed during the check can reach the model, and shows a phone form.
 3. The UI calls `verify/start`, then shows a code form.

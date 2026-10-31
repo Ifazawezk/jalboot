@@ -186,7 +186,8 @@ mark {
   margin-inline-end: 6px;
 }
 
-.mode--demo strong {
+.mode--demo strong,
+.mode--replies strong {
   padding-inline: 8px;
   border-radius: var(--radius);
   background: var(--accent);

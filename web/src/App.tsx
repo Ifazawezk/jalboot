@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import type { SupportApi } from './api/client';
-import { ChatProvider } from './chat/ChatProvider';
+import { ChatProvider, useChat } from './chat/ChatProvider';
 import { ChatScreen } from './chat/ChatScreen';
 import { Desk } from './desk/Desk';
 import { I18nProvider, useI18n } from './i18n/context';
 import { brandFor } from './i18n/translate';
+import { bannerFor } from './lib/mode';
 import { BrandMark, Icon } from './ui/Icon';
 import { useRoute } from './ui/hooks';
 
@@ -63,16 +64,17 @@ function ThemeButton() {
 
 function ModeBanner() {
   const api = useApi();
+  const { assistant } = useChat();
   const { t } = useI18n();
-  if (api.mode === 'live') return null;
-  const demo = api.mode === 'demo';
+  const banner = bannerFor(api.mode, assistant);
+  if (!banner) return null;
   return (
-    <p className={demo ? 'mode mode--demo' : 'mode'}>
+    <p className={banner === 'mock' ? 'mode' : `mode mode--${banner}`}>
       <strong>
-        {demo && <span className="rec-dot" aria-hidden="true" />}
-        {t(demo ? 'mode.demo.title' : 'mode.mock.title')}
+        {banner === 'demo' && <span className="rec-dot" aria-hidden="true" />}
+        {t(`mode.${banner}.title`)}
       </strong>{' '}
-      <span>{t(demo ? 'mode.demo.body' : 'mode.mock.body')}</span>
+      <span>{t(`mode.${banner}.body`)}</span>
     </p>
   );
 }

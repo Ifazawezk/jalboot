@@ -1,6 +1,6 @@
 // Drives the built site in real headless Edge: real clicks and keys, both languages, two widths.
 //   npm run build
-//   VITE_BASE_PATH=/jalboot-support/ npm run build:demo     (Git Bash: add MSYS_NO_PATHCONV=1)
+//   VITE_BASE_PATH=/jalboot/ npm run build:demo     (Git Bash: add MSYS_NO_PATHCONV=1)
 //   npm run e2e
 // Only one browser runs at a time, to keep memory low.
 
@@ -13,7 +13,7 @@ import puppeteer from 'puppeteer-core';
 const EDGE =
   process.env.EDGE_PATH ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const SHOTS = resolve('screenshots');
-const BASE_PATH = '/jalboot-support/';
+const BASE_PATH = '/jalboot/';
 const AXE = resolve('node_modules/axe-core/axe.min.js');
 const VIEWPORTS = {
   desktop: { width: 1366, height: 850 },

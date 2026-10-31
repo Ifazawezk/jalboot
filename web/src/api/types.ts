@@ -3,6 +3,8 @@
 
 export type Locale = 'en' | 'ar';
 export type ApiMode = 'mock' | 'demo' | 'live';
+/** What the server answers with: fixed rules in mock mode, or a real model in live mode. */
+export type AssistantMode = 'mock' | 'live';
 
 export type Vertical = 'food' | 'grocery' | 'pharmacy' | 'parcel';
 
@@ -72,6 +74,7 @@ export interface ApiErrorBody {
 export interface Policy {
   policyVersion: string;
   currency: string;
+  assistant?: AssistantMode;
   refund: {
     automatedLimitQar: number | null;
     newAccountAutomatedLimitQar: number | null;
@@ -143,6 +146,7 @@ export interface Conversation {
   locale: Locale;
   createdAt: string;
   verified: boolean;
+  assistant?: AssistantMode;
 }
 
 export interface SendMessageInput {

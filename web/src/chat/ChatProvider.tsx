@@ -10,7 +10,7 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 import type { Unsubscribe } from '../api/client';
-import { ApiError, type Policy, type VerifyStartResult } from '../api/types';
+import { ApiError, type AssistantMode, type Policy, type VerifyStartResult } from '../api/types';
 import { useApi } from '../App';
 import type { Recording } from '../data/recordings';
 import { useI18n } from '../i18n/context';
@@ -27,6 +27,7 @@ interface Playback {
 interface Chat {
   state: ChatState;
   policy: Policy | null;
+  assistant: AssistantMode | null;
   send: (text: string) => void;
   stop: () => void;
   retry: () => void;
@@ -60,6 +61,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const { locale, t } = useI18n();
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [policy, setPolicy] = useState<Policy | null>(null);
+  const [assistant, setAssistant] = useState<AssistantMode | null>(null);
   const [playback, setPlayback] = useState<Playback>(NO_PLAYBACK);
 
   const conversationId = useRef<string | null>(null);
@@ -71,7 +73,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let live = true;
     void api.getPolicy().then((value) => {
-      if (live) setPolicy(value);
+      if (!live) return;
+      setPolicy(value);
+      if (value?.assistant) setAssistant(value.assistant);
     });
     return () => {
       live = false;
@@ -90,6 +94,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (conversationId.current) return conversationId.current;
     const conversation = await api.createConversation(locale);
     conversationId.current = conversation.id;
+    // Also read here, so the mock label still shows if GET /policy failed.
+    if (conversation.assistant) setAssistant(conversation.assistant);
     follow(conversation.id);
     return conversation.id;
   }, [api, follow, locale]);
@@ -241,6 +247,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       policy,
+      assistant,
       send,
       stop,
       retry,
@@ -259,6 +266,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [
       state,
       policy,
+      assistant,
       send,
       stop,
       retry,

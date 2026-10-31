@@ -127,6 +127,11 @@ describe('repository rules', () => {
     for (const [path, text] of texts) expect(text.includes('{{BRAND}}'), path).toBe(false);
   });
 
+  it('has no inline script, which the backend Content-Security-Policy refuses', () => {
+    const html = readFileSync('index.html', 'utf-8');
+    expect(/<script(?![^>]*\ssrc=)[^>]*>/.test(html)).toBe(false);
+  });
+
   it('has no fixed tool list and no hardcoded refund limit in the UI', () => {
     for (const [path, text] of texts) {
       expect(/TOOL_NAMES|KnownTool|AUTO_APPROVE_LIMIT/.test(text), path).toBe(false);

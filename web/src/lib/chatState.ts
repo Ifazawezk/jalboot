@@ -232,8 +232,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         items: [...state.items, { kind: 'customer', id: action.id, text: action.text }],
       };
-    case 'message.start':
-      if (state.items.some((item) => item.id === action.messageId)) return state;
+    case 'message.start': {
+      // The backend keeps the ID when it runs a held turn again, so only a reply that is still
+      // open counts as a repeat. A finished one means a new run, which needs its own bubble.
+      const runs = state.items.filter(
+        (item) => item.id === action.messageId || item.id.startsWith(`${action.messageId}-run-`),
+      );
+      if (runs.some((item) => item.kind === 'bot' && item.status === 'streaming')) return state;
       return {
         ...state,
         streaming: true,
@@ -241,7 +246,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ...state.items,
           {
             kind: 'bot',
-            id: action.messageId,
+            id: runs.length > 0 ? `${action.messageId}-run-${runs.length + 1}` : action.messageId,
             text: '',
             tools: [],
             orders: [],
@@ -253,6 +258,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           },
         ],
       };
+    }
     case 'tool.start':
       return updateOpenBot(state, (item) => ({
         ...item,
@@ -296,8 +302,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return addNotice({ ...state, identity: 'verified', maskedPhone: null }, 'identity_verified');
     case 'identity.cancelled':
       return addNotice({ ...state, identity: 'none', maskedPhone: null }, 'identity_cancelled');
-    case 'message.end':
-      return closeOpenBot(state, 'complete', null, false);
+    case 'message.end': {
+      const closed = closeOpenBot(state, 'complete', null, false);
+      if (action.finish !== 'forwarded') return closed;
+      // The message went to a person, so the opened reply has nothing to show.
+      const silent = (item: ChatItem) =>
+        item.kind === 'bot' && item.status === 'complete' && !item.text && item.tools.length === 0;
+      return { ...closed, items: closed.items.filter((item) => !silent(item)) };
+    }
     case 'error':
       return failTurn(state, action.error.message, action.error.retryable);
     case 'turn.stopped':

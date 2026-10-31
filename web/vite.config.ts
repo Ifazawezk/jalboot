@@ -13,6 +13,13 @@ export default defineConfig(({ mode }) => {
       `VITE_BASE_PATH must start with a slash, got "${base}". In Git Bash, run with MSYS_NO_PATHCONV=1.`,
     );
   }
+  const apiBase = env.VITE_API_BASE;
+  if (apiBase && !/^(\/|https?:\/\/)/.test(apiBase)) {
+    // The same rewrite here builds a site where every API call fails.
+    throw new Error(
+      `VITE_API_BASE must start with a slash or http, got "${apiBase}". In Git Bash, run with MSYS_NO_PATHCONV=1.`,
+    );
+  }
   const config: ViteUserConfig = {
     base,
     plugins: [react()],

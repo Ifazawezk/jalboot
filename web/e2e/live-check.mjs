@@ -61,6 +61,7 @@ const AGENT = { id: 'a1', name: 'Noor', role: 'agent' };
 const POLICY = {
   policyVersion: '2026.11',
   currency: 'QAR',
+  assistant: 'mock',
   refund: {
     automatedLimitQar: 50,
     newAccountAutomatedLimitQar: 25,
@@ -118,7 +119,8 @@ async function streamReply(res, turn) {
   sse(res);
   const parts = state.verified
     ? [
-        frame('message.start', { messageId: `m-${Date.now()}` }),
+        // The real backend repeats the ID when a held turn runs again.
+        frame('message.start', { messageId: `m-${turn}` }),
         frame('tool.start', { toolCallId: 't1', tool: 'a_tool_the_ui_has_never_seen', label: 'Checking your order' }),
         frame('tool.end', { toolCallId: 't1', status: 'ok', label: 'Checked your order' }),
         frame('order.card', { order: ORDER }),
@@ -131,9 +133,9 @@ async function streamReply(res, turn) {
         frame('message.end', { finish: 'complete' }),
       ]
     : [
-        frame('message.start', { messageId: `m-${Date.now()}` }),
-        frame('text.delta', { delta: 'I need to confirm it is you first.' }),
+        frame('message.start', { messageId: `m-${turn}` }),
         frame('identity.required', { reason: 'order_tools' }),
+        frame('text.delta', { delta: 'I need to confirm it is you first.' }),
         frame('message.end', { finish: 'identity_required' }),
       ];
   // Bytes are cut at arbitrary places, in the middle of frames and of Arabic letters.
@@ -150,7 +152,7 @@ async function customerApi(req, res, path) {
   if (path === '/policy') return send(res, 200, POLICY);
   if (path === '/conversations' && req.method === 'POST') {
     await readBody(req);
-    return send(res, 201, { id: 'cv-live', token: 'tok-1', locale: 'en', createdAt: new Date().toISOString(), verified: false });
+    return send(res, 201, { id: 'cv-live', token: 'tok-1', locale: 'en', createdAt: new Date().toISOString(), verified: false, assistant: 'mock' });
   }
   if (req.headers.authorization !== 'Bearer tok-1') return fail(res, 401, 'unauthorized', 'No token');
 
@@ -286,7 +288,9 @@ try {
 
   await page.goto(`http://127.0.0.1:${PORT}/?lang=en#/chat`);
   await page.waitForSelector('.rows button');
-  check('live: no sample data banner', (await page.$('.mode')) === null);
+  const banner = await (await page.waitForSelector('.mode--replies')).evaluate((el) => el.textContent);
+  check('live: mock replies are labelled from GET /policy', banner.includes('Mock replies'), banner.slice(0, 40));
+  check('live: no sample data banner', !banner.includes('Sample data'));
   const rule = await page.waitForFunction(() => document.querySelector('.case .fine')?.textContent);
   check('live: limit comes from GET /policy', (await rule.jsonValue()).includes('50.00'));
 

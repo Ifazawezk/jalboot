@@ -74,6 +74,36 @@ describe('chatReducer streaming', () => {
     expect(state.items).toHaveLength(1);
   });
 
+  it('opens a new reply when a finished message ID runs again after the identity check', () => {
+    const state = run([
+      { type: 'message.start', messageId: 'm1' },
+      { type: 'identity.required', reason: 'order_tools' },
+      { type: 'text.delta', delta: 'I need to confirm it is you.' },
+      { type: 'message.end', finish: 'identity_required' },
+      { type: 'identity.verified' },
+      { type: 'message.start', messageId: 'm1' },
+      { type: 'text.delta', delta: 'Your order is on the way.' },
+      { type: 'message.end', finish: 'complete' },
+    ]);
+    const bots = state.items.filter((item): item is BotItem => item.kind === 'bot');
+    expect(bots.map((item) => item.text)).toEqual([
+      'I need to confirm it is you.',
+      'Your order is on the way.',
+    ]);
+    expect(new Set(state.items.map((item) => item.id)).size).toBe(state.items.length);
+    expect(state.streaming).toBe(false);
+  });
+
+  it('leaves no empty reply when a message is forwarded to a person', () => {
+    const withStart = run([
+      { type: 'message.start', messageId: 'm1' },
+      { type: 'message.end', finish: 'forwarded' },
+    ]);
+    expect(withStart.items).toEqual([]);
+    expect(withStart.streaming).toBe(false);
+    expect(run([{ type: 'message.end', finish: 'forwarded' }]).items).toEqual([]);
+  });
+
   it('marks unfinished tools when a reply is stopped or fails', () => {
     const open: ChatAction[] = [
       { type: 'message.start', messageId: 'm1' },

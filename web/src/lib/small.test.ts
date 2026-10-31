@@ -6,9 +6,26 @@ import { forceLtr, formatClock, formatDay, formatNumber, formatQar, formatTime, 
 import { normalizeCode, normalizePhone, toAsciiDigits } from './identity';
 import { classifyIntent, normalizeText } from './intent';
 import { sortLive, upsertById } from './live';
+import { bannerFor } from './mode';
 import { orderStep } from './orders';
 import { applyDecision, checkDecision, decidedOnly, nextFocusAfter, sortQueue } from './refunds';
 import { parseRoute } from './route';
+
+describe('bannerFor', () => {
+  it('labels a live server that answers in mock mode', () => {
+    expect(bannerFor('live', 'mock')).toBe('replies');
+  });
+
+  it('shows nothing for a real model, or before the server has said', () => {
+    expect(bannerFor('live', 'live')).toBeNull();
+    expect(bannerFor('live', null)).toBeNull();
+  });
+
+  it('keeps the banners of the builds that have no server', () => {
+    expect(bannerFor('demo', null)).toBe('demo');
+    expect(bannerFor('mock', null)).toBe('mock');
+  });
+});
 
 describe('parseCitedText', () => {
   const known = new Set([1, 2]);
@@ -55,6 +72,8 @@ describe('identity input', () => {
     ['+974 3300-1234', '+97433001234'],
     ['0097433001234', '+97433001234'],
     ['٣٣٠٠١٢٣٤', '+97433001234'],
+    ['01001001', '+97401001001'],
+    ['+97401001002', '+97401001002'],
   ])('accepts %s', (input, expected) => {
     expect(normalizePhone(input)).toBe(expected);
   });
