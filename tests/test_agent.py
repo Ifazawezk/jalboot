@@ -500,3 +500,31 @@ def test_a_search_that_finds_nothing_relevant_gives_no_sources(searching):
 def test_the_full_search_result_stays_in_the_tool_log(searching):
     result = run(Script(search(), LLMReply("Sure.")), searching, NO_SOURCES)
     assert "confidence" in result.tool_log[0]["result"]["passages"][0]
+
+
+@pytest.mark.parametrize("reason", ["upset_customer", "rule_conflict", "repeated_failure", "low_confidence"])
+def test_a_reply_at_a_slow_priority_does_not_promise_a_person_now(reason):
+    from jalboot.agent.replies import handoff_reply
+
+    english, arabic = handoff_reply(reason, "en"), handoff_reply(reason, "ar")
+    assert "connecting you" not in english.lower()
+    assert "now" not in english.lower().split()
+    assert "الآن" not in arabic
+    assert "أحوّلك" not in arabic
+
+
+@pytest.mark.parametrize("reason", ["safety", "account_security"])
+def test_the_safety_team_can_still_say_now(reason):
+    from jalboot.agent.replies import handoff_reply
+
+    assert "now" in handoff_reply(reason, "en")
+    assert "الآن" in handoff_reply(reason, "ar")
+
+
+def test_arabic_replies_name_the_safety_team_and_avoid_the_guessing_line():
+    from jalboot.agent.replies import HANDOFF_REPLIES
+
+    arabic = " ".join(table["ar"] for table in HANDOFF_REPLIES.values())
+    assert "فريق الأمان" not in arabic
+    assert "أخمّن" not in arabic
+    assert "لست متأكدا من أنني" not in arabic

@@ -23,8 +23,8 @@ HANDOFF_REPLIES = {
         "ar": "بالتأكيد. طلبت انضمام موظف، وسيطّلع على هذه المحادثة دون الحاجة إلى إعادة ما قلته.",
     },
     "upset_customer": {
-        "en": "I am sorry about this. I am connecting you with a person who can look at it properly, and they will see everything so far.",
-        "ar": "نأسف لذلك. أحوّلك إلى موظف ليتابع الأمر معك، وسيطّلع على كل ما سبق.",
+        "en": "I am sorry about this. I have asked a person to look at it properly, and they will see everything so far.",
+        "ar": "نأسف لذلك. طلبت من موظف متابعة الأمر معك، وسيطّلع على كل ما سبق.",
     },
     "account_security": {
         "en": "I am sorry. I am passing this to our safety team now so your account can be protected.",
@@ -39,20 +39,20 @@ HANDOFF_REPLIES = {
         "ar": "يحتاج هذا الأمر إلى مراجعة موظف، لذا حوّلته إلى الفريق، وسيطّلع على كل ما سبق.",
     },
     "rule_conflict": {
-        "en": "I do not want to guess on this one, so I am connecting you with a person who can decide.",
-        "ar": "هذه الحالة تحتاج إلى قرار موظف، لذا أحوّلك إليه الآن.",
+        "en": "I do not want to guess on this one, so I have passed it to a person who can decide.",
+        "ar": "هذه الحالة تحتاج إلى قرار موظف، لذا حوّلتها إلى الفريق.",
     },
     "repeated_failure": {
-        "en": "I have not been able to solve this, so I am connecting you with a person who can help.",
-        "ar": "لم أتمكن من حل هذا الأمر، لذا أحوّلك إلى موظف يمكنه مساعدتك.",
+        "en": "I have not been able to solve this, so I have passed it to a person who can help.",
+        "ar": "لم أتمكن من حل هذا الأمر، لذا حوّلته إلى موظف يمكنه مساعدتك.",
     },
     "legal_threat": {
         "en": "I understand. I am passing this to a person on our team who can respond to you directly.",
         "ar": "أتفهم ذلك. سأحوّل الأمر إلى أحد أفراد فريقنا ليرد عليك مباشرة.",
     },
     "low_confidence": {
-        "en": "I am not sure I can answer this correctly, so I am connecting you with a person who can help.",
-        "ar": "لا أستطيع تأكيد الإجابة الصحيحة هنا، لذا أحوّلك إلى موظف.",
+        "en": "I am not sure I can answer this correctly, so I have passed it to a person who can help.",
+        "ar": "لا أستطيع تأكيد الإجابة الصحيحة هنا، لذا حوّلت الأمر إلى موظف.",
     },
 }
 
