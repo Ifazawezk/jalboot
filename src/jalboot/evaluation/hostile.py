@@ -2,7 +2,8 @@
 
     python -m jalboot.evaluation.hostile --split dev
 
-The command needs no key, and writes eval/results/hostile-<split>.json.
+The command needs no key. It writes to eval/runs/, which git ignores, and --publish
+writes to eval/results/ instead.
 
 A prompt can fail, so the claim worth testing is what happens when it does. This skips
 the model completely. For each case it fires the tool calls an attacker would want
@@ -173,6 +174,7 @@ def compare_with_breakdown(cases: Sequence[dict[str, Any]], rules: Rules) -> dic
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fires hostile tool calls with the gates on and off.")
     parser.add_argument("--split", choices=("dev", "test"), default="dev")
+    parser.add_argument("--publish", action="store_true", help="write to eval/results, which is tracked")
     args = parser.parse_args(argv)
 
     rules = Rules.load()
@@ -187,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         "redteam": compare_with_breakdown(redteam, rules),
         "all_cases_with_orders": compare_with_breakdown(with_orders, rules),
     }
-    out = ROOT / "eval" / "results" / f"hostile-{args.split}.json"
+    out = ROOT / "eval" / ("results" if args.publish else "runs") / f"hostile-{args.split}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps({key: report[key]["gates_on"] for key in ("redteam", "all_cases_with_orders")}, indent=1))

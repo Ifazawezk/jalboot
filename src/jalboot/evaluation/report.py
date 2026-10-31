@@ -81,6 +81,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--daily-tokens", type=int, default=None)
     parser.add_argument("--embeddings", default="", help="embedding preset, such as e5-small")
     parser.add_argument(
+        "--publish", action="store_true",
+        help="write to eval/results, which is tracked. Without it the report stays in eval/runs",
+    )
+    parser.add_argument(
         "--sample", type=int, default=None,
         help="run only this many evenly spaced cases from each set, for a small run on a tight budget",
     )
@@ -90,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("a run on test/ needs --why, which goes in eval/test_runs.md")
     if args.system == "baseline" and args.mode == "mock":
         parser.error("the baseline needs a real model: both sides of a mock comparison are the same keyword rules")
+    if args.publish and (args.mode == "mock" or args.sample):
+        parser.error("only a full run on a real model can be published")
 
     sets = tuple(args.sets.split(","))
     cases = load_cases(args.split, sets)
@@ -127,8 +133,9 @@ def main(argv: list[str] | None = None) -> int:
         system=args.system, mode=args.mode, model=model, stopped_early=stopped, sampled=bool(args.sample),
         note="" if args.mode == "llm" else "Mock mode: a keyword planner, not a model.",
     )
-    RESULTS.mkdir(parents=True, exist_ok=True)
-    out = RESULTS / f"{name}.json"
+    folder = RESULTS if args.publish else RUNS
+    folder.mkdir(parents=True, exist_ok=True)
+    out = folder / f"{name}.json"
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"{report['cases_run']} of {report['cases_total']} cases. Report: {out.relative_to(ROOT)}")
     print(f"requests {budget.requests_used}, tokens {budget.tokens_used}, cache hits {budget.cache_hits}")

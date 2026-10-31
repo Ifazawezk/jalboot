@@ -198,8 +198,10 @@ A run stops at its request budget, its daily token cap or the provider's limit, 
 The compromised-model test needs no key and no model:
 
 ```bash
-python -m jalboot.evaluation.hostile --split dev           # writes eval/results/hostile-dev.json
+python -m jalboot.evaluation.hostile --split dev
 ```
+
+Every command writes to `eval/runs/`, which git ignores, so trying one cannot change a published result. `--publish` writes to `eval/results/` instead. A mock run or a sample cannot be published.
 
 ## Rules for the test split
 

@@ -9,7 +9,7 @@ import pytest
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
 from jalboot.db.models import Customer, Order
-from jalboot.evaluation import hostile, retrieval, scoring
+from jalboot.evaluation import hostile, report, retrieval, scoring
 from jalboot.evaluation.baseline import PlainBot
 from jalboot.evaluation.cases import _customer, case_now, load_state
 from jalboot.evaluation.harness import (
@@ -463,3 +463,21 @@ def test_two_runs_of_a_case_send_the_same_prompt():
     CaseRunner(first, KB, RULES).run(case())
     CaseRunner(second, KB, RULES).run(case())
     assert first.seen == second.seen
+
+
+def test_a_mock_run_or_a_sample_cannot_be_published(capsys):
+    with pytest.raises(SystemExit):
+        report.main(["--split", "dev", "--mode", "mock", "--publish"])
+    with pytest.raises(SystemExit):
+        report.main(["--split", "dev", "--mode", "llm", "--sample", "2", "--publish"])
+    assert "only a full run" in capsys.readouterr().err
+
+
+def test_the_hostile_command_leaves_published_results_alone_by_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(hostile, "ROOT", tmp_path)
+    monkeypatch.setattr(hostile, "load_cases", lambda *_args: [case()])
+    assert hostile.main(["--split", "dev"]) == 0
+    assert (tmp_path / "eval" / "runs" / "hostile-dev.json").exists()
+    assert not (tmp_path / "eval" / "results").exists()
+    assert hostile.main(["--split", "dev", "--publish"]) == 0
+    assert (tmp_path / "eval" / "results" / "hostile-dev.json").exists()

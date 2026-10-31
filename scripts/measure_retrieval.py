@@ -1,8 +1,9 @@
 """Measures retrieval, with no language model involved.
 
 Compares keyword search, character n-grams, the two fused, and optionally dense
-embeddings and a reranker, then writes eval/results/retrieval-<split>.json. Dense and
-reranker runs need the embeddings extra and a local model.
+embeddings and a reranker. It writes retrieval-<split>.json to eval/runs/, which git
+ignores, and --publish writes to eval/results/ instead. Dense and reranker runs need the
+embeddings extra and a local model.
 
     python scripts/measure_retrieval.py --split dev --dense --rerank-model PATH_OR_NAME
 """
@@ -45,6 +46,7 @@ def main() -> int:
     parser.add_argument("--dense", action="store_true")
     parser.add_argument("--dense-model", default="e5-small")
     parser.add_argument("--rerank-model", default="")
+    parser.add_argument("--publish", action="store_true", help="write to eval/results, which is tracked")
     args = parser.parse_args()
 
     passages = load_passages()
@@ -89,7 +91,7 @@ def main() -> int:
         print(f"{name:22} R@3 {row['recall_at_3']['value']:.3f}  R@5 {row['recall_at_5']['value']:.3f}  "
               f"MRR {row['mrr']:.3f}  en R@3 {row['recall_at_3_en']['value']:.3f}  ar R@3 {row['recall_at_3_ar']['value']:.3f}",
               flush=True)
-    out = ROOT / "eval" / "results" / f"retrieval-{args.split}.json"
+    out = ROOT / "eval" / ("results" if args.publish else "runs") / f"retrieval-{args.split}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps(report["paired_vs_bm25_ngrams_at_3"]))
