@@ -82,8 +82,8 @@ class Runtime:
     # has none. A recording sets this, so a fallback is never saved as the model's reply.
     propagate: tuple[type[BaseException], ...] = ()
 
-    def agent(self) -> SupportAgent:
-        return SupportAgent(self.llm, self.knowledge, propagate=self.propagate)
+    def agent(self, llm: LLMClient | None = None) -> SupportAgent:
+        return SupportAgent(llm or self.llm, self.knowledge, propagate=self.propagate)
 
     @property
     def mode(self) -> str:

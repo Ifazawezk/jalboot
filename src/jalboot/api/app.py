@@ -86,21 +86,57 @@ def get_session(runtime: Runtime = Depends(get_runtime)):
         yield session
 
 
-def customer_auth(
-    conversation_id: str,
-    authorization: str | None = Header(default=None),
-    runtime: Runtime = Depends(get_runtime),
-    session: Session = Depends(get_session),
-) -> Conversation:
+def conversation_for_token(session: Session, secret: str, conversation_id: str, authorization: str | None) -> Conversation:
     """Each conversation has its own token, so knowing an id reaches nothing. Unknown
     ids and wrong tokens get the same answer."""
     token = (authorization or "").removeprefix("Bearer ").strip()
     conversation = session.get(Conversation, conversation_id)
     if conversation is None or not token:
         raise ApiError(401, "unauthorized")
-    if not secrets.compare_digest(conversation.token_hash, tokens.hash_token(runtime.settings.secret_key, token)):
+    if not secrets.compare_digest(conversation.token_hash, tokens.hash_token(secret, token)):
         raise ApiError(401, "unauthorized")
     return conversation
+
+
+def web_session_for(session: Session, secret: str, request: Request) -> WebSession:
+    row = tokens.find_session(session, secret, request.cookies.get(COOKIE), "staff")
+    if row is None:
+        raise ApiError(401, "unauthorized")
+    return row
+
+
+def active_staff(session: Session, row: WebSession) -> StaffUser:
+    staff = session.get(StaffUser, row.staff_id)
+    if staff is None or not staff.active:
+        raise ApiError(401, "unauthorized")
+    return staff
+
+
+def customer_auth(
+    conversation_id: str,
+    authorization: str | None = Header(default=None),
+    runtime: Runtime = Depends(get_runtime),
+    session: Session = Depends(get_session),
+) -> Conversation:
+    return conversation_for_token(session, runtime.settings.secret_key, conversation_id, authorization)
+
+
+def customer_stream_auth(
+    conversation_id: str,
+    authorization: str | None = Header(default=None),
+    runtime: Runtime = Depends(get_runtime),
+) -> None:
+    """For routes that stream. A dependency using get_session stays open until the
+    response ends, which for a stream means a connection held for as long as a page is
+    open. So these check in a short session of their own and keep no database object."""
+    with runtime.sessions() as session:
+        conversation_for_token(session, runtime.settings.secret_key, conversation_id, authorization)
+
+
+def desk_stream_role(request: Request, runtime: Runtime = Depends(get_runtime)) -> str:
+    """The desk version of customer_stream_auth, which keeps only the role."""
+    with runtime.sessions() as session:
+        return active_staff(session, web_session_for(session, runtime.settings.secret_key, request)).role
 
 
 def desk_session(
@@ -108,17 +144,11 @@ def desk_session(
     runtime: Runtime = Depends(get_runtime),
     session: Session = Depends(get_session),
 ) -> WebSession:
-    row = tokens.find_session(session, runtime.settings.secret_key, request.cookies.get(COOKIE), "staff")
-    if row is None:
-        raise ApiError(401, "unauthorized")
-    return row
+    return web_session_for(session, runtime.settings.secret_key, request)
 
 
 def desk_user(row: WebSession = Depends(desk_session), session: Session = Depends(get_session)) -> StaffUser:
-    staff = session.get(StaffUser, row.staff_id)
-    if staff is None or not staff.active:
-        raise ApiError(401, "unauthorized")
-    return staff
+    return active_staff(session, row)
 
 
 def desk_write(
@@ -187,11 +217,11 @@ def create_conversation(
 async def send_message(
     conversation_id: str,
     body: SendMessage,
-    conversation: Conversation = Depends(customer_auth),
+    _authorized: None = Depends(customer_stream_auth),
     runtime: Runtime = Depends(get_runtime),
 ) -> StreamingResponse:
     plan = await run_in_threadpool(
-        chat.prepare_turn, runtime, conversation.id, body.clientMessageId, body.text, body.locale,
+        chat.prepare_turn, runtime, conversation_id, body.clientMessageId, body.text, body.locale,
     )
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -281,11 +311,11 @@ def resume_id(last_event_id: str | None) -> int | None:
 @api.get("/conversations/{conversation_id}/events")
 async def conversation_events(
     conversation_id: str,
-    conversation: Conversation = Depends(customer_auth),
+    _authorized: None = Depends(customer_stream_auth),
     last_event_id: str | None = Header(default=None),
     runtime: Runtime = Depends(get_runtime),
 ) -> StreamingResponse:
-    subscription = runtime.broker.subscribe(chat.conversation_topic(conversation.id), resume_id(last_event_id))
+    subscription = runtime.broker.subscribe(chat.conversation_topic(conversation_id), resume_id(last_event_id))
     return StreamingResponse(stream_events(subscription), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
@@ -591,11 +621,11 @@ def desk_quality(
 @api.get("/desk/events")
 async def desk_events(
     request: Request,
-    staff: StaffUser = Depends(desk_user),
+    role: str = Depends(desk_stream_role),
     last_event_id: str | None = Header(default=None),
     runtime: Runtime = Depends(get_runtime),
 ) -> StreamingResponse:
-    topic = chat.desk_topic(staff.role, language_of(request))
+    topic = chat.desk_topic(role, language_of(request))
     subscription = runtime.broker.subscribe(topic, resume_id(last_event_id))
     return StreamingResponse(stream_events(subscription), media_type="text/event-stream", headers=SSE_HEADERS)
 

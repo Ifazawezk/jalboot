@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ from jalboot.api.errors import ApiError, error_body
 from jalboot.api.runtime import Runtime
 from jalboot.db.base import utcnow
 from jalboot.db.models import Approval, AuditEvent, Conversation, Customer, Message, Order
-from jalboot.llm.client import LLMError
+from jalboot.llm.client import LLMClient, LLMError, LLMReply
 from jalboot.policy.engine import ROLES
 from jalboot.security.redact import redact
 from jalboot.tools.executor import ToolContext, ToolExecutor
@@ -201,6 +201,21 @@ def _customer_label(session: Session, conversation: Conversation) -> str:
     return f"{customer.name} ({customer.id})" if customer and conversation.verified_at else ""
 
 
+class ReleasingClient:
+    """Ends the open transaction before each model call, so a slow provider holds no
+    database connection. Tools commit their own writes, so nothing is left half done."""
+
+    def __init__(self, client: LLMClient, session: Session):
+        self._client = client
+        self._session = session
+        self.provider = client.provider
+        self.model = client.model
+
+    def chat(self, messages: Sequence[dict], tools: Sequence[dict] | None = None) -> LLMReply:
+        self._session.commit()
+        return self._client.chat(messages, tools)
+
+
 def run_turn(runtime: Runtime, plan: TurnPlan, emit: Emit) -> None:
     """Worker thread. Emits the stream events, and always ends the stream."""
     session = runtime.sessions()
@@ -279,9 +294,12 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
         knowledge=runtime.knowledge, publish=on_tool_publish, turn_id=str(plan.message_id),
     )
     tools = ToolExecutor(context)
-    result = runtime.agent().respond(
-        plan.text, tools, _history(session, conversation.id, plan.message_id), language,
-        customer_label=_customer_label(session, conversation), emit=translate, failures=conversation.failures,
+    history = _history(session, conversation.id, plan.message_id)
+    customer_label = _customer_label(session, conversation)
+    session.commit()  # Search can be slow too, and it runs before the first model call.
+    result = runtime.agent(ReleasingClient(runtime.llm, session)).respond(
+        plan.text, tools, history, language,
+        customer_label=customer_label, emit=translate, failures=conversation.failures,
     )
     _keep_handoff_promise(result, tools, conversation, translate)
 
