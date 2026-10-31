@@ -76,6 +76,9 @@ class ItemFact:
     quantity: int
     unit_dh: int
     promo_eligible: bool = True
+    # WRG-03: units of a buy-one-get-one pair that were free.
+    free_units: int = 0
+    approved_substitute: bool = False
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,7 @@ class OrderFacts:
     driver_calls: int | None = None
     left_for_safety: bool = False
     change_short_dh: int = 0
+    leave_at_door: bool = False
 
     @property
     def refund_subtotal_dh(self) -> int:
@@ -304,6 +308,9 @@ def decide_refund(
             return Decision(APPROVAL, "not_received_limit", role)
         close = order.gps_distance_m is not None and order.gps_distance_m <= int(rules.get("not_received.gps_radius_m"))
         if order.proof_of_delivery and close:
+            # LAT-04: a proof photo of the right door within range means it was delivered.
+            if order.leave_at_door:
+                return Decision(DENY, "delivered_at_door_with_proof")
             return Decision(APPROVAL, "proof_of_delivery_exists", role)
 
     # REF-06: the photo may follow up to a day after the report, so a missing photo
@@ -579,6 +586,11 @@ def promo_discount_dh(rules: Rules, code: str, eligible_subtotal_dh: int, delive
         return min(to_dh(promo["value"]), eligible_subtotal_dh)
     discount = percent_of(eligible_subtotal_dh, promo["value"])
     return min(discount, to_dh(promo["max_discount_qar"]))
+
+
+def refundable_units(item: ItemFact, missing: int) -> int:
+    """WRG-03: the first missing units of a buy-one-get-one are the free ones."""
+    return max(missing - item.free_units, 0)
 
 
 def net_item_refund_dh(order: OrderFacts, item: ItemFact, quantity: int) -> int:

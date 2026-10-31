@@ -56,6 +56,18 @@ LABEL_WORDS = {
 }
 EARTH_KM = 6371.0
 DOHA = timezone(timedelta(hours=3))
+# Facts on file that a model needs to answer well. Listed here so that a new field
+# reaches the model because someone chose it, not by accident.
+ORDER_FACTS = (
+    "promo_code", "proof_of_delivery", "gps_distance_m", "leave_at_door", "failed_contact", "driver_wait_minutes",
+    "driver_calls", "left_for_safety", "severe_weather", "cancelled_by", "credit_paid_dh", "open_bank_dispute",
+    "pending_bank_amount_dh", "charges", "last_tracking_update_at", "declared_value_dh", "recipient_refused",
+    "refused_reason", "scheduled_slot_at", "driver_change_short_dh",
+)
+ITEM_FACTS = (
+    "offer", "charged_units", "substitute_for", "customer_approved", "contains", "prescription", "cold_chain",
+    "chilled", "modifier", "missed_modifier", "shelf_life_days_at_delivery",
+)
 PREPICKUP_LOCKED = {"picked_up", "on_the_way", "delivered", "cancelled", "failed_customer"}
 DELAY_TEXT = {
     "merchant_backlog": {"en": "the merchant had a backlog of orders", "ar": "كان لدى المتجر طلبات كثيرة قيد التحضير"},
@@ -260,6 +272,7 @@ class ToolExecutor:
                 for o in orders
             ],
             "saved_addresses": [a.label for a in customer.addresses],
+            "allergy_profile": (customer.extra or {}).get("allergy_profile", []),
         }
 
     def _all_orders_refused(self) -> dict[str, Any]:
@@ -285,7 +298,8 @@ class ToolExecutor:
             **self._order_view(order),
             "items": [
                 {"name": i.name_ar if arabic and i.name_ar else i.name, "name_en": i.name,
-                 "quantity": i.quantity, "unit_price_qar": to_qar(i.unit_price_dh)}
+                 "quantity": i.quantity, "unit_price_qar": to_qar(i.unit_price_dh),
+                 **{key: (i.extra or {})[key] for key in ITEM_FACTS if (i.extra or {}).get(key) is not None}}
                 for i in order.items
             ],
             "subtotal_qar": to_qar(order.subtotal_dh),
@@ -301,6 +315,7 @@ class ToolExecutor:
             # Text from a merchant or customer. Data for the model, never an instruction.
             "merchant_note": order.merchant_note,
             "customer_note": order.customer_note,
+            **{key: (order.extra or {})[key] for key in ORDER_FACTS if (order.extra or {}).get(key) not in (None, False, 0, "")},
         }
 
     def _explain_delay(self, order_id: str) -> dict[str, Any]:
@@ -333,7 +348,12 @@ class ToolExecutor:
 
     # Refunds and credit
 
-    def _affected_items(self, order: Order, names: list[str]) -> list[tuple[ItemFact, int]] | None:
+    def _affected_items(
+        self, order: Order, names: list[str], quantity: int | None = None
+    ) -> list[tuple[ItemFact, int]] | None:
+        """The items a claim names, and how many units of each. WRG-01: a short quantity
+        refunds only the units not received. A buy-one-get-one claim names how many went
+        missing, or it counts as one, which is the free unit."""
         facts = order_facts(order)
         rows = list(zip(order.items, facts.items))
         affected = []
@@ -347,10 +367,13 @@ class ToolExecutor:
                     break
             if match is None:
                 return None
-            affected.append((match, match.quantity))
+            default = 1 if match.free_units else match.quantity
+            affected.append((match, min(quantity or default, match.quantity)))
         return affected
 
-    def _entitlement_dh(self, order: Order, reason: str, names: list[str]) -> tuple[int | None, str | None]:
+    def _entitlement_dh(
+        self, order: Order, reason: str, names: list[str], quantity: int | None = None
+    ) -> tuple[int | None, str | None]:
         """The most this claim can be worth, from the order's own prices. It stops a
         model paying the automated limit for a missing cup of tea."""
         facts = order_facts(order)
@@ -370,39 +393,48 @@ class ToolExecutor:
             return (due, None) if due else (None, "no_fee_refund_due")
         if not names:
             return None, "items_required"
-        affected = self._affected_items(order, names)
+        affected = self._affected_items(order, names, quantity)
         if affected is None:
             return None, "item_not_in_order"
+        if reason == "substitute_rejected" and any(item.approved_substitute for item, _ in affected):
+            # GRC-04: an approved substitute is only rejected if it is damaged, spoiled or expired.
+            return None, "approved_substitute"
+        billed = [(item, engine.refundable_units(item, units)) for item, units in affected]
+        if not any(units for _, units in billed):
+            return None, "no_refund_value"
         already = refunded_items(self.session, order.id)
         if any(normalize(item.name).strip() in already for item, _ in affected):
             return None, "item_already_refunded"
         # An older refund can have no item names. One of exactly this value is taken to
         # be this same item, so it is not paid twice on a guess.
         unnamed = int((order.extra or {}).get("prior_refunded_dh", 0))
-        if unnamed and sum(engine.net_item_refund_dh(facts, item, q) for item, q in affected) == unnamed:
+        if unnamed and sum(engine.net_item_refund_dh(facts, item, q) for item, q in billed) == unnamed:
             return None, "already_refunded"
-        if reason not in NO_FULL_REFUND_CONVERSION and engine.full_refund_applies(self.rules, facts, affected):
+        offer = any(item.free_units for item, _ in affected)
+        if reason not in NO_FULL_REFUND_CONVERSION and not offer and engine.full_refund_applies(self.rules, facts, billed):
             return engine.full_refund_dh(facts, claims), None
-        total = sum(engine.net_item_refund_dh(facts, item, quantity) for item, quantity in affected)
+        total = sum(engine.net_item_refund_dh(facts, item, units) for item, units in billed)
         if reason in PERCENT_RULES:
             total = percent_of(total, self.rules.get(PERCENT_RULES[reason]))
         return total, None
 
-    def _quote_refund(self, order_id: str, reason: str, items: list[str] | None = None) -> dict[str, Any]:
+    def _quote_refund(
+        self, order_id: str, reason: str, items: list[str] | None = None, quantity: int | None = None
+    ) -> dict[str, Any]:
         """Arithmetic belongs in code. Net prices and the 70 percent rule are exactly
         what a model gets wrong, so it asks here. This holds no approval limits, which
         are internal (ESC-03)."""
         order = self._owned_order(order_id)
         if order is None:
             return refused("order_not_found")
-        entitled, problem = self._entitlement_dh(order, reason, list(items or []))
+        entitled, problem = self._entitlement_dh(order, reason, list(items or []), quantity)
         if problem:
             return refused(problem)
         return {"ok": True, "order_id": order.id, "reason": reason, "amount_qar": to_qar(entitled or 0)}
 
     def _issue_refund(
         self, order_id: str, amount_qar: float, reason: str, items: list[str] | None = None,
-        method: str | None = None,
+        method: str | None = None, quantity: int | None = None,
     ) -> dict[str, Any]:
         order = self._owned_order(order_id)
         if order is None:
@@ -427,7 +459,7 @@ class ToolExecutor:
             return refused(decision.code, **self._limit(decision))
         if decision.outcome == ESCALATE:
             return conflict(decision.code)
-        entitled, problem = self._entitlement_dh(order, reason, list(items or []))
+        entitled, problem = self._entitlement_dh(order, reason, list(items or []), quantity)
         if problem:
             return refused(problem)
         if entitled is not None and amount > entitled:

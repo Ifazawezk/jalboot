@@ -204,6 +204,7 @@ class SupportAgent:
             allowed_contacts=tools.allowed_contacts(),
             system_prompt=system,
             canary=self.canary,
+            used_tools=any(entry["result"].get("ok") for entry in result.tool_log),
         )
 
     def _accept(self, result, reply, verdict, passages, text, emit) -> None:

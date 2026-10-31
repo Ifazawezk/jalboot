@@ -362,3 +362,12 @@ def test_paired_change_counts_both_directions():
         return [Hit("A1", 1, 1)]
 
     assert retrieval.paired_change(questions, lambda *a: [Hit("A0", 1, 1)], other) == {"gained": 1, "lost": 1}
+
+
+@pytest.mark.parametrize("written,wanted", [("66.80", "66.8"), ("45.00", "45"), ("QAR 7.50", "7.5")])
+def test_numbers_match_by_value(written, wanted):
+    assert scoring.holds(scoring.fold(written), wanted)
+
+
+def test_a_different_number_does_not_match():
+    assert not scoring.holds(scoring.fold("66.85"), "66.8")

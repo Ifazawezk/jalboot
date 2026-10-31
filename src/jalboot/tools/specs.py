@@ -65,6 +65,22 @@ class ToolSpec:
 
 
 ORDER_ID = {"type": "string", "description": "The order number, such as JB-500007"}
+ITEMS = {
+    "type": "array", "items": {"type": "string"},
+    "description": "Names of the affected items. Required for an item claim.",
+}
+QUANTITY = {
+    "type": "integer",
+    "description": "How many units of the item are affected, when it is not all of them",
+}
+REASON_GUIDE = (
+    " Reasons: missing_item, wrong_item, damaged_item, spoiled_item, quality (stale, soggy), cold_food, "
+    "chilled_item, expired_product, cold_chain, allergen, foreign_object, broken_seal, illness, "
+    "not_received (nothing arrived), modifier_missed (a chosen option was ignored), substitute_rejected, "
+    "duplicate_charge (charged twice), late_delivery_fee (delivery fee on a very late order), "
+    "failed_contact_refund (delivery failed at the door), whole_wrong_order (the bag was someone else's), "
+    "driver_change_short (the driver could not give full change on a cash order)."
+)
 
 TOOLS = {
     spec.name: spec
@@ -95,14 +111,12 @@ TOOLS = {
         ToolSpec(
             "quote_refund",
             "Work out exactly what a claim is worth. Always use this before issue_refund, and "
-            "refund the amount it returns. Do not calculate refunds yourself.",
+            "refund the amount it returns. Do not calculate refunds yourself." + REASON_GUIDE,
             {
                 "order_id": ORDER_ID,
                 "reason": {"type": "string", "enum": REFUND_REASONS},
-                "items": {
-                    "type": "array", "items": {"type": "string"},
-                    "description": "Names of the affected items. Required for an item claim.",
-                },
+                "items": ITEMS,
+                "quantity": QUANTITY,
             },
             ("order_id", "reason"),
         ),
@@ -113,10 +127,8 @@ TOOLS = {
                 "order_id": ORDER_ID,
                 "amount_qar": {"type": "number", "description": "Amount in QAR"},
                 "reason": {"type": "string", "enum": REFUND_REASONS},
-                "items": {
-                    "type": "array", "items": {"type": "string"},
-                    "description": "Names of the affected items. Required for an item claim.",
-                },
+                "items": ITEMS,
+                "quantity": QUANTITY,
                 "method": {
                     "type": "string", "enum": ["original", "refund_credit"],
                     "description": "Where the money goes, if the customer chose",
@@ -206,6 +218,7 @@ TOOLS = {
 TYPE_CHECKS = {
     "string": lambda v: isinstance(v, str) and bool(v.strip()),
     "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool) and v > 0,
     "boolean": lambda v: isinstance(v, bool),
     "array": lambda v: isinstance(v, list) and all(isinstance(x, str) for x in v),
 }

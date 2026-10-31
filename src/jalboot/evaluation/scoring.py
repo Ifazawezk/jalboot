@@ -37,8 +37,10 @@ def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float,
 
 
 def fold(text: str) -> str:
-    """Matching text: folded Arabic, Western digits, and 45.00 reduced to 45."""
-    return re.sub(r"\b(\d+)\.0+\b", r"\1", normalize(str(text)))
+    """Matching text: folded Arabic and Western digits. Numbers compare by value, so
+    45.00 reads as 45 and 66.80 reads as 66.8."""
+    folded = re.sub(r"\b(\d+\.\d*?[1-9])0+\b", r"\1", normalize(str(text)))
+    return re.sub(r"\b(\d+)\.0+\b", r"\1", folded)
 
 
 def holds(haystack: str, needle: str) -> bool:

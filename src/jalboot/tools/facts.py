@@ -7,10 +7,21 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from jalboot.db.models import Customer, Order, Refund
+from jalboot.db.models import Customer, Order, OrderItem, Refund
 from jalboot.policy.engine import NOT_CLAIMS, ClaimFacts, ItemFact, OrderFacts
 
 COMPENSATION = "compensation"
+
+
+def _item_fact(item: OrderItem) -> ItemFact:
+    extra = item.extra or {}
+    free = 0
+    if extra.get("offer") == "buy_one_get_one":
+        free = item.quantity - int(extra.get("charged_units", item.quantity))
+    return ItemFact(
+        item.name, item.quantity, item.unit_price_dh, not extra.get("prescription"),
+        free_units=max(free, 0), approved_substitute=bool(extra.get("customer_approved")),
+    )
 
 
 def order_facts(order: Order) -> OrderFacts:
@@ -41,10 +52,7 @@ def order_facts(order: Order) -> OrderFacts:
         failed_contact=bool(extra.get("failed_contact")),
         proof_of_delivery=bool(extra.get("proof_of_delivery")),
         gps_distance_m=extra.get("gps_distance_m"),
-        items=tuple(
-            ItemFact(i.name, i.quantity, i.unit_price_dh, not (i.extra or {}).get("prescription"))
-            for i in order.items
-        ),
+        items=tuple(_item_fact(item) for item in order.items),
         estimate_at=moment("estimate_at"),
         iftar_window=bool(extra.get("iftar_window")),
         cancelled_by=str(extra.get("cancelled_by") or ""),
@@ -60,6 +68,7 @@ def order_facts(order: Order) -> OrderFacts:
         driver_calls=extra.get("driver_calls"),
         left_for_safety=bool(extra.get("left_for_safety")),
         change_short_dh=int(extra.get("driver_change_short_dh") or 0),
+        leave_at_door=bool(extra.get("leave_at_door")),
     )
 
 

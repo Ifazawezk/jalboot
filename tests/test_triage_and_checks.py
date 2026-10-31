@@ -163,3 +163,19 @@ def test_lookalike_hyphens_and_spaces_become_plain_ones():
 
 def test_an_iso_date_is_not_a_phone_number():
     assert run("It expired on 2026-09-30.").ok
+
+
+def test_a_policy_answer_with_no_marker_is_held_back():
+    assert not run("You can get up to QAR 25 within 48 hours.", used_tools=False).ok
+
+
+def test_an_honest_i_do_not_know_needs_no_source():
+    assert run("I am not sure about that, I can connect you with a person.", used_tools=False).ok
+
+
+def test_a_short_greeting_needs_no_source():
+    assert run("Hello, how can I help?", used_tools=False).ok
+
+
+def test_a_reply_built_on_tool_results_needs_no_source():
+    assert run("Your order is on the way, it should arrive at 19:15 tonight.", used_tools=True).ok
