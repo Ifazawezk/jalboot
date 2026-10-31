@@ -1,0 +1,486 @@
+{
+  "meta": {
+    "schema_version": 1,
+    "policy_version": "2026.11",
+    "effective_from": "2026-11-01",
+    "brand": "Jalboot",
+    "brand_ar": "جالبوت",
+    "fictional": true,
+    "currency": "QAR",
+    "timezone": "Asia/Qatar",
+    "utc_offset": "+03:00",
+    "notes": "All values are invented company policy for a fictional business. Field names ending in _qar are amounts in QAR, _pct are percentages on a 0 to 100 scale, null means not available."
+  },
+  "general": {
+    "money_decimals": 2,
+    "rounding": "half_up",
+    "window_end_inclusive": true,
+    "business_days": ["sun", "mon", "tue", "wed", "thu"],
+    "verticals": ["food", "grocery", "pharmacy", "parcel"],
+    "order_status_paths": {
+      "food": ["placed", "accepted", "preparing", "ready", "picked_up", "on_the_way", "delivered"],
+      "grocery": ["placed", "accepted", "picking", "picked_up", "on_the_way", "delivered"],
+      "pharmacy": ["placed", "accepted", "packed", "picked_up", "on_the_way", "delivered"],
+      "parcel": ["placed", "driver_assigned", "picked_up", "on_the_way", "delivered"]
+    },
+    "terminal_statuses": ["delivered", "cancelled", "failed_customer"]
+  },
+  "refunds": {
+    "windows_hours": {
+      "food_standard": 24,
+      "food_quality": 24,
+      "food_temperature": 2,
+      "grocery_ambient": 48,
+      "grocery_chilled_frozen": 6,
+      "expired_product": 168,
+      "pharmacy_standard": 48,
+      "pharmacy_cold_chain": 2,
+      "allergen_mismatch": 72,
+      "foreign_object": 72,
+      "broken_seal": 24,
+      "suspected_illness": 168,
+      "not_received": 24,
+      "late_credit": 24
+    },
+    "full_refund_conversion_pct": 70,
+    "approval_limits_qar": {
+      "automated": 50,
+      "agent": 300,
+      "supervisor": 1500
+    },
+    "new_account": {
+      "age_days": 7,
+      "automated_limit_qar": 25
+    },
+    "repeat_claims": {
+      "window_days": 30,
+      "agent_review_from_prior_claims": 3,
+      "agent_review_above_total_qar": 300
+    },
+    "trust_review": {
+      "window_days": 90,
+      "from_prior_claims": 8,
+      "max_business_days": 5
+    },
+    "photo": {
+      "required_above_qar": 30,
+      "upload_hours": 24
+    },
+    "timing": {
+      "card_business_days": 7,
+      "credit_minutes": 15
+    }
+  },
+  "goodwill": {
+    "automated_max_qar": 10,
+    "max_per_customer_30d_qar": 60,
+    "expiry_days": 90
+  },
+  "compensation_credit_cap_per_order_qar": 30,
+  "credit_wallet": {
+    "max_balance_qar": 2000,
+    "returned_value_min_validity_days": 30
+  },
+  "late_delivery": {
+    "tiers": [
+      { "min_minutes": 20, "max_minutes": 39, "credit_qar": 5, "refund_delivery_fee": false },
+      { "min_minutes": 40, "max_minutes": 59, "credit_qar": 10, "refund_delivery_fee": false },
+      { "min_minutes": 60, "max_minutes": null, "credit_qar": 20, "refund_delivery_fee": true }
+    ],
+    "iftar_tier_shift_minutes": 10,
+    "iftar_window_before_sunset_minutes": 90,
+    "iftar_window_after_sunset_minutes": 30,
+    "credit_cap_pct_of_item_subtotal": 30,
+    "free_cancel_after_minutes_late": 45,
+    "auto_cancel_after_minutes_late": 120,
+    "eta_slip_free_cancel_minutes": 30
+  },
+  "not_received": {
+    "gps_radius_m": 150,
+    "max_refunds": 2,
+    "window_days": 90
+  },
+  "failed_delivery": {
+    "driver_wait_minutes": 7,
+    "call_attempts": 2
+  },
+  "wrong_items": {
+    "modifier_miss_refund_pct": 50,
+    "quality_refund_pct": 50,
+    "redelivery_window_minutes": 60,
+    "redelivery_arrival_minutes": 60,
+    "redelivery_max_per_order": 1
+  },
+  "cancellations": {
+    "grace_minutes": 2,
+    "food": {
+      "preparing_charge_pct": 50,
+      "ready_or_later_charge_pct": 100
+    },
+    "grocery": {
+      "picking_charge_pct": 15,
+      "picking_charge_min_qar": 10,
+      "picking_charge_max_qar": 50,
+      "picked_up_or_later_charge_pct": 100
+    },
+    "pharmacy": {
+      "packed_charge_qar": 10,
+      "picked_up_or_later_charge_pct": 100
+    },
+    "parcel": {
+      "driver_assigned_charge_qar": 5
+    },
+    "scheduled_free_until_minutes_before_slot": {
+      "food": 60,
+      "pharmacy": 60,
+      "grocery": 120
+    },
+    "merchant_cancel_credit_qar": 10,
+    "merchant_cancel_credit_min_minutes_after_placed": 30,
+    "repeat": {
+      "window_days": 7,
+      "chargeable_cancellations": 3,
+      "cod_disable_days": 30
+    }
+  },
+  "fees": {
+    "zones": {
+      "A": {
+        "name": "Central",
+        "areas": ["Al Dafna", "West Bay", "Msheireb", "Al Sadd", "Bin Mahmoud", "Al Mansoura", "Najma", "Old Airport"]
+      },
+      "B": {
+        "name": "Inner",
+        "areas": ["Madinat Khalifa", "Al Gharrafa", "Al Waab", "Al Aziziyah", "Onaiza", "The Pearl", "Al Duhail"]
+      },
+      "C": {
+        "name": "Outer",
+        "areas": ["Lusail", "Al Rayyan", "Al Wakrah", "Al Wukair", "Muaither", "Umm Salal"]
+      },
+      "D": {
+        "name": "Extended",
+        "areas": ["Al Khor", "Mesaieed", "Al Shahaniya"]
+      }
+    },
+    "delivery_fee_qar": {
+      "A": { "food": 5, "grocery": 7, "pharmacy": 5 },
+      "B": { "food": 8, "grocery": 10, "pharmacy": 8 },
+      "C": { "food": 12, "grocery": 15, "pharmacy": 12 },
+      "D": { "food": null, "grocery": 25, "pharmacy": 20 }
+    },
+    "minimum_order_qar": {
+      "food": 20,
+      "grocery": 40,
+      "pharmacy": 0
+    },
+    "small_order": {
+      "food": { "below_qar": 30, "fee_qar": 3 },
+      "grocery": { "below_qar": 60, "fee_qar": 5 }
+    },
+    "free_delivery": {
+      "food": { "min_subtotal_qar": 150, "free_zones": ["A", "B"], "half_fee_zones": [] },
+      "grocery": { "min_subtotal_qar": 200, "free_zones": ["A", "B"], "half_fee_zones": ["C"] },
+      "pharmacy": { "min_subtotal_qar": 100, "free_zones": ["A"], "half_fee_zones": ["B"] }
+    },
+    "service_fee": {
+      "pct": 3,
+      "min_qar": 1,
+      "max_qar": 7
+    },
+    "peak": {
+      "fee_qar": 4,
+      "days": ["thu", "fri"],
+      "start": "18:00:00",
+      "end": "21:59:59"
+    },
+    "weather": {
+      "fee_qar": 6
+    },
+    "surcharge_cap_qar": 8,
+    "tip_max_qar": 50
+  },
+  "promos": {
+    "max_codes_per_order": 1,
+    "codes": {
+      "WELCOME40": {
+        "type": "percent",
+        "value": 40,
+        "max_discount_qar": 30,
+        "min_spend_qar": 40,
+        "verticals": ["food", "grocery", "pharmacy"],
+        "limit": "first_delivered_order",
+        "valid_until": null
+      },
+      "SAVE20": {
+        "type": "percent",
+        "value": 20,
+        "max_discount_qar": 25,
+        "min_spend_qar": 60,
+        "verticals": ["food"],
+        "limit": "once_per_calendar_month",
+        "valid_until": "2027-06-30"
+      },
+      "GROCERY15": {
+        "type": "fixed",
+        "value": 15,
+        "max_discount_qar": 15,
+        "min_spend_qar": 100,
+        "verticals": ["grocery"],
+        "limit": "once_per_calendar_month",
+        "valid_until": "2027-06-30"
+      },
+      "FREEDROP": {
+        "type": "free_delivery",
+        "min_spend_qar": 50,
+        "verticals": ["food", "grocery", "pharmacy"],
+        "zones": ["A", "B", "C"],
+        "limit": "once_per_calendar_month",
+        "valid_until": "2027-06-30"
+      },
+      "PARCEL10": {
+        "type": "fixed",
+        "value": 10,
+        "max_discount_qar": 10,
+        "min_base_fee_qar": 20,
+        "verticals": ["parcel"],
+        "limit": "once_per_calendar_month",
+        "valid_until": "2027-06-30"
+      },
+      "SUMMER25": {
+        "type": "percent",
+        "value": 25,
+        "max_discount_qar": 20,
+        "min_spend_qar": 50,
+        "verticals": ["food", "grocery"],
+        "limit": "once_per_account",
+        "valid_until": "2026-09-30"
+      }
+    },
+    "restore_extension_days": 7,
+    "referral": {
+      "reward_qar": 20,
+      "min_first_order_qar": 40,
+      "max_per_calendar_year": 10,
+      "reward_delay_hours": 48
+    }
+  },
+  "loyalty": {
+    "earn_points_per_qar": 1,
+    "post_delay_hours": 48,
+    "redeem_unit_points": 100,
+    "redeem_unit_value_qar": 5,
+    "redeem_min_points": 200,
+    "redeem_max_pct_of_net_subtotal": 50,
+    "expiry_months": 12,
+    "tiers": {
+      "silver": { "min_points_12m": 1000, "multiplier": 1.25 },
+      "gold": { "min_points_12m": 3000, "multiplier": 1.5 }
+    }
+  },
+  "plus": {
+    "monthly_fee_qar": 29,
+    "min_subtotal_qar": 50,
+    "free_delivery_zones": ["A", "B", "C"],
+    "first_payment_refund_days": 7
+  },
+  "payments": {
+    "grocery_hold_pct": 110,
+    "hold_release_business_days": 7,
+    "retry": {
+      "max_attempts": 3,
+      "window_minutes": 15,
+      "lock_minutes": 30
+    },
+    "duplicate_charge": {
+      "window_days": 30,
+      "refund_business_days": 3,
+      "automated_limit_qar": 300
+    },
+    "cod": {
+      "max_order_qar": 300,
+      "new_customer_max_order_qar": 150,
+      "new_customer_account_days": 30,
+      "new_customer_min_delivered_orders": 3,
+      "driver_change_max_qar": 100,
+      "outstanding_balance_cap_qar": 30,
+      "refused_limit": 2,
+      "refused_window_days": 30,
+      "refused_disable_days": 90
+    },
+    "failed_refund_to_credit_business_days": 10
+  },
+  "pharmacy": {
+    "min_age": 18,
+    "prescription_max_age_days": 30,
+    "prescription_review_minutes": 30,
+    "prescription_reuploads": 2,
+    "substitution_consent_minutes": 15,
+    "otc_max_packs_per_item": 3,
+    "min_shelf_life_days": 90,
+    "cold_chain_zones": ["A", "B", "C"],
+    "cold_chain_max_delivery_minutes": 60
+  },
+  "grocery": {
+    "contact_timeout_minutes": 5,
+    "substitute_approval_above_pct": 125,
+    "weighed_charge_cap_pct": 110,
+    "large_shortfall_above_pct": 50,
+    "expired_item_credit_qar": 10
+  },
+  "parcels": {
+    "base_fee_qar": { "A": 15, "B": 20, "C": 30, "D": 45 },
+    "base_weight_kg": 5,
+    "weight_bands": [
+      { "over_kg": 5, "up_to_kg": 15, "surcharge_qar": 10 },
+      { "over_kg": 15, "up_to_kg": 30, "surcharge_qar": 25 }
+    ],
+    "max_weight_kg": 30,
+    "max_side_cm": 120,
+    "reweigh_tolerance_kg": 1,
+    "pickup_wait_minutes": 10,
+    "default_cover_qar": 200,
+    "documents_cover_qar": 50,
+    "extended_cover_max_qar": 2000,
+    "extended_cover_rate_pct": 1,
+    "extended_cover_min_fee_qar": 3,
+    "otp_from_declared_value_qar": 500,
+    "same_day_cutoff": "16:00:00",
+    "promised_end_of_day": "23:59:59",
+    "delay_refund": [
+      { "over_hours": 24, "fee_refund_pct": 50 },
+      { "over_hours": 48, "fee_refund_pct": 100 }
+    ],
+    "lost_after_hours_past_promised": 72,
+    "claim_window_days": 14,
+    "proof_required_above_qar": 100,
+    "claim_decision_business_days": 5,
+    "damage_window_hours": 72,
+    "keep_packaging_days": 7,
+    "free_attempts": 2,
+    "extra_attempt_fee_qar": 10,
+    "hub_hold_days": 5,
+    "return_fee_pct_of_base": 50,
+    "unclaimed_disposal_days": 30,
+    "reroute_fee_qar": 10
+  },
+  "safety": {
+    "merchant_pause": {
+      "confirmed_reports": 3,
+      "window_days": 30,
+      "review_business_days": 3
+    }
+  },
+  "account": {
+    "min_age": 16,
+    "otp": {
+      "max_failures": 5,
+      "lock_minutes": 30
+    },
+    "phone_recovery_cooloff_hours": 48,
+    "phone_recovery_credit_limit_qar": 100,
+    "address_change": {
+      "max_per_order": 1,
+      "max_distance_km": 2
+    },
+    "saved_addresses_max": 10,
+    "appeal_days": 14,
+    "appeal_review_business_days": 5
+  },
+  "privacy": {
+    "retention": {
+      "order_payment_records_years": 5,
+      "safety_records_years": 5,
+      "chat_transcripts_months": 12,
+      "call_recordings_months": 6,
+      "gps_traces_days": 90,
+      "prescription_images_months": 24
+    },
+    "export_days": 30,
+    "export_free_every_days": 90,
+    "deletion_cooloff_days": 14,
+    "deletion_complete_days": 30,
+    "refund_credit_payout_min_qar": 10,
+    "refund_credit_payout_business_days": 10,
+    "masked_contact_hours_after_delivery": 2,
+    "marketing_opt_out_hours": 48,
+    "incident_notice_hours": 72
+  },
+  "drivers": {
+    "min_age": 21,
+    "max_online_hours_per_day": 12,
+    "min_rest_hours": 10,
+    "continuous_hours_before_break": 5,
+    "break_minutes": 30,
+    "heat_alert": {
+      "feels_like_celsius": 42,
+      "shaded_break_minutes": 10,
+      "every_minutes": 60
+    },
+    "rating": {
+      "min_orders": 50,
+      "coaching_below": 4.2,
+      "suspend_below": 3.8
+    },
+    "cash_holding_max_qar": 1000,
+    "cash_deposit_hours": 24,
+    "report_window_days": 7,
+    "hold_within_minutes": 60,
+    "decision_business_days": 3,
+    "accident_report_minutes": 30,
+    "appeal_days": 7,
+    "customer_conduct": {
+      "verified_reports": 2,
+      "window_months": 12,
+      "suspension_days": 30
+    }
+  },
+  "merchant_onboarding": {
+    "licence_min_remaining_days": 60,
+    "licence_expiry_notice_days": 30,
+    "document_review_business_days": 3,
+    "site_check_business_days": 5,
+    "go_live_target_business_days": 10,
+    "activation_fee_qar": 500,
+    "device_deposit_qar": 300,
+    "device_deposit_return_days": 30,
+    "commission_pct": { "food": 22, "grocery": 12, "pharmacy": 8 },
+    "min_term_months": 6,
+    "termination_notice_days": 30,
+    "probation_days": 90,
+    "max_price_markup_pct": 10,
+    "acceptance_timeout_minutes": 3,
+    "performance": {
+      "review_window_days": 30,
+      "min_acceptance_rate_pct": 90,
+      "max_merchant_cancel_rate_pct": 3,
+      "min_rating": 3.8
+    }
+  },
+  "merchant_payouts": {
+    "pay_within_business_days": 3,
+    "minimum_payout_qar": 100,
+    "max_rollover_weeks": 4,
+    "processing_fee_pct": 1.5,
+    "unknown_cause_split_pct": 50,
+    "reserve_pct": 5,
+    "reserve_days": 90,
+    "reserve_release_days": 30,
+    "dispute_window_days": 14,
+    "dispute_response_business_days": 5,
+    "small_deduction_qar": 15,
+    "small_deduction_bundle_count": 5,
+    "bank_change_hold_business_days": 3,
+    "bank_change_cutoff_hours": 48,
+    "negative_balance_invoice_days": 30,
+    "negative_balance_suspend_qar": 5000,
+    "final_payout_days": 30,
+    "merchant_fault_review_pct": 5
+  },
+  "escalation": {
+    "p1_first_reply_minutes": 15,
+    "p2_first_reply_minutes": 60,
+    "p3_first_reply_hours": 24,
+    "p4_first_reply_hours": 72,
+    "handoff_after_failed_attempts": 2
+  }
+}

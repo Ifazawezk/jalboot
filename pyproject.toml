@@ -19,6 +19,7 @@ dependencies = [
     "pydantic>=2.7",
     "numpy>=1.26",
     "snowballstemmer>=2.2",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
