@@ -54,6 +54,12 @@ def order_facts(order: Order) -> OrderFacts:
         cold_chain=any((item.extra or {}).get("cold_chain") for item in order.items),
         credit_paid_dh=int(extra.get("credit_paid_dh") or 0),
         final_subtotal_dh=extra.get("final_subtotal_dh"),
+        cancelled_at=moment("cancelled_at"),
+        status_at_first_request=str(extra.get("status_at_first_request") or ""),
+        driver_wait_minutes=extra.get("driver_wait_minutes"),
+        driver_calls=extra.get("driver_calls"),
+        left_for_safety=bool(extra.get("left_for_safety")),
+        change_short_dh=int(extra.get("driver_change_short_dh") or 0),
     )
 
 

@@ -46,7 +46,7 @@ REASON_WINDOWS: dict[str, str | None] = {
     "late_delivery_fee": "late_credit",
 }
 # These have their own rules for when they can be claimed, handled below.
-OWN_WINDOW_REASONS = {"duplicate_charge", "failed_contact_refund"}
+OWN_WINDOW_REASONS = {"duplicate_charge", "failed_contact_refund", "driver_change_short"}
 ALL_REFUND_REASONS = set(REASON_WINDOWS) | OWN_WINDOW_REASONS
 CATEGORY_WINDOWS = {
     "food": "food_standard",
@@ -64,9 +64,10 @@ PHOTO_ABOVE_LIMIT = {"wrong_item", "damaged_item", "spoiled_item", "quality"}
 NOT_CLAIMS = {
     "duplicate_charge", "merchant_cancelled", "late_delivery", "late_delivery_fee", "goodwill",
     "cancellation_credit", "expired_item_credit", "allergen", "foreign_object", "illness",
-    "broken_seal", "customer_cancelled", "substitute_rejected",
+    "broken_seal", "customer_cancelled", "substitute_rejected", "driver_change_short",
+    "failed_contact_refund",
 }
-CREDIT_REASONS = {"late_delivery", "goodwill"}
+CREDIT_REASONS = {"late_delivery", "goodwill", "cancellation_credit", "expired_item_credit"}
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,12 @@ class OrderFacts:
     credit_paid_dh: int = 0
     # GEN-03: refunds and late credit use the subtotal after picking and substitutions.
     final_subtotal_dh: int | None = None
+    cancelled_at: datetime | None = None
+    status_at_first_request: str = ""
+    driver_wait_minutes: int | None = None
+    driver_calls: int | None = None
+    left_for_safety: bool = False
+    change_short_dh: int = 0
 
     @property
     def refund_subtotal_dh(self) -> int:
@@ -255,7 +262,14 @@ def decide_refund(
     if reason == "duplicate_charge":
         return _decide_duplicate(rules, order, amount_dh, now)
 
-    if reason == "failed_contact_refund":
+    if reason == "driver_change_short":
+        if order.payment_method != "cash" or order.change_short_dh == 0:
+            return Decision(DENY, "no_change_shortfall_recorded")
+        if amount_dh > order.change_short_dh:
+            return Decision(DENY, "amount_exceeds_paid", limit_dh=order.change_short_dh)
+        return Decision(EXECUTE, "change_shortfall")
+
+    if reason == "failed_contact_refund" or (reason == "not_received" and order.status == "failed_customer"):
         if order.status != "failed_customer":
             return Decision(DENY, "order_not_failed")
     elif order.status != "delivered":
@@ -309,8 +323,20 @@ def decide_refund(
     return Decision(APPROVAL, "above_automated_limit", role, limit_dh=limit)
 
 
-def failed_contact_refund_dh(rules: Rules, order: OrderFacts) -> int:
-    """LAT-05 for a properly failed contact."""
+def contact_fell_short(rules: Rules, order: OrderFacts) -> bool:
+    """LAT-05: a short wait or too few calls means the failure is not the customer's.
+    DRV-04: a driver who left because they felt unsafe is not a short wait."""
+    if order.left_for_safety or order.driver_wait_minutes is None:
+        return False
+    waited = order.driver_wait_minutes >= int(rules.get("failed_delivery.driver_wait_minutes"))
+    called = (order.driver_calls or 0) >= int(rules.get("failed_delivery.call_attempts"))
+    return not (waited and called)
+
+
+def failed_contact_refund_dh(rules: Rules, order: OrderFacts, claims: "ClaimFacts | None" = None) -> int:
+    """LAT-05."""
+    if contact_fell_short(rules, order):
+        return full_refund_dh(order, claims or ClaimFacts(), delivered=False)
     net = order.net_items_dh
     if order.category == "food":
         return order.tip_dh
@@ -347,6 +373,17 @@ def late_entitlement(rules: Rules, order: OrderFacts, now: datetime) -> dict[str
     }
 
 
+def late_credit_due_dh(rules: Rules, order: OrderFacts, claims: ClaimFacts, now: datetime) -> int:
+    """The late credit still owed. It shares the per order cap with other credit (REF-07).
+    An older credit can have no reason on record, so one equal to this exact amount is
+    taken to be this same credit, and a different amount is left to the cap."""
+    tier = late_entitlement(rules, order, now)["credit_dh"]
+    prior = claims.credit_on_order_dh
+    if tier == 0 or prior == tier:
+        return 0
+    return max(min(tier, rules.dh("compensation_credit_cap_per_order_qar") - prior), 0)
+
+
 def decide_credit(
     rules: Rules,
     order: OrderFacts,
@@ -373,12 +410,38 @@ def decide_credit(
         since = hours_since(order.delivered_at, now)
         if since is None or since > float(rules.get("refunds.windows_hours.late_credit")):
             return Decision(DENY, "outside_reporting_window")
-        entitled = late_entitlement(rules, order, now)["credit_dh"]
-        if entitled == 0:
+        tier = late_entitlement(rules, order, now)["credit_dh"]
+        if tier == 0:
             return Decision(DENY, "no_late_credit_due")
-        if amount_dh > entitled:
-            return Decision(DENY, "above_late_credit_due", limit_dh=entitled)
-        return Decision(EXECUTE, "late_credit_due", limit_dh=entitled)
+        due = late_credit_due_dh(rules, order, claims, now)
+        if due == 0:
+            return Decision(DENY, "late_credit_already_issued")
+        if amount_dh > due:
+            return Decision(DENY, "above_late_credit_due", limit_dh=due)
+        return Decision(EXECUTE, "late_credit_due", limit_dh=due)
+
+    if reason == "cancellation_credit":
+        # CAN-04: only for a cancellation by the merchant or the company, 30 minutes or
+        # more after placing, once per order.
+        placed = order.placed_at
+        if order.status != "cancelled" or order.cancelled_by not in {"merchant", "jalboot"}:
+            return Decision(DENY, "no_cancellation_credit_due")
+        wait = int(rules.get("cancellations.merchant_cancel_credit_min_minutes_after_placed"))
+        if order.cancelled_at is None or order.cancelled_at - placed < timedelta(minutes=wait):
+            return Decision(DENY, "no_cancellation_credit_due")
+        limit = rules.dh("cancellations.merchant_cancel_credit_qar")
+        if amount_dh > limit:
+            return Decision(DENY, "above_late_credit_due", limit_dh=limit)
+        return Decision(EXECUTE, "cancellation_credit_due")
+
+    if reason == "expired_item_credit":
+        # GRC-05: once per order, inside the 7 day window, for an order that arrived.
+        if order.status != "delivered" or not in_window(rules, "expired_product", order, now):
+            return Decision(DENY, "no_expired_item_credit_due")
+        limit = rules.dh("grocery.expired_item_credit_qar")
+        if amount_dh > limit:
+            return Decision(DENY, "above_late_credit_due", limit_dh=limit)
+        return Decision(EXECUTE, "expired_item_credit_due")
 
     # Goodwill (REF-07).
     if claims.claims_90d >= int(rules.get("refunds.trust_review.from_prior_claims")):
@@ -390,38 +453,57 @@ def decide_credit(
     return Decision(EXECUTE, "within_goodwill_limit")
 
 
+def _settle(rules: Rules, order: OrderFacts, code: str, charge: int) -> dict[str, Any]:
+    """Turns a charge into terms. On a cash order no money was collected, so nothing
+    comes back, and a charge becomes a balance capped by CAN-05."""
+    if order.payment_method != "cash":
+        return {"allowed": True, "code": code, "charge_dh": charge, "refund_dh": order.paid_dh - charge}
+    if charge > 0 and order.credit_paid_dh > 0:
+        # The documents do not say how to recover a charge from part-paid credit.
+        return {"allowed": False, "code": "cash_and_credit_charge", "escalate": True, "charge_dh": 0, "refund_dh": 0}
+    balance = min(charge, rules.dh("payments.cod.outstanding_balance_cap_qar"))
+    return {"allowed": True, "code": code, "charge_dh": balance, "refund_dh": order.credit_paid_dh}
+
+
+SCHEDULE_STAGE = {"food": "preparing", "grocery": "picking", "pharmacy": "packed"}
+
+
 def cancellation_terms(rules: Rules, order: OrderFacts, now: datetime) -> dict[str, Any]:
-    """CAN-01 to CAN-04. Returns allowed, charge_dh, refund_dh and the rule that applied."""
-    paid, tip, net = order.paid_dh, order.tip_dh, order.net_items_dh
+    """CAN-01 to CAN-05. The status when the customer first asked sets the charge, not
+    the status when support replies."""
     if order.status in rules.get("general.terminal_statuses"):
         return {"allowed": False, "code": "order_already_finished", "charge_dh": 0, "refund_dh": 0}
 
+    status = order.status_at_first_request or order.status
+    early_stage = status not in {"picked_up", "on_the_way"}
     late = minutes_late(order, now)
-    free_exit = int(rules.get("late_delivery.free_cancel_after_minutes_late"))
-    if order.promised_at is not None and late >= free_exit:
-        return {"allowed": True, "code": "late_free_cancel", "charge_dh": 0, "refund_dh": paid}
+    if order.promised_at is not None and late >= int(rules.get("late_delivery.free_cancel_after_minutes_late")):
+        return _settle(rules, order, "late_free_cancel", 0)
     slip = int(rules.get("late_delivery.eta_slip_free_cancel_minutes"))
-    early_stage = order.status not in {"picked_up", "on_the_way"}
     if order.estimate_at and order.promised_at and early_stage:
         if (order.estimate_at - order.promised_at) >= timedelta(minutes=slip):
-            return {"allowed": True, "code": "eta_slip_free_cancel", "charge_dh": 0, "refund_dh": paid}
+            return _settle(rules, order, "eta_slip_free_cancel", 0)
 
     in_grace = (now - order.placed_at) <= timedelta(minutes=int(rules.get("cancellations.grace_minutes")))
     if in_grace and order.category != "parcel" and early_stage:
-        return {"allowed": True, "code": "grace_period", "charge_dh": 0, "refund_dh": paid}
+        return _settle(rules, order, "grace_period", 0)
 
-    charge = _status_charge(rules, order, net)
+    charge = _status_charge(rules, order, status)
     if charge is None:
         return {"allowed": False, "code": "cannot_cancel_now", "charge_dh": 0, "refund_dh": 0}
-    charge = min(charge, paid - tip)
-    # A charge on a cash order part-paid with credit has no written order of recovery.
-    if charge > 0 and order.payment_method == "cash" and order.credit_paid_dh > 0:
-        return {"allowed": False, "code": "cash_and_credit_charge", "escalate": True, "charge_dh": 0, "refund_dh": 0}
-    return {"allowed": True, "code": "standard", "charge_dh": charge, "refund_dh": paid - charge}
+    code = "standard"
+    if order.scheduled_slot_at is not None and order.category in SCHEDULE_STAGE:
+        free_until = int(rules.get("cancellations.scheduled_free_until_minutes_before_slot")[order.category])
+        if order.scheduled_slot_at - now >= timedelta(minutes=free_until):
+            return _settle(rules, order, "scheduled_free", 0)
+        # Past the limit the charge is at least the working-stage charge (CAN-03).
+        charge = max(charge, _status_charge(rules, order, SCHEDULE_STAGE[order.category]) or 0)
+        code = "scheduled_late"
+    return _settle(rules, order, code, min(charge, order.paid_dh - order.tip_dh))
 
 
-def _status_charge(rules: Rules, order: OrderFacts, net: int) -> int | None:
-    status, category = order.status, order.category
+def _status_charge(rules: Rules, order: OrderFacts, status: str) -> int | None:
+    category, net = order.category, order.net_items_dh
     all_but_tip = order.paid_dh - order.tip_dh
     if category == "food":
         if status == "placed":

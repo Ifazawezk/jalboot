@@ -401,3 +401,105 @@ def test_percent_discounts_have_a_ceiling():
     assert engine.promo_discount_dh(RULES, "SAVE20", 10000, 800) == 2000
     assert engine.promo_discount_dh(RULES, "SAVE20", 50000, 800) == 2500
     assert engine.promo_discount_dh(RULES, "FREEDROP", 10000, 800) == 800
+
+
+def scheduled(status="placed", minutes_to_slot=119, category="grocery"):
+    return base_order(
+        category=category, status=status, delivered_at=None, discount_dh=0, placed_at=NOW - timedelta(hours=3),
+        promised_at=NOW + timedelta(hours=3), scheduled_slot_at=NOW + timedelta(minutes=minutes_to_slot),
+    )
+
+
+def test_can03_past_the_scheduled_limit_the_stage_charge_applies():
+    terms = engine.cancellation_terms(RULES, scheduled(), NOW)
+    assert terms["code"] == "scheduled_late"
+    assert terms["charge_dh"] == 1500
+
+
+def test_can03_cancelling_exactly_at_the_limit_is_free():
+    assert engine.cancellation_terms(RULES, scheduled(minutes_to_slot=120), NOW)["charge_dh"] == 0
+
+
+def test_can05_a_cash_order_returns_nothing_and_caps_the_balance():
+    order = base_order(status="preparing", delivered_at=None, payment_method="cash", subtotal_dh=8000, discount_dh=0,
+                       placed_at=NOW - timedelta(minutes=10), promised_at=NOW + timedelta(minutes=20))
+    terms = engine.cancellation_terms(RULES, order, NOW)
+    assert terms["charge_dh"] == 3000
+    assert terms["refund_dh"] == 0
+
+
+def test_can05_a_small_cash_charge_stays_as_it_is():
+    order = base_order(status="preparing", delivered_at=None, payment_method="cash", subtotal_dh=4000, discount_dh=0,
+                       placed_at=NOW - timedelta(minutes=10), promised_at=NOW + timedelta(minutes=20))
+    assert engine.cancellation_terms(RULES, order, NOW)["charge_dh"] == 2000
+
+
+def test_can01_the_status_at_the_first_request_sets_the_charge():
+    order = base_order(status="picked_up", delivered_at=None, status_at_first_request="accepted",
+                       placed_at=NOW - timedelta(minutes=10), promised_at=NOW + timedelta(minutes=20))
+    assert engine.cancellation_terms(RULES, order, NOW)["charge_dh"] == 4000
+
+
+def test_can04_cancellation_credit_needs_a_merchant_cancellation_after_thirty_minutes():
+    placed = NOW - timedelta(hours=2)
+
+    def order(minutes, by="merchant"):
+        return base_order(status="cancelled", delivered_at=None, placed_at=placed, cancelled_by=by,
+                          cancelled_at=placed + timedelta(minutes=minutes))
+
+    credit = lambda o: engine.decide_credit(RULES, o, ClaimFacts(), 1000, "cancellation_credit", NOW)  # noqa: E731
+    assert credit(order(30)).outcome == EXECUTE
+    assert credit(order(29)).code == "no_cancellation_credit_due"
+    assert credit(order(40, "customer")).code == "no_cancellation_credit_due"
+
+
+def test_grc05_expired_item_credit_is_limited_and_in_window():
+    order = base_order(delivered_at=NOW - timedelta(days=3))
+    assert engine.decide_credit(RULES, order, ClaimFacts(), 1000, "expired_item_credit", NOW).outcome == EXECUTE
+    assert engine.decide_credit(RULES, order, ClaimFacts(), 1100, "expired_item_credit", NOW).outcome == DENY
+    old = base_order(delivered_at=NOW - timedelta(days=8))
+    assert engine.decide_credit(RULES, old, ClaimFacts(), 1000, "expired_item_credit", NOW).code == "no_expired_item_credit_due"
+
+
+def failed(**overrides):
+    values = dict(status="failed_customer", delivered_at=None, failed_contact=True, driver_wait_minutes=8, driver_calls=2)
+    values.update(overrides)
+    return base_order(**values)
+
+
+def test_lat05_a_short_wait_means_a_full_refund_with_the_tip():
+    assert engine.failed_contact_refund_dh(RULES, failed(driver_wait_minutes=4)) == 9600
+
+
+def test_lat05_too_few_calls_means_a_full_refund():
+    assert engine.failed_contact_refund_dh(RULES, failed(driver_calls=1)) == 9600
+
+
+def test_lat05_a_proper_attempt_returns_only_the_tip():
+    assert engine.failed_contact_refund_dh(RULES, failed()) == 500
+
+
+def test_drv04_leaving_for_safety_is_not_a_short_wait():
+    assert engine.failed_contact_refund_dh(RULES, failed(driver_wait_minutes=3, left_for_safety=True)) == 500
+
+
+def test_pay04_a_change_shortfall_is_paid_up_to_what_is_on_record():
+    order = base_order(payment_method="cash", change_short_dh=1500)
+    assert refund(15, "driver_change_short", order=order).outcome == EXECUTE
+    assert refund(16, "driver_change_short", order=order).code == "amount_exceeds_paid"
+    assert refund(5, "driver_change_short").code == "no_change_shortfall_recorded"
+
+
+def test_late_credit_paid_before_is_not_paid_again():
+    start = NOW - timedelta(hours=3)
+    order = base_order(promised_at=start, delivered_at=start + timedelta(minutes=25))
+    claims = ClaimFacts(credit_on_order_dh=500)
+    assert engine.decide_credit(RULES, order, claims, 500, "late_delivery", NOW).code == "late_credit_already_issued"
+
+
+def test_other_credit_on_the_order_leaves_only_the_room_under_the_cap():
+    start = NOW - timedelta(hours=3)
+    order = base_order(promised_at=start, delivered_at=start + timedelta(minutes=45))
+    claims = ClaimFacts(credit_on_order_dh=2500)
+    assert engine.late_credit_due_dh(RULES, order, claims, NOW) == 500
+    assert engine.decide_credit(RULES, order, claims, 500, "late_delivery", NOW).outcome == EXECUTE

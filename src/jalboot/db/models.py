@@ -172,6 +172,8 @@ class Conversation(Base):
     language: Mapped[str] = mapped_column(String(2), default="en")
     status: Mapped[str] = mapped_column(String(16), default="bot", index=True)
     verified_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+    # GEN-02: a claim counts from this moment, even if a dropped chat is picked up later.
+    first_report_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
     assigned_staff_id: Mapped[Optional[str]] = mapped_column(ForeignKey("staff_users.id"), nullable=True)

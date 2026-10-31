@@ -56,15 +56,23 @@ NEGATION = _pattern(
 )
 
 SAFETY_TERMS = _pattern(
-    "allergic", "allergy", "anaphyla", "food poisoning", "poisoned", "hospital", "emergency room",
-    "can't breathe", "cannot breathe", "swelling", "vomiting", "injured", "injury", "accident",
-    "crashed", "harass", "assault", "threatened me", "unsafe", "wrong medicine", "wrong medication",
-    "wrong dose", "overdose",
-    "حساسيه", "تسمم", "مستشفي", "المستشفي", "طوارئ", "الطوارئ", "اختناق", "تورم", "اصابه", "مصاب",
-    "حادث", "تحرش", "هددني", "تهديد", "دواء خطا", "جرعه",
+    "allergic", "allergy", "anaphyla", "food poisoning", "poisoned", "emergency room",
+    "can't breathe", "cannot breathe", "struggling to breathe", "swelling", "vomiting", "injured", "injury",
+    "accident", "crashed", "harass", "assault", "threatened me", "unsafe", "wrong medicine",
+    "wrong medication", "wrong dose", "wrong strength", "overdose", "heart is racing", "had a reaction",
+    "bad stomach", "stomach pain", "at the clinic", "i'm scared", "i am scared", "make me pay for",
+    "glass in", "bleeding", "choking",
+    "حساسيه", "تسمم", "طوارئ", "الطوارئ", "اختناق", "تورم", "اصابه", "مصاب", "حادث", "تحرش", "هددني", "تهديد",
+    "دواء خطا", "جرعه", "خايفه", "خايف", "انجرح", "ينزل دم", "قزاز", "زجاج في", "رسايل مزعجه", "يطق الباب",
+    "يرفض يمشي",
+)
+# A hospital is only a safety signal when someone went there because of the order.
+HOSPITAL = _pattern("hospital", "مستشفي", "المستشفي")
+WORKS_THERE = _pattern(
+    "i work", "work at", "work in", "nurse", "doctor at", "اشتغل", "ممرضه", "ممرض", "دوامي", "طبيب في",
 )
 LEGAL_TERMS = _pattern(
-    "lawyer", "attorney", "sue you", "legal action", "court", "consumer protection",
+    "lawyer", "attorney", "sue you", "legal action", "in court", "to court", "take you to", "consumer protection",
     "journalist", "newspaper", "the press", "the media", "regulator", "the ministry",
     "محامي", "المحكمه", "قضيه", "شكوي رسميه", "حمايه المستهلك", "وزاره التجاره",
     "صحفي", "الصحافه", "الجريده", "الاعلام", "الجهات المختصه",
@@ -78,11 +86,12 @@ ACCOUNT_TAKEOVER = _pattern(
 AGENT_COMPLAINT_TERMS = _pattern(
     "complain about your agent", "complaint about your agent", "complaint about the agent",
     "complaint about a support", "complaint about support", "your support agent", "the support agent was",
-    "your agent was", "your staff was", "شكوي علي موظف", "شكوي ضد موظف", "شكوي من موظف", "موظف الدعم كان",
+    "your agent was", "your staff was", "the agent who", "complain about her", "complain about him",
+    "شكوي علي موظف", "شكوي ضد موظف", "شكوي من موظف", "موظف الدعم كان",
     "الموظف كان", "موظفكم كان",
 )
 ANGER_STRONG = _pattern(
-    "unacceptable", "furious", "scam", "fraud", "thieves", "disgusting", "pathetic", "disgrace",
+    "unacceptable", "end of my rope", "you people", "furious", "scam", "fraud", "thieves", "disgusting", "pathetic", "disgrace",
     "worst", "fed up", "sick of", "never again", "ridiculous", "useless", "outrageous", "enraged",
     "نصب", "نصابين", "حراميه", "حرامي", "مهزله", "فضيحه", "كارثه", "قرف", "اسوا", "زفت", "غاضب",
     "معصب", "مقهور", "زهقت", "طفشت", "مستفز", "سئمت", "غير مقبول",
@@ -151,7 +160,7 @@ def triage_message(text: str, default_language: str = "en", upset_threshold: int
 
     # In order of harm, so a safety report inside an angry message keeps its reason.
     checks = (
-        (SAFETY_TERMS.search(folded), SAFETY, "safety_term"),
+        (SAFETY_TERMS.search(folded) or (HOSPITAL.search(folded) and not WORKS_THERE.search(folded)), SAFETY, "safety_term"),
         (ACCOUNT_TAKEOVER.search(folded), SECURITY, "account_takeover"),
         (LEGAL_TERMS.search(folded), LEGAL, "legal_term"),
         (AGENT_COMPLAINT_TERMS.search(folded), AGENT_COMPLAINT, "agent_complaint"),

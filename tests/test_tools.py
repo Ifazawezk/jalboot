@@ -4,6 +4,8 @@ These tests call the tool layer directly, the way a compromised model would. Not
 here depends on a prompt.
 """
 
+from datetime import timedelta
+
 import pytest
 from sqlalchemy import func, select
 
@@ -367,3 +369,35 @@ def test_role_ranks():
     row = Approval(required_role="finance_lead")
     assert not approvals.can_decide("supervisor", row)
     assert approvals.can_decide("finance_lead", row)
+
+
+def test_a_street_number_that_matches_nothing_is_a_new_address_even_with_a_word_for_home(db):
+    tools = tools_for(db, make_conversation(db, customer_id="C-1002"))
+    result = tools.execute("change_address", {"order_id": "JB-700201", "new_address": "Street 777, Building 40, near the home of my aunt"})
+    assert result["status"] == "pending_approval"
+
+
+def test_an_aunts_house_is_not_the_home_label(db):
+    tools = tools_for(db, make_conversation(db, customer_id="C-1002"))
+    result = tools.execute("change_address", {"order_id": "JB-700201", "new_address": "بيت خالتي"})
+    assert result["status"] == "pending_approval"
+
+
+def test_the_first_cancel_request_fixes_the_status(db):
+    conversation = make_conversation(db, customer_id="C-1002")
+    tools_for(db, conversation, turn="t1").execute("cancel_order", {"order_id": "JB-700201"})
+    assert db.get(Order, "JB-700201").extra["status_at_first_request"] == "picking"
+
+
+def test_a_first_report_inside_the_window_counts_after_the_window_ends(db):
+    conversation = make_conversation(db)
+    conversation.first_report_at = ANCHOR
+    db.commit()
+    late = ANCHOR + timedelta(hours=30)
+    tools = tools_for(db, conversation, now=late)
+    assert tools.execute("issue_refund", MISSING)["status"] == "done"
+
+
+def test_without_a_first_report_the_same_claim_is_too_late(db):
+    tools = tools_for(db, make_conversation(db), now=ANCHOR + timedelta(hours=30))
+    assert tools.execute("issue_refund", MISSING)["error"] == "outside_reporting_window"

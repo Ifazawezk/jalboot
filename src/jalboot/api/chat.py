@@ -116,6 +116,7 @@ def prepare_turn(runtime: Runtime, conversation_id: str, client_id: str, text: s
         try:
             conversation.language = locale
             conversation.updated_at = utcnow()
+            conversation.first_report_at = conversation.first_report_at or runtime.clock.now()
             code_expected = identity.open_challenge(session, conversation_id) is not None
             clean, removed = redact(text, code_expected=code_expected)
             if existing is None:

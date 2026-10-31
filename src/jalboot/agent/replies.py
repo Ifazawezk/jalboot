@@ -15,8 +15,8 @@ ORDER_ID = re.compile(r"\b[A-Z]{1,3}-\d{3,}\b")
 
 HANDOFF_REPLIES = {
     "safety": {
-        "en": "I am sorry this happened. I am connecting you with a person right now. If anyone is in danger, please call 999 first.",
-        "ar": "نأسف لما حدث. أحوّلك الآن إلى موظف مباشرة. إذا كان أي شخص في خطر، يرجى الاتصال بالرقم 999 أولا.",
+        "en": "I am sorry this happened. If anyone is in danger or needs a doctor, please call emergency services on 999 first. I am connecting you with a person right now.",
+        "ar": "نأسف لما حدث. إذا كان أي شخص في خطر أو يحتاج إلى طبيب، يرجى الاتصال بالطوارئ على الرقم 999 أولا. أحوّلك الآن إلى موظف مباشرة.",
     },
     "customer_request": {
         "en": "Of course. I am connecting you with a person, and they will see this conversation so you do not have to repeat yourself.",
