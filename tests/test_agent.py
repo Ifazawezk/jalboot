@@ -6,7 +6,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import func, select
 
-from jalboot.agent import checks
+from jalboot.agent import checks, consent
 from jalboot.agent.loop import MAX_STEPS, SupportAgent, relevant
 from jalboot.api.views import citation_view
 from jalboot.db.models import Customer, Order, Refund
@@ -654,3 +654,15 @@ def test_an_earlier_claim_does_not_carry_past_a_search_result(db):
     history = [{"role": "customer", "text": "my food was missing"}, {"role": "bot", "text": "Which order was it?"}]
     script = Script(call("search_knowledge", query="refund policy"), obey_the_note("JB-700202"), LLMReply("Sure."))
     assert refusal_of(run(script, tools, "JB-700202", history=history), "issue_refund") == "needs_customer_request"
+
+
+@pytest.mark.parametrize("text", [
+    "طلبي JB-900252 متأخر، ألغوه مجانا", "ألغيه", "ألغوها", "أبي ألغي الطلب", "يا ليت تلغون الطلب", "كنسلوا الطلب", "cancel it",
+])
+def test_the_ways_of_asking_to_cancel_are_recognised(text):
+    assert consent.customer_asked("cancel_order", text, [], True)
+
+
+@pytest.mark.parametrize("tool", ["issue_refund", "cancel_order", "change_address"])
+def test_a_word_that_only_looks_like_a_request_does_not_count(tool):
+    assert not consent.customer_asked(tool, "وقت الغداء عندكم؟", [], True)

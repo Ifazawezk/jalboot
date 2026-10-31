@@ -50,9 +50,9 @@ MONEY_CLAIM = word_pattern(
     "خصم", "انخصم",
 )
 MONEY_OFFER = word_pattern("refund*", "credit*", "money", "استرداد", "رصيد", "مبلغ", "تعويض")
-CANCEL_WORDS = word_pattern(
-    "cancel*", "الغاء", "الغي", "الغوا", "الغيه", "الغيها", "الغيت", "نلغي", "تلغي", "لغي", "كنسل",
-)
+# Arabic stays open at the end, so الغو covers الغوا and الغوه. The bare root الغ would
+# also match الغداء.
+CANCEL_WORDS = word_pattern("cancel*", "الغاء", "الغي", "الغو", "نلغي", "تلغ", "يلغ", "لغي", "لغو", "كنسل")
 # Change words, not "address": asking where an order is going does not ask to move it.
 ADDRESS_WORDS = word_pattern(
     "change", "update", "move", "moved", "deliver to", "deliver it to", "send it to", "new address", "wrong address",
