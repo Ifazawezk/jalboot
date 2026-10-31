@@ -1,0 +1,116 @@
+/*
+ * The whole look lives here. The idea: a printed delivery manifest marked up with a
+ * highlighter. Re-skin by changing these values. No component holds a colour of its own.
+ */
+:root {
+  color-scheme: light;
+
+  --paper: #eef0e8;
+  --sheet: #f9faf4;
+  --ink: #15211d;
+  --ink-2: #45534d;
+  --ink-3: #56645d;
+  --rule: #c7cdc0;
+  --rule-strong: #15211d;
+
+  --accent: #d9f24f;
+  --on-accent: #15211d;
+  --accent-soft: #eaf6ab;
+  --link: #0b5f5a;
+
+  --chart: #008a7c;
+  --chart-wash: rgb(0 138 124 / 0.1);
+  --chart-grid: #dcdfd5;
+  --chart-muted: #7c8a82;
+
+  --good: #17603b;
+  --good-bg: #d6eedc;
+  --warn: #6f4a00;
+  --warn-bg: #f6e4b4;
+  --bad: #9c2319;
+  --bad-bg: #f8dcd7;
+  --person: #123d6b;
+  --person-bg: #d9e7f6;
+
+  --on-ink: #f9faf4;
+  --scrim: rgb(21 33 29 / 0.55);
+
+  --font-body: 'Alexandria', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Changa', 'Alexandria', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  --radius: 3px;
+  --gutter: 16px;
+  --line: 1.6;
+  --tap: 44px;
+}
+
+:root[lang='ar'] {
+  --line: 1.85;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --paper: #0e1513;
+    --sheet: #17201d;
+    --ink: #eaf0e5;
+    --ink-2: #b4c0b9;
+    --ink-3: #9eaba3;
+    --rule: #2e3a35;
+    --rule-strong: #eaf0e5;
+
+    --accent-soft: #2b3517;
+    --link: #84dfd5;
+
+    --chart: #1fa594;
+    --chart-wash: rgb(31 165 148 / 0.1);
+    --chart-grid: #26312c;
+    --chart-muted: #7d8b84;
+
+    --good: #8fdcae;
+    --good-bg: #17352a;
+    --warn: #f0cb77;
+    --warn-bg: #3a2e12;
+    --bad: #ffa99c;
+    --bad-bg: #431d18;
+    --person: #a9cdf5;
+    --person-bg: #18304a;
+
+    --on-ink: #101816;
+    --scrim: rgb(0 0 0 / 0.65);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --paper: #0e1513;
+  --sheet: #17201d;
+  --ink: #eaf0e5;
+  --ink-2: #b4c0b9;
+  --ink-3: #9eaba3;
+  --rule: #2e3a35;
+  --rule-strong: #eaf0e5;
+
+  --accent-soft: #2b3517;
+  --link: #84dfd5;
+
+  --chart: #1fa594;
+  --chart-wash: rgb(31 165 148 / 0.1);
+  --chart-grid: #26312c;
+  --chart-muted: #7d8b84;
+
+  --good: #8fdcae;
+  --good-bg: #17352a;
+  --warn: #f0cb77;
+  --warn-bg: #3a2e12;
+  --bad: #ffa99c;
+  --bad-bg: #431d18;
+  --person: #a9cdf5;
+  --person-bg: #18304a;
+
+  --on-ink: #101816;
+  --scrim: rgb(0 0 0 / 0.65);
+}
