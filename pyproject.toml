@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jalboot"
+version = "0.1.0"
+description = "AI customer support for a fictional Doha delivery app, in Arabic and English, with rules enforced in code"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Mohaned Elhagar" }]
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "websockets>=13",
+    "sqlalchemy>=2.0.30",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "numpy>=1.26",
+    "snowballstemmer>=2.2",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2"]
+# Install PyTorch first (CPU build: pip install torch --index-url https://download.pytorch.org/whl/cpu)
+embeddings = ["sentence-transformers>=3.0"]
+dev = ["pytest>=8", "playwright>=1.45"]
+
+[project.scripts]
+jalboot = "jalboot.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = ["postgres: needs a PostgreSQL server named by TEST_DATABASE_URL"]

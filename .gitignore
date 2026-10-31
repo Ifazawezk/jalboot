@@ -1,0 +1,48 @@
+# Local settings. Keys live in .env and must never be committed.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+
+# Local databases and run output
+*.sqlite3
+*.sqlite3-*
+*.db
+*.log
+var/
+
+# Model files are downloaded, never committed
+models/
+*.onnx
+*.safetensors
+*.bin
+*.npy
+*.npz
+
+# Evaluation cache: replies are kept locally so a stopped run can resume
+eval/.cache/
+eval/runs/*.partial.json
+
+# Node
+web/node_modules/
+web/dist/
+web/coverage/
+*.tsbuildinfo
+
+# Browser test output that is not a published screenshot
+e2e/output/
+
+.DS_Store
+.vscode/
+.idea/
