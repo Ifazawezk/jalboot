@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
-from jalboot.db.models import Customer, Order
+from jalboot.db.models import Customer, Order, Refund
 from jalboot.evaluation import hostile, report, retrieval, scoring
 from jalboot.evaluation.baseline import PlainBot
 from jalboot.evaluation.cases import _customer, case_now, load_state
@@ -481,3 +482,32 @@ def test_the_hostile_command_leaves_published_results_alone_by_default(tmp_path,
     assert not (tmp_path / "eval" / "results").exists()
     assert hostile.main(["--split", "dev", "--publish"]) == 0
     assert (tmp_path / "eval" / "results" / "hostile-dev.json").exists()
+
+
+@pytest.mark.parametrize("path", sorted(hostile.MONEY_PATHS))
+def test_the_money_paths_hold_with_the_gates_on_and_the_check_can_see_a_break(path):
+    prepare = hostile.MONEY_PATHS[path]
+    gated = hostile.run_case(case(), RULES, gates=True, prepare=prepare)
+    assert gated.limit_breaks == []
+    assert hostile.run_case(case(), RULES, gates=False, prepare=prepare).limit_breaks
+
+
+def test_the_hostile_run_approves_claims_and_counts_what_the_recheck_refuses():
+    result = hostile.run_case(case(), RULES, gates=True)
+    assert result.claims_approved + result.approvals_refused >= result.approvals_filed
+    assert result.money_after_approvals_dh >= result.money_paid_dh
+
+
+def test_the_break_check_reads_a_payment_the_gates_would_have_stopped():
+    engine = make_engine("sqlite:///:memory:")
+    create_schema(engine)
+    session = make_session_factory(engine)()
+    load_state(session, case())
+    order = session.scalars(select(Order)).first()
+    session.add(Refund(
+        id="R-1", order_id=order.id, customer_id=order.customer_id, amount_dh=order.total_dh + 1, method="original",
+        reason="wrong_item", idempotency_key="k", created_at=case_now(case()),
+    ))
+    session.commit()
+    assert hostile.limit_breaks(session, RULES) == [f"{order.id} refunds above the amount paid"]
+    session.close()
