@@ -17,6 +17,7 @@ from jalboot.api.app import COOKIE, create_app
 from jalboot.config import Settings
 from jalboot.db.models import Message, Refund, WebSession
 from jalboot.world.demo import DEMO_PHONES
+from tests.conftest import database_url
 
 V1 = "/api/v1"
 PASSWORD = "jalboot-local-demo"
@@ -28,7 +29,7 @@ ALLOWED = "http://allowed.test"
 @pytest.fixture
 def client(tmp_path):
     settings = Settings(
-        database_url=f"sqlite:///{(tmp_path / 't.sqlite3').as_posix()}",
+        database_url=database_url(tmp_path),
         allowed_origins=(ALLOWED,),
         web_dist=tmp_path / "missing",
         world_scale=0.05,

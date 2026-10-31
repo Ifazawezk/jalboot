@@ -1,6 +1,8 @@
+import os
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import text
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
 from jalboot.db.models import Conversation
@@ -11,6 +13,19 @@ from jalboot.world.generator import DEFAULT_ANCHOR, generate_world
 
 ANCHOR = DEFAULT_ANCHOR
 RULES = Rules.load()
+
+
+def database_url(tmp_path) -> str:
+    """A throwaway SQLite file, or an emptied PostgreSQL named by TEST_DATABASE_URL."""
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        return f"sqlite:///{(tmp_path / 'test.sqlite3').as_posix()}"
+    engine = make_engine(url)
+    with engine.begin() as connection:
+        connection.execute(text("DROP SCHEMA public CASCADE"))
+        connection.execute(text("CREATE SCHEMA public"))
+    engine.dispose()
+    return url
 
 
 @pytest.fixture

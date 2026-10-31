@@ -6,12 +6,11 @@ yet" and then both pay is the bug a duplicate click or a retry would produce.
 The same tests run on PostgreSQL when TEST_DATABASE_URL names one.
 """
 
-import os
 import threading
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from jalboot import audit
 from jalboot.db.base import create_schema, make_engine, make_session_factory
@@ -21,6 +20,7 @@ from jalboot.tools.approvals import DecisionError, decide
 from jalboot.tools.executor import ToolContext, ToolExecutor
 from jalboot.world.demo import add_demo_customers
 from jalboot.world.generator import DEFAULT_ANCHOR, generate_world
+from tests.conftest import database_url
 
 RULES = Rules.load()
 THREADS = 8
@@ -30,12 +30,7 @@ LARGE = {"order_id": "JB-700103", "amount_qar": 90.0, "reason": "wrong_item", "i
 
 @pytest.fixture
 def sessions(tmp_path):
-    url = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{(tmp_path / 'race.sqlite3').as_posix()}"
-    engine = make_engine(url)
-    if engine.dialect.name == "postgresql":
-        with engine.begin() as connection:
-            connection.execute(text("DROP SCHEMA public CASCADE"))
-            connection.execute(text("CREATE SCHEMA public"))
+    engine = make_engine(database_url(tmp_path))
     create_schema(engine)
     factory = make_session_factory(engine)
     with factory() as session:
