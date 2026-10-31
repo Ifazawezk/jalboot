@@ -16,6 +16,8 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from jalboot.agent import replies
+from jalboot.agent.loop import TurnResult
 from jalboot.api import identity, views
 from jalboot.api.errors import ApiError, error_body
 from jalboot.api.runtime import Runtime
@@ -25,6 +27,7 @@ from jalboot.llm.client import LLMError
 from jalboot.policy.engine import ROLES
 from jalboot.security.redact import redact
 from jalboot.tools.executor import ToolContext, ToolExecutor
+from jalboot.tools.specs import HANDOFF_REASONS, MAX_TEXT
 
 log = logging.getLogger("jalboot.chat")
 Emit = Callable[[dict[str, Any]], None]
@@ -35,6 +38,8 @@ NO_CODES_IN_CHAT = {
     "ar": "حفاظا على أمانك، لا تكتب الرمز في المحادثة. استخدم النموذج الآمن.",
 }
 LANGUAGES = ("en", "ar")
+HANDOFF_TOOL = "handoff_to_human"
+NO_SUMMARY = "No summary was written."
 
 
 @dataclass
@@ -149,6 +154,38 @@ def prepare_turn(runtime: Runtime, conversation_id: str, client_id: str, text: s
             raise
 
 
+def fit_summary(summary: str) -> str:
+    """The tool refuses a blank or oversized summary. A summary only helps the person
+    who picks this up, so it must never be what stops them being reached."""
+    return (summary.strip() or NO_SUMMARY)[:MAX_TEXT]
+
+
+def reach_person(tools: ToolExecutor, reason: str, summary: str) -> dict[str, Any]:
+    """Puts the conversation in the queue for a person, or raises. Nothing tells a
+    customer that a person is coming until this has returned."""
+    outcome = tools.execute(HANDOFF_TOOL, {"reason": reason, "summary": fit_summary(summary)})
+    if not outcome.get("ok"):
+        raise ApiError(500, "internal_error", retryable=True)
+    return outcome
+
+
+def _keep_handoff_promise(
+    result: TurnResult, tools: ToolExecutor, conversation: Conversation, translate: Emit,
+) -> None:
+    """The agent chose a person but the tool refused the call, so the conversation is
+    still with the bot. The reply already says otherwise, so finish the handoff here."""
+    attempts = [entry["arguments"] for entry in result.tool_log if entry["tool"] == HANDOFF_TOOL]
+    if not attempts or conversation.status != "bot":
+        return
+    reason = attempts[-1].get("reason")
+    reason = reason if reason in HANDOFF_REASONS else "low_confidence"
+    translate({"type": "tool.start", "id": HANDOFF_TOOL, "tool": HANDOFF_TOOL})
+    outcome = reach_person(tools, reason, str(attempts[-1].get("summary") or ""))
+    translate({"type": "tool.end", "id": HANDOFF_TOOL, "tool": HANDOFF_TOOL, "result": outcome})
+    result.reply = replies.handoff_reply(reason, result.language)
+    result.finish = "handoff"
+
+
 def _history(session: Session, conversation_id: str, before_id: int) -> list[dict[str, str]]:
     rows = session.scalars(
         select(Message).where(
@@ -241,10 +278,12 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
         session=session, conversation=conversation, rules=runtime.rules, now=runtime.clock.now(),
         knowledge=runtime.knowledge, publish=on_tool_publish, turn_id=str(plan.message_id),
     )
+    tools = ToolExecutor(context)
     result = runtime.agent().respond(
-        plan.text, ToolExecutor(context), _history(session, conversation.id, plan.message_id), language,
+        plan.text, tools, _history(session, conversation.id, plan.message_id), language,
         customer_label=_customer_label(session, conversation), emit=translate, failures=conversation.failures,
     )
+    _keep_handoff_promise(result, tools, conversation, translate)
 
     if result.finish == "identity_required":
         emit({"type": "identity.required", "reason": "order_tools"})

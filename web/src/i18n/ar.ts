@@ -115,6 +115,7 @@ export const ar: Record<MessageKey, string> = {
   'handoff.joinedDetail': 'موظف من فريق الدعم، وليس ردودًا آلية.',
   'notice.handoff_queued': 'توقفت الردود الآلية. سيقرأ الموظف كل ما سبق.',
   'notice.handoff_joined': 'انضم {name} إلى المحادثة',
+  'notice.handoff_failed': 'تعذر الوصول إلى الفريق الآن. يُرجى اختيار «تحدث مع موظف» مرة أخرى.',
   'notice.closed': 'انتهت المحادثة.',
   'notice.refund_approved': 'وافق {name} على استرداد المبلغ.',
   'notice.refund_rejected': 'رفض {name} طلب الاسترداد.',

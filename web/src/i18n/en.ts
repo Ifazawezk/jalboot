@@ -113,6 +113,7 @@ export const en = {
   'handoff.joinedDetail': 'A person from the support team, not automated replies.',
   'notice.handoff_queued': 'Automated replies have paused. A person will read everything above.',
   'notice.handoff_joined': '{name} joined the conversation',
+  'notice.handoff_failed': 'We could not reach the team just now. Please choose Talk to a person again.',
   'notice.closed': 'The conversation has ended.',
   'notice.refund_approved': '{name} approved your refund.',
   'notice.refund_rejected': '{name} declined your refund.',

@@ -264,7 +264,7 @@ def request_handoff(
         .order_by(Message.id).limit(1)
     )
     summary = f"Reason: customer_request\nAsked first: {first or 'nothing yet'}"
-    ToolExecutor(context).execute("handoff_to_human", {"reason": "customer_request", "summary": summary})
+    chat.reach_person(ToolExecutor(context), "customer_request", summary)
     chat.publish_conversation(runtime, session, conversation)
     chat.publish_audit_since(runtime, session, mark)
     chat.publish_summary(runtime, session)

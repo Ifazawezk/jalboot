@@ -14,9 +14,12 @@ from sqlalchemy import select
 
 from jalboot import audit
 from jalboot.api.app import COOKIE, create_app
+from jalboot.api import chat as chat_api
 from jalboot.config import Settings
 from jalboot.db.models import Message, Refund, WebSession
-from jalboot.llm.client import LLMError
+from jalboot.llm.client import LLMError, LLMReply, ToolCall
+from jalboot.tools.executor import ToolExecutor
+from jalboot.tools.specs import MAX_TEXT
 from jalboot.world.demo import DEMO_PHONES
 from tests.conftest import database_url
 
@@ -592,3 +595,92 @@ def test_closing_ends_the_summary_count(client):
     before = client.get(f"{V1}/desk/summary").json()["live"]
     client.post(f"{V1}/desk/conversations/{cid}/close", headers=csrf)
     assert client.get(f"{V1}/desk/summary").json()["live"] == before - 1
+
+
+class Scripted:
+    """A model that plays back fixed replies, so a test can choose what it asks for."""
+
+    provider, model = "test", "scripted"
+
+    def __init__(self, *replies):
+        self.replies = list(replies)
+        self.calls = 0
+
+    def chat(self, messages, tools=None):
+        self.calls += 1
+        return self.replies.pop(0)
+
+
+def state_of(client, cid):
+    signed_in(client)
+    return client.get(f"{V1}/desk/conversations/{cid}").json()["state"]
+
+
+def test_a_long_first_message_cannot_stop_a_handoff(client):
+    """The summary quotes the first message, so a long one must not block the person."""
+    cid, auth = start(client)
+    first = ("how long does delivery take " * 80)[:1995]
+    assert say(client, cid, auth, first).status_code == 200
+    assert state_of(client, cid) == "bot"
+    response = client.post(f"{V1}/conversations/{cid}/handoff", headers=auth, json={})
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    assert state_of(client, cid) == "waiting"
+
+
+def test_asking_for_a_person_with_many_order_numbers_reaches_one(client):
+    cid, auth = start(client)
+    orders = " ".join(f"JB-{700000 + n}" for n in range(180))
+    response = say(client, cid, auth, f"I want to talk to a human about {orders}")
+    assert find(response, "message.end") == {"finish": "handoff"}
+    assert state_of(client, cid) == "waiting"
+
+
+def test_a_handoff_the_model_asked_for_survives_a_long_summary(tmp_path):
+    model = Scripted(
+        LLMReply("", [ToolCall("h1", "handoff_to_human", {"reason": "customer_request", "summary": "x" * 3000})]),
+        LLMReply("Sorry, something went wrong on my side."),
+    )
+    with TestClient(app_with(tmp_path, model), base_url="http://testserver") as test_client:
+        cid, auth = start(test_client)
+        response = say(test_client, cid, auth, "please check the status of my refund")
+        assert find(response, "message.end") == {"finish": "handoff"}
+        assert "handoff.update" in names(response)
+        assert state_of(test_client, cid) == "waiting"
+
+
+def test_a_handoff_with_a_reason_the_tool_refuses_still_reaches_a_person(tmp_path):
+    model = Scripted(
+        LLMReply("", [ToolCall("h1", "handoff_to_human", {"reason": "made_up", "summary": ""})]),
+        LLMReply("One moment."),
+    )
+    with TestClient(app_with(tmp_path, model), base_url="http://testserver") as test_client:
+        cid, auth = start(test_client)
+        response = say(test_client, cid, auth, "please check the status of my refund")
+        assert find(response, "message.end") == {"finish": "handoff"}
+        assert state_of(test_client, cid) == "waiting"
+
+
+def test_a_handoff_that_fails_is_never_reported_as_working(client, monkeypatch):
+    cid, auth = start(client)
+    monkeypatch.setattr(ToolExecutor, "execute", lambda *_a, **_k: {"ok": False, "error": "invalid_argument"})
+    response = client.post(f"{V1}/conversations/{cid}/handoff", headers=auth, json={})
+    assert response.status_code == 500
+    assert response.json()["error"] == {
+        "code": "internal_error", "message": "Something went wrong. Please try again.", "retryable": True,
+    }
+
+
+def test_a_turn_whose_handoff_fails_does_not_tell_the_customer_it_worked(client, monkeypatch):
+    cid, auth = start(client)
+    monkeypatch.setattr(ToolExecutor, "execute", lambda *_a, **_k: {"ok": False, "error": "invalid_argument"})
+    response = say(client, cid, auth, "I want to talk to a human")
+    assert find(response, "error")["error"]["code"] == "internal_error"
+    assert "message.end" not in names(response)
+    assert reply_text(response) == ""
+
+
+def test_a_summary_is_cut_to_what_the_tool_accepts():
+    assert len(chat_api.fit_summary("x" * 5000)) == MAX_TEXT
+    assert chat_api.fit_summary("short") == "short"
+    assert chat_api.fit_summary("   ") == "No summary was written."
