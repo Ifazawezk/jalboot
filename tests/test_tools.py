@@ -401,3 +401,27 @@ def test_a_first_report_inside_the_window_counts_after_the_window_ends(db):
 def test_without_a_first_report_the_same_claim_is_too_late(db):
     tools = tools_for(db, make_conversation(db), now=ANCHOR + timedelta(hours=30))
     assert tools.execute("issue_refund", MISSING)["error"] == "outside_reporting_window"
+
+
+def test_a_mixed_payment_refunds_the_card_part_first(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.extra = {**(order.extra or {}), "credit_paid_dh": 2000}
+    db.commit()
+    before = db.get(Customer, "C-1001").wallet_dh
+    paid_card = order.total_dh - 2000
+    result = layla.execute("issue_refund", {
+        "order_id": "JB-700102", "amount_qar": 4.0, "reason": "missing_item", "items": ["Karak tea"],
+    })
+    assert result["to_original_payment_qar"] == 4.0 and paid_card > 400
+    assert db.get(Customer, "C-1001").wallet_dh == before
+
+
+def test_a_cash_refund_goes_to_credit(db):
+    order = db.get(Order, "JB-700102")
+    order.payment_method = "cash"
+    db.commit()
+    tools = tools_for(db, make_conversation(db))
+    before = db.get(Customer, "C-1001").wallet_dh
+    result = tools.execute("issue_refund", MISSING)
+    assert result["to_credit_qar"] == 4.0
+    assert db.get(Customer, "C-1001").wallet_dh == before + 400

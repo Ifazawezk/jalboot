@@ -449,17 +449,22 @@ class ToolExecutor:
     ) -> dict[str, Any]:
         # REF-04: a cash order is only ever refunded as credit.
         method = "refund_credit" if order.payment_method == "cash" else (method or "original")
+        # REF-04: on a mixed payment the card part goes back first, then the credit part.
+        credit_part = amount if method == "refund_credit" else 0
+        paid_by_credit = int((order.extra or {}).get("credit_paid_dh") or 0)
+        if method == "original" and paid_by_credit:
+            credit_part = max(amount - (order_facts(order).paid_dh - paid_by_credit), 0)
         refund = Refund(
             id=new_id("R"), order_id=order.id, customer_id=order.customer_id, amount_dh=amount,
             method=method, reason=reason, items=names, approved_by=approved_by, approval_id=approval_id,
             created_at=self.now, idempotency_key=key,
         )
         self.session.add(refund)
-        if method == "refund_credit":
-            order.customer.wallet_dh += amount
+        order.customer.wallet_dh += credit_part
         result = {
             "ok": True, "status": "done", "refund_id": refund.id, "order_id": order.id,
             "amount_qar": to_qar(amount), "method": method, "reason": reason,
+            "to_original_payment_qar": to_qar(amount - credit_part), "to_credit_qar": to_qar(credit_part),
         }
         self._publish_refund(refund.id, order.id, amount, "auto_approved")
         return self._remember(key, "issue_refund", result)

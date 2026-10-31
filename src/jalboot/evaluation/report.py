@@ -48,6 +48,16 @@ def note_test_run(version: str, why: str) -> None:
         handle.write(f"| {day} | {version} | {test_files_hash()} | {why} |\n")
 
 
+def even_sample(cases: list[dict], sets: tuple[str, ...], size: int) -> list[dict]:
+    """The same evenly spaced cases each time, so a sample can be repeated and compared."""
+    chosen = []
+    for name in sets:
+        group = [case for case in cases if case["set"] == name]
+        step = max(len(group) // size, 1)
+        chosen.extend(group[::step][:size])
+    return chosen
+
+
 def build_llm(mode: str, budget: Budget):
     if mode == "mock":
         return MockPlanner()
@@ -69,13 +79,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-requests", type=int, default=None)
     parser.add_argument("--max-tokens", type=int, default=None)
     parser.add_argument("--daily-tokens", type=int, default=None)
+    parser.add_argument(
+        "--sample", type=int, default=None,
+        help="run only this many evenly spaced cases from each set, for a small run on a tight budget",
+    )
     args = parser.parse_args(argv)
 
     if args.split == "test" and not args.why:
         parser.error("a run on test/ needs --why, which goes in eval/test_runs.md")
+    if args.system == "baseline" and args.mode == "mock":
+        parser.error("the baseline needs a real model: both sides of a mock comparison are the same keyword rules")
 
     sets = tuple(args.sets.split(","))
     cases = load_cases(args.split, sets)
+    if args.sample:
+        if args.split == "test":
+            parser.error("--sample is for dev: a test run covers every case")
+        cases = even_sample(cases, sets, args.sample)
     budget = Budget(requests=args.max_requests, tokens=args.max_tokens, daily_tokens=args.daily_tokens)
     llm = build_llm(args.mode, budget)
     knowledge = KnowledgeBase(load_passages())
@@ -96,7 +116,10 @@ def main(argv: list[str] | None = None) -> int:
     report = scoring.aggregate(
         cases, done, knowledge.section_ids, version=args.version, split=args.split, date=day,
     )
-    report.update(system=args.system, mode=args.mode, model=model, stopped_early=stopped)
+    report.update(
+        system=args.system, mode=args.mode, model=model, stopped_early=stopped, sampled=bool(args.sample),
+        retrieval_note="" if args.mode == "llm" else "Mock mode: a keyword planner, not a model.",
+    )
     RESULTS.mkdir(parents=True, exist_ok=True)
     out = RESULTS / f"{name}.json"
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
