@@ -6,7 +6,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import func, select
 
-from jalboot.agent.loop import MAX_STEPS, SupportAgent
+from jalboot.agent.loop import MAX_STEPS, SupportAgent, relevant
 from jalboot.db.models import Customer, Order, Refund
 from jalboot.kb.store import KnowledgeBase, load_passages
 from jalboot.llm.cache import BudgetExhausted
@@ -399,3 +399,30 @@ def test_mock_mode_does_not_call_a_credit_under_review_unqualified():
     text = MockPlanner()._late_text(Turn(results=[("explain_delay", first), ("issue_credit", pending)]), first)
     assert "does not qualify" not in text
     assert "A person will decide" in text
+
+
+@pytest.mark.parametrize("text,language,section", [
+    ("refnud polcy for mising itms", "en", "WRG-01"),
+    ("ابي فلوسي ترجع البطاقه", "ar", "REF-04"),
+])
+def test_the_gate_keeps_what_the_ngrams_found(layla, text, language, section):
+    script = Script(LLMReply("I am not sure, I can connect a person."))
+    run(script, layla, text, language=language)
+    assert f'"section": "{section}"' in script.seen[0][-1]["content"]
+
+
+def test_a_question_about_nothing_in_the_policy_reaches_the_model_with_no_sources(layla):
+    script = Script(LLMReply("I am not sure, I can connect a person."))
+    run(script, layla, "do you deliver helicopters to the moon on tuesdays")
+    assert '"section"' not in script.seen[0][-1]["content"]
+
+
+def test_ngrams_only_rescue_passages_when_the_lead_passage_looks_similar():
+    weak_lead = [{"id": "A", "confidence": 0.0, "ngram_similarity": 0.05}, {"id": "B", "confidence": 0.1, "ngram_similarity": 0.3}]
+    assert relevant(weak_lead) == []
+    good_lead = [{"id": "A", "confidence": 0.0, "ngram_similarity": 0.3}, {"id": "B", "confidence": 0.0, "ngram_similarity": 0.01}]
+    assert [p["id"] for p in relevant(good_lead)] == ["A"]
+
+
+def test_a_passage_with_no_ngram_score_is_judged_on_coverage_alone():
+    assert [p["id"] for p in relevant([{"id": "planted", "confidence": 1.0}])] == ["planted"]

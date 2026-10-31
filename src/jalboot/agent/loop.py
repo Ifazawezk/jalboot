@@ -26,6 +26,10 @@ MAX_FAILED_ATTEMPTS = 2  # ESC-02, escalation.handoff_after_failed_attempts in r
 # sees it. With nothing relevant to cite, the honest answer is the only one left. Tuned
 # on the development questions only.
 MIN_COVERAGE = 0.25
+# Typos and Gulf spellings share no terms with the policy, so coverage reads near zero
+# on a good passage. Cosine scores sit on a much lower scale than coverage, so this has
+# its own limit. Also tuned on development questions only.
+MIN_SIMILARITY = 0.085
 MAX_STEPS = 6
 MAX_TOOL_CALLS = 8
 HISTORY_TURNS = 8
@@ -62,6 +66,18 @@ def _no_emit(_event: dict[str, Any]) -> None:
     return None
 
 
+def relevant(passages: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The passages worth showing the model. N-grams can only rescue a passage when the
+    top result looks similar too: a question about something else still shares common
+    runs of letters with long sections, so one middling score lower down proves nothing."""
+
+    def similar(passage: dict[str, Any]) -> bool:
+        return passage.get("ngram_similarity", 0.0) >= MIN_SIMILARITY
+
+    rescue = bool(passages) and similar(passages[0])
+    return [p for p in passages if p["confidence"] >= MIN_COVERAGE or (rescue and similar(p))]
+
+
 class SupportAgent:
     def __init__(self, llm: LLMClient, knowledge: Knowledge, *, propagate: tuple[type[BaseException], ...] = ()):
         self.llm = llm
@@ -94,7 +110,7 @@ class SupportAgent:
             self._close_with_handoff(result, "repeated_failure", text, tools, history, customer_label, emit)
             return result
 
-        passages = [p for p in self.knowledge.search(text, triage.language, k=4) if p["confidence"] >= MIN_COVERAGE]
+        passages = relevant(self.knowledge.search(text, triage.language, k=4))
         self._plan(result, text, tools, history, passages, customer_label, emit)
         return result
 
