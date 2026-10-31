@@ -33,6 +33,8 @@ MIN_SIMILARITY = 0.085
 MAX_STEPS = 6
 MAX_TOOL_CALLS = 8
 HISTORY_TURNS = 8
+SEARCH_TOOL = "search_knowledge"
+CITATION_FIELDS = ("id", "doc", "doc_title", "title", "text", "updated")
 
 
 class Knowledge(Protocol):
@@ -76,6 +78,26 @@ def relevant(passages: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
 
     rescue = bool(passages) and similar(passages[0])
     return [p for p in passages if p["confidence"] >= MIN_COVERAGE or (rescue and similar(p))]
+
+
+def _add_sources(outcome: dict[str, Any], passages: list[dict[str, Any]]) -> dict[str, Any]:
+    """Passages from a search join this turn's sources, so a reply can cite them. A
+    section the model already holds keeps its marker. The tool log keeps the full result;
+    this returns what the model reads."""
+    numbered = []
+    for found in relevant(outcome.get("passages") or []):
+        marker = next((n for n, p in enumerate(passages, start=1) if p["id"] == found["id"]), None)
+        if marker is None:
+            passages.append(found)
+            marker = len(passages)
+        numbered.append(prompts.numbered_source(marker, found))
+    return {**outcome, "passages": numbered}
+
+
+def _acted(result: TurnResult) -> bool:
+    """Whether a tool did real work this turn. A search is reading the same policy as
+    the sources, so an answer built on one still has to cite it."""
+    return any(entry["result"].get("ok") and entry["tool"] != SEARCH_TOOL for entry in result.tool_log)
 
 
 class SupportAgent:
@@ -169,7 +191,8 @@ class SupportAgent:
                         self._fall_back(result, text, tools, history, customer_label, emit)
                         return
                     outcome = self._run_tool(result, tools, call, emit)
-                    messages.append(prompts.tool_result_message(call.id, call.name, outcome))
+                    shown = _add_sources(outcome, passages) if call.name == SEARCH_TOOL and outcome.get("ok") else outcome
+                    messages.append(prompts.tool_result_message(call.id, call.name, shown))
                     if outcome.get("error") == "identity_required":
                         result.reply = replies.identity_reply(result.language)
                         result.finish = "identity_required"
@@ -212,14 +235,14 @@ class SupportAgent:
             reply,
             source_count=len(passages),
             evidence=[p["text"] for p in passages],
-            tool_results=[entry["result"] for entry in result.tool_log],
+            tool_results=[entry["result"] for entry in result.tool_log if entry["tool"] != SEARCH_TOOL],
             done=effects.done,
             offered=effects.offered,
             amounts=effects.amounts,
             allowed_contacts=tools.allowed_contacts(),
             system_prompt=system,
             canary=self.canary,
-            used_tools=any(entry["result"].get("ok") for entry in result.tool_log),
+            used_tools=_acted(result),
         )
 
     def _accept(self, result, reply, verdict, passages, text, emit) -> None:
@@ -227,10 +250,10 @@ class SupportAgent:
         result.reply = " ".join([reply.strip(), *unsaid])
         for number in verdict.citations:
             passage = passages[number - 1]
-            citation = {"n": number, **{k: passage[k] for k in ("id", "title", "text") if k in passage}}
+            citation = {"n": number, **{k: passage[k] for k in CITATION_FIELDS if k in passage}}
             result.citations.append(citation)
             emit({"type": "citation", "citation": citation})
-        used_tools = any(entry["result"].get("ok") for entry in result.tool_log)
+        used_tools = _acted(result)
         best = max((p.get("confidence", 0.0) for p in passages), default=0.0)
         result.confidence = 0.9 if used_tools else (best if verdict.citations else 0.3)
         result.failed = not used_tools and not verdict.citations and len(text.split()) > 3

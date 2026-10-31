@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import func, select
 
 from jalboot.agent.loop import MAX_STEPS, SupportAgent, relevant
+from jalboot.api.views import citation_view
 from jalboot.db.models import Customer, Order, Refund
 from jalboot.kb.store import KnowledgeBase, load_passages
 from jalboot.llm.cache import BudgetExhausted
@@ -426,3 +427,76 @@ def test_ngrams_only_rescue_passages_when_the_lead_passage_looks_similar():
 
 def test_a_passage_with_no_ngram_score_is_judged_on_coverage_alone():
     assert [p["id"] for p in relevant([{"id": "planted", "confidence": 1.0}])] == ["planted"]
+
+
+NO_SOURCES = "do you deliver helicopters to the moon on tuesdays"
+
+
+def search(query="late credit tiers"):
+    return call("search_knowledge", query=query)
+
+
+@pytest.fixture
+def searching(db):
+    return tools_for(db, make_conversation(db), knowledge=KB)
+
+
+def test_a_citation_keeps_its_document_and_date(layla):
+    citation = run(Script(LLMReply("Late credit depends on the delay [1].")), layla, "late credit tiers").citations[0]
+    assert citation["doc"] and citation["doc_title"] and citation["updated"]
+    view = citation_view(citation)
+    assert view["title"] == citation["doc_title"]
+    assert view["updatedAt"].startswith(citation["updated"])
+
+
+def test_a_search_result_can_be_cited(searching):
+    script = Script(search(), LLMReply("Late credit depends on the delay [1]."))
+    result = run(script, searching, NO_SOURCES)
+    assert result.finish == "complete"
+    assert result.citations[0]["n"] == 1
+    assert result.citations[0]["id"] in KB.section_ids
+    assert '"marker": 1' in script.seen[1][-1]["content"]
+
+
+def test_a_search_result_continues_the_numbering_of_the_sources(searching):
+    script = Script(search("how do promo codes work"), LLMReply("Sure."))
+    run(script, searching, "what is the policy on late orders")
+    first = re.findall(r'"marker": (\d+)', script.seen[0][-1]["content"])
+    found = re.findall(r'"marker": (\d+)', script.seen[1][-1]["content"])
+    assert first
+    assert max(map(int, found)) > len(first)
+
+
+def test_a_passage_found_twice_keeps_its_marker(searching):
+    text = "what is the policy on late orders"
+    script = Script(search(text), LLMReply("Sure."))
+    run(script, searching, text)
+    marked = re.compile(r'"marker": (\d+), "section": "([A-Z]+-\d+)"')
+    first = dict((section, marker) for marker, section in marked.findall(script.seen[0][-1]["content"]))
+    found = dict((section, marker) for marker, section in marked.findall(script.seen[1][-1]["content"]))
+    assert set(first) & set(found)
+    assert all(first[section] == found[section] for section in set(first) & set(found))
+
+
+def test_a_figure_from_a_search_result_counts_as_a_source(searching):
+    script = Script(search(), LLMReply("From 20 minutes late, credit is QAR 5 [1]."))
+    result = run(script, searching, NO_SOURCES)
+    assert result.reply == "From 20 minutes late, credit is QAR 5 [1].", result.flags
+
+
+def test_a_search_alone_does_not_excuse_an_uncited_answer(searching):
+    uncited = LLMReply("Late credit is QAR 5 from 20 minutes late.")
+    result = run(Script(search(), uncited, uncited), searching, NO_SOURCES)
+    assert result.finish == "handoff"
+    assert any("does not cite its source" in flag for flag in result.flags)
+
+
+def test_a_search_that_finds_nothing_relevant_gives_no_sources(searching):
+    script = Script(search("helicopters to the moon on tuesdays"), LLMReply("I am not sure, I can connect a person."))
+    run(script, searching, NO_SOURCES)
+    assert '"marker"' not in script.seen[1][-1]["content"]
+
+
+def test_the_full_search_result_stays_in_the_tool_log(searching):
+    result = run(Script(search(), LLMReply("Sure.")), searching, NO_SOURCES)
+    assert "confidence" in result.tool_log[0]["result"]["passages"][0]
