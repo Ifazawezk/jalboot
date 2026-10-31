@@ -70,6 +70,10 @@ INTENT_WORDS: dict[str, tuple[str, ...]] = {
     "late": ("late", "delay", "مأخر", "متاخر", "تاخر", "تأخر", "التاخير"),
     "track": ("where is", "where's", "track", "status", "وين", "اين", "متي يوصل", "حاله طلبي"),
 }
+QUESTION_WORDS = re.compile(
+    r"^\s*(how|what|when|why|which|can i|do you|does|is there|are there|كم|كيف|متي|هل|ما |ماذا|لماذا|ليش)"
+    r"|\bhow (much|long|many)\b"
+)
 YES = ("yes", "go ahead", "confirm", "ok", "okay", "sure", "نعم", "اي", "ايوه", "موافق", "تمام", "اكد")
 
 
@@ -147,6 +151,9 @@ class MockPlanner:
         intent = classify(folded)
         if self._pending_cancel(turn, folded):
             return _call("cancel_order", order_id=order_id, confirm_charge=True) if not turn.results else self._after_cancel(turn)
+        # A question with no order number is about the policy, not about an order.
+        if not ORDER_ID.search(turn.text) and QUESTION_WORDS.search(folded):
+            return self._plan_question(turn, None, folded)
         handler = getattr(self, f"_plan_{intent}", self._plan_question)
         return handler(turn, order_id, folded)
 

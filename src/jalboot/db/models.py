@@ -338,6 +338,7 @@ class OtpChallenge(Base):
     conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
     customer_id: Mapped[Optional[str]] = mapped_column(ForeignKey("customers.id"), nullable=True)
     code_hash: Mapped[str] = mapped_column(String(64))
+    phone_key: Mapped[str] = mapped_column(String(64), default="")
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime)

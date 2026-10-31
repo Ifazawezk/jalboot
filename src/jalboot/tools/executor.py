@@ -117,6 +117,7 @@ class ToolExecutor:
         self.conversation = context.conversation
         self.rules = context.rules
         self.now = context.now
+        self._outbox: list[dict[str, Any]] = []
 
     def specs(self) -> list[dict[str, Any]]:
         return [spec.openai() for spec in specs.TOOLS.values()]
@@ -150,6 +151,9 @@ class ToolExecutor:
                 self._audit("guardrail.blocked", "denied", name, arguments, result)
             else:
                 self._audit(self._action_name(name, result), self._outcome(result), name, arguments, result)
+        for event in self._outbox:
+            self.ctx.publish(event)
+        self._outbox.clear()
         return result
 
     def _block(self, name: str, arguments: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -463,11 +467,11 @@ class ToolExecutor:
             "amount_qar": to_qar(amount), "reason": reason,
         }
         self._publish_refund(approval.id, order.id, amount, "pending")
-        self.ctx.publish({"type": "approval.created", "approvalId": approval.id})
+        self._outbox.append({"type": "approval.created", "approvalId": approval.id})
         return self._remember(key, tool, result)
 
     def _publish_refund(self, refund_id: str, order_id: str, amount: int, status: str) -> None:
-        self.ctx.publish({
+        self._outbox.append({
             "type": "refund.update",
             "refund": {
                 "id": refund_id, "orderId": order_id, "amountQar": to_qar(amount), "status": status,
@@ -721,7 +725,7 @@ class ToolExecutor:
         conversation.handoff_at = self.now
         conversation.priority = chosen
         conversation.failures = 0
-        self.ctx.publish({
+        self._outbox.append({
             "type": "handoff.update",
             "handoff": {"status": "queued", "agentName": None, "etaMinutes": None, "position": None},
         })
