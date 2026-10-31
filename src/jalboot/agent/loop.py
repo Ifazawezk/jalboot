@@ -29,10 +29,6 @@ MIN_COVERAGE = 0.25
 MAX_STEPS = 6
 MAX_TOOL_CALLS = 8
 HISTORY_TURNS = 8
-WRITE_EFFECTS = {
-    "issue_refund": "refund", "issue_credit": "refund", "change_address": "address",
-    "cancel_order": "cancel",
-}
 
 
 class Knowledge(Protocol):
@@ -168,7 +164,7 @@ class SupportAgent:
                 continue
 
             content = checks.tidy_reply(reply.content)
-            verdict = self._check(content, text, passages, result, tools, system)
+            verdict = self._check(content, passages, result, tools, system)
             if verdict.ok:
                 self._accept(result, content, verdict, passages, text, emit)
                 return
@@ -189,18 +185,16 @@ class SupportAgent:
         result.finish = "handoff"
         result.confidence = 0.5
 
-    def _check(self, reply, text, passages, result, tools, system) -> checks.CheckResult:
-        evidence = [text, *(p["text"] for p in passages)]
-        evidence.extend(json.dumps(entry["result"], ensure_ascii=False, default=str) for entry in result.tool_log)
-        done = {
-            WRITE_EFFECTS[entry["tool"]] for entry in result.tool_log
-            if entry["tool"] in WRITE_EFFECTS and entry["result"].get("status") == "done"
-        }
+    def _check(self, reply, passages, result, tools, system) -> checks.CheckResult:
+        effects = checks.effects_of(result.tool_log)
         return checks.check_reply(
             reply,
             source_count=len(passages),
-            evidence=evidence,
-            done=done,
+            evidence=[p["text"] for p in passages],
+            tool_results=[entry["result"] for entry in result.tool_log],
+            done=effects.done,
+            offered=effects.offered,
+            amounts=effects.amounts,
             allowed_contacts=tools.allowed_contacts(),
             system_prompt=system,
             canary=self.canary,
