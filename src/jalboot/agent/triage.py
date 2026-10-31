@@ -225,7 +225,7 @@ def upset_score(original: str, folded: str) -> int:
 
 def triage_message(text: str, default_language: str = "en", upset_threshold: int = 2) -> Triage:
     # Phone keyboards type a curly apostrophe, which would hide "can't breathe".
-    folded = normalize(text).replace("’", "'")
+    folded = normalize(text).replace("\u2019", "'")
     # A reply of a word or two, such as "ok" or an order number, keeps the conversation's language.
     language = detect_language(text, default_language) if len(text.split()) >= 3 else default_language
     result = Triage(language=language)

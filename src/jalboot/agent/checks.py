@@ -46,7 +46,7 @@ COUNT_IN_BRACKETS = re.compile(r"\((\d+)\)")
 PHONE = re.compile(r"(?<![\w-])\+?\d[\d\s-]{7,14}\d(?![\w-])")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
-ARABIC_SEPARATORS = str.maketrans({"٫": ".", "٬": ","})
+ARABIC_SEPARATORS = str.maketrans({"\u066b": ".", "\u066c": ","})
 # A marker can follow the full stop, and it still belongs to that sentence.
 SENTENCE_END = re.compile(r"(?<=[.!?;])\s+(?!\[\d)|\n+")
 ADDRESSED = re.compile(r"(?<!\w)(?:you|your|لك|اليك)(?!\w)|\w(?:ك|كم)(?!\w)")
@@ -127,8 +127,8 @@ ALREADY_DONE = {
 # Models like typographic hyphens and spaces. An order number holding one cannot be
 # searched or copied, and it slips past every pattern here.
 LOOKALIKES = str.maketrans({
-    "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-",
-    " ": " ", " ": " ", " ": " ", " ": " ",
+    "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-", "\u2014": "-",
+    "\u00a0": " ", "\u202f": " ", "\u2009": " ", "\u2007": " ",
 })
 
 
