@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import func, select
 
 from jalboot import audit
-from jalboot.db.models import Approval, AuditEvent, Customer, Order, Refund, StaffUser, Ticket
+from jalboot.db.models import Address, Approval, AuditEvent, Customer, Order, Refund, StaffUser, Ticket
 from jalboot.security.passwords import hash_password
 from jalboot.tools import approvals
 from jalboot.tools.approvals import DecisionError, decide
@@ -135,6 +135,7 @@ def test_an_item_that_is_not_on_the_order_is_refused(layla):
 def test_quote_uses_the_seventy_percent_rule_and_reveals_no_limits(layla):
     quote = layla.execute("quote_refund", {
         "order_id": "JB-700103", "reason": "wrong_item", "items": ["Mixed grill plate", "Grilled hammour"],
+        "quantity": 2,
     })
     assert quote["amount_qar"] == 250 + 8 + 3
     assert set(quote) == {"ok", "order_id", "reason", "amount_qar"}
@@ -498,3 +499,154 @@ def test_order_details_list_only_chosen_facts(db, layla):
     details = layla.execute("get_order_details", {"order_id": "JB-700102"})
     assert details["proof_of_delivery"] is True
     assert "internal_score" not in details
+
+
+def test_saf03_an_allergen_claim_is_a_full_order_refund(layla):
+    quote = layla.execute("quote_refund", {"order_id": "JB-700102", "reason": "allergen", "items": ["Karak tea"]})
+    assert quote["amount_qar"] == 65 + 8 + 3
+
+
+@pytest.mark.parametrize("reason", ["illness", "broken_seal"])
+def test_saf04_these_need_no_items_and_are_full_order(layla, reason):
+    assert layla.execute("quote_refund", {"order_id": "JB-700102", "reason": reason})["amount_qar"] == 65 + 8 + 3
+
+
+def test_wrg01_a_line_of_several_units_must_say_how_many(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.items[0].quantity = 3
+    db.commit()
+    args = {"order_id": "JB-700102", "reason": "missing_item", "items": [order.items[0].name]}
+    assert layla.execute("quote_refund", args)["error"] == "quantity_required"
+
+
+def test_a_second_missing_unit_pays_only_for_the_new_one(db, layla):
+    order = db.get(Order, "JB-700102")
+    name = order.items[0].name
+    order.items[0].quantity = 3
+    db.commit()
+    claim = {"order_id": "JB-700102", "reason": "missing_item", "items": [name]}
+    first = layla.execute("issue_refund", {**claim, "quantity": 1, "amount_qar": 20.0})
+    assert first["status"] == "done"
+    assert layla.execute("quote_refund", {**claim, "quantity": 2})["amount_qar"] == 20.0
+    assert layla.execute("issue_refund", {**claim, "quantity": 2, "amount_qar": 20.0})["status"] == "done"
+    assert layla.execute("quote_refund", {**claim, "quantity": 2})["error"] == "item_already_refunded"
+    assert refund_count(db) == 2
+
+
+def test_prm01_a_second_code_cannot_stack(db, layla):
+    assert layla.execute("apply_promo", {"code": "SAVE20"})["status"] == "done"
+    assert layla.execute("apply_promo", {"code": "FREEDROP"})["error"] == "one_code_per_order"
+
+
+def test_gen03_free_delivery_changes_the_fee_and_makes_no_discount(db, layla):
+    basket = db.get(Order, "BASKET-C-1001")
+    total = basket.total_dh
+    assert layla.execute("apply_promo", {"code": "FREEDROP"})["status"] == "done"
+    assert basket.delivery_fee_dh == 0
+    assert basket.discount_dh == 0
+    assert basket.total_dh == total - 500
+
+
+def test_prm01_free_delivery_is_not_used_up_when_delivery_is_already_free(db, layla):
+    db.get(Order, "BASKET-C-1001").delivery_fee_dh = 0
+    db.commit()
+    assert layla.execute("apply_promo", {"code": "FREEDROP"})["error"] == "delivery_already_free"
+
+
+def very_late(db, minutes=125):
+    order = db.get(Order, "JB-700101")
+    order.promised_at = ANCHOR - timedelta(minutes=minutes)
+    db.commit()
+    return order
+
+
+def test_lat03_a_two_hour_delay_refunds_and_adds_the_credit(db, layla):
+    order = very_late(db)
+    before = db.get(Customer, "C-1001").wallet_dh
+    result = layla.execute("cancel_order", {"order_id": "JB-700101"})
+    assert result["rule"] == "jalboot_auto_cancel"
+    assert result["credit_qar"] == 10.0
+    assert order.extra["cancelled_by"] == "jalboot"
+    assert db.get(Customer, "C-1001").wallet_dh == before + 1000
+
+
+def test_ref04_a_cancellation_returns_the_credit_part_to_the_wallet(db, layla):
+    order = very_late(db, 50)
+    order.extra = {**(order.extra or {}), "credit_paid_dh": 2000}
+    db.commit()
+    before = db.get(Customer, "C-1001").wallet_dh
+    result = layla.execute("cancel_order", {"order_id": "JB-700101"})
+    assert result["status"] == "done"
+    assert result["to_credit_qar"] == 20.0
+    assert db.get(Customer, "C-1001").wallet_dh == before + 2000
+
+
+def test_ref04_a_cash_cancellation_returns_credit_it_used(db, layla):
+    order = very_late(db, 50)
+    order.payment_method = "cash"
+    order.extra = {**(order.extra or {}), "credit_paid_dh": 2000}
+    db.commit()
+    before = db.get(Customer, "C-1001").wallet_dh
+    layla.execute("cancel_order", {"order_id": "JB-700101"})
+    assert db.get(Customer, "C-1001").wallet_dh == before + 2000
+
+
+def test_ref04_approval_uses_the_same_split(db, layla):
+    order = db.get(Order, "JB-700103")
+    order.extra = {**(order.extra or {}), "credit_paid_dh": order.total_dh - 5000}
+    db.commit()
+    before = db.get(Customer, "C-1001").wallet_dh
+    approval_id = file_large_refund(db, layla, amount=90.0)
+    outcome = decide(db, approval_id, staff(db), "approve", "", 1, ANCHOR, RULES)
+    assert outcome.refund.method == "mixed"
+    assert db.get(Customer, "C-1001").wallet_dh == before + 4000
+
+
+def test_acc03_an_address_change_resets_the_promise_and_charges_a_dearer_zone(db):
+    order = db.get(Order, "JB-700201")
+    original = order.promised_at
+    tools = tools_for(db, make_conversation(db, customer_id="C-1002"))
+    result = tools.execute("change_address", {"order_id": "JB-700201", "new_address": "Street 410, Building 7"})
+    assert result["fee_qar"] == 0.0
+    assert order.promised_at != original
+    assert order.extra["original_promised_at"]
+
+
+def test_acc03_food_cannot_move_to_zone_d(db):
+    db.get(Order, "JB-700201").category = "food"
+    address = db.get(Address, "A-1002-2")
+    address.line = "Zone 90, Street 410, Building 7, Al Khor"
+    db.commit()
+    tools = tools_for(db, make_conversation(db, customer_id="C-1002"))
+    result = tools.execute("change_address", {"order_id": "JB-700201", "new_address": "Street 410, Building 7"})
+    assert result["error"] == "zone_not_served"
+
+
+def test_gen02_an_old_chat_cannot_stretch_a_window(db):
+    conversation = make_conversation(db)
+    conversation.first_report_at = ANCHOR - timedelta(days=5)
+    db.commit()
+    late = ANCHOR + timedelta(hours=30)
+    assert tools_for(db, conversation, now=late).execute("issue_refund", MISSING)["error"] == "outside_reporting_window"
+
+
+def test_an_address_change_never_shows_a_refund_card(db):
+    events = []
+    conversation = make_conversation(db, customer_id="C-1002")
+    tools = tools_for(db, conversation, publish=events.append)
+    tools.execute("change_address", {"order_id": "JB-700201", "new_address": "Some villa near the park"})
+    assert not [event for event in events if event["type"] == "refund.update"]
+
+
+def test_a_credit_card_says_where_the_money_went(db, layla):
+    events = []
+    tools = tools_for(db, layla.conversation, publish=events.append)
+    tools.execute("issue_credit", {"order_id": "JB-700104", "amount_qar": 20.0, "reason": "late_delivery"})
+    assert [event for event in events if event["type"] == "refund.update"][0]["refund"]["destination"] == "credit"
+
+
+def test_explain_delay_reports_nothing_due_after_the_window(db):
+    tools = tools_for(db, make_conversation(db), now=ANCHOR + timedelta(hours=30))
+    result = tools.execute("explain_delay", {"order_id": "JB-700104"})
+    assert result["minutes_late"] > 60
+    assert result["late_credit_due_qar"] == 0

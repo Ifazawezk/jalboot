@@ -211,6 +211,7 @@ def refund_summary(approval: Approval, staff_name: str | None) -> dict[str, Any]
         "status": refund_status(approval),
         "decidedBy": staff_name,
         "note": approval.decision_note or None if approval.status == "rejected" else None,
+        "destination": "credit" if approval.kind == "credit" else "original",
     }
 
 
@@ -245,7 +246,7 @@ def refund_view(
     reason = str((approval.payload or {}).get("reason") or approval.reason)
     risks = _risks(session, rules, approval, order, now, language)
     section = POLICY_SECTIONS.get(reason, "REF-03")
-    items = ", ".join((approval.payload or {}).get("items") or [])
+    items = ", ".join(str(entry["name"]) for entry in (approval.payload or {}).get("items") or [])
     evidence = [
         {"label": pick(("Order total", "إجمالي الطلب"), language), "value": f"QAR {to_qar(order.total_dh):g}"},
         {"label": pick(("Order status", "حالة الطلب"), language), "value": order.status},

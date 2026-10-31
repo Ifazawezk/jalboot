@@ -38,7 +38,7 @@ class Outcome:
     refund: Refund | None
 
 
-def _pay(session: Session, approval: Approval, staff: StaffUser, now: datetime) -> Refund | None:
+def _pay(session: Session, rules: Rules, approval: Approval, staff: StaffUser, now: datetime) -> Refund | None:
     order = session.get(Order, approval.order_id)
     customer = order.customer
     if approval.kind == "address_change":
@@ -49,15 +49,19 @@ def _pay(session: Session, approval: Approval, staff: StaffUser, now: datetime) 
         order.extra = extra
         return None
 
-    credit = approval.kind == "credit"
-    # The cap can have moved since filing, so it is enforced again here.
-    room = engine.remaining_refundable_dh(order_facts(order), claim_facts(session, customer, order, now))
-    if approval.amount_dh > room:
+    facts = order_facts(order)
+    # The cap can have moved since filing, so it is enforced again here. A parcel payout
+    # follows its cover (PCL-03), not the amount paid.
+    room = engine.remaining_refundable_dh(facts, claim_facts(session, customer, order, now))
+    if order.category != "parcel" and approval.amount_dh > room:
         raise DecisionError("amount_exceeds_paid")
-    if credit:
-        method = COMPENSATION
+    if approval.kind == "credit":
+        method, credit_part = COMPENSATION, approval.amount_dh
     else:
-        method = "refund_credit" if order.payment_method == "cash" else "original"
+        original, credit_part, overflow = engine.refund_split(rules, facts, approval.amount_dh, customer.wallet_dh)
+        if overflow:
+            raise DecisionError("wallet_at_limit")
+        method = engine.refund_method(original, credit_part)
     refund = Refund(
         id=new_id("R"), order_id=order.id, customer_id=order.customer_id, amount_dh=approval.amount_dh,
         method=method, reason=str(approval.payload.get("reason") or approval.reason),
@@ -65,8 +69,7 @@ def _pay(session: Session, approval: Approval, staff: StaffUser, now: datetime) 
         created_at=now, idempotency_key=approval.idempotency_key,
     )
     session.add(refund)
-    if method != "original":
-        customer.wallet_dh += approval.amount_dh
+    customer.wallet_dh += credit_part
     return refund
 
 
@@ -96,7 +99,7 @@ def decide(
             session.commit()
             raise DecisionError("approval_limit_exceeded")
 
-        refund = _pay(session, approval, staff, now) if action == "approve" else None
+        refund = _pay(session, rules, approval, staff, now) if action == "approve" else None
         approval.status = "approved" if action == "approve" else "rejected"
         approval.decided_at = now
         approval.decided_by = staff.id

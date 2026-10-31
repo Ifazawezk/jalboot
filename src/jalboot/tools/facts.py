@@ -21,6 +21,7 @@ def _item_fact(item: OrderItem) -> ItemFact:
     return ItemFact(
         item.name, item.quantity, item.unit_price_dh, not extra.get("prescription"),
         free_units=max(free, 0), approved_substitute=bool(extra.get("customer_approved")),
+        chilled=bool(extra.get("chilled")), cold_chain=bool(extra.get("cold_chain")),
     )
 
 
@@ -69,18 +70,24 @@ def order_facts(order: Order) -> OrderFacts:
         left_for_safety=bool(extra.get("left_for_safety")),
         change_short_dh=int(extra.get("driver_change_short_dh") or 0),
         leave_at_door=bool(extra.get("leave_at_door")),
+        declared_value_dh=extra.get("declared_value_dh"),
+        documents=bool(extra.get("documents")),
+        extended_cover=bool(extra.get("extended_cover")),
     )
 
 
 def claim_facts(session: Session, customer: Customer, order: Order | None, now: datetime) -> ClaimFacts:
     """Works out history from the refunds table. Figures the customer or the model
     states are never used here."""
-    refunded = credited = 0
+    refunded = credited = late_credit = late_fee = unnamed = 0
     if order is not None:
         rows = session.scalars(select(Refund).where(Refund.order_id == order.id)).all()
         extra = order.extra or {}
         refunded = sum(r.amount_dh for r in rows if r.method != COMPENSATION) + int(extra.get("prior_refunded_dh", 0))
-        credited = sum(r.amount_dh for r in rows if r.method == COMPENSATION) + int(extra.get("prior_credit_dh", 0))
+        unnamed = int(extra.get("prior_credit_dh", 0))
+        credited = sum(r.amount_dh for r in rows if r.method == COMPENSATION) + unnamed
+        late_credit = sum(r.amount_dh for r in rows if r.reason == "late_delivery")
+        late_fee = sum(r.amount_dh for r in rows if r.reason == "late_delivery_fee")
 
     history = session.scalars(select(Refund).where(Refund.customer_id == customer.id)).all()
 
@@ -102,12 +109,19 @@ def claim_facts(session: Session, customer: Customer, order: Order | None, now: 
         + int(prior.get("prior_goodwill_30d_dh", 0)),
         account_age_days=max((now - customer.created_at).days, 0),
         wallet_dh=customer.wallet_dh,
+        late_credit_on_order_dh=late_credit,
+        late_fee_refunded_dh=late_fee,
+        unnamed_credit_dh=unnamed,
     )
 
 
-def refunded_items(session: Session, order_id: str) -> set[str]:
-    rows = session.scalars(select(Refund.items).where(Refund.order_id == order_id)).all()
-    return {str(name).strip().lower() for items in rows for name in (items or [])}
+def refunded_items(session: Session, order_id: str) -> dict[str, int]:
+    """Units already refunded, by item, so a later claim only pays for what is new."""
+    done: dict[str, int] = {}
+    for items in session.scalars(select(Refund.items).where(Refund.order_id == order_id)).all():
+        for entry in items or []:
+            done[entry["name"]] = max(done.get(entry["name"], 0), int(entry["units"]))
+    return done
 
 
 def order_count(session: Session, customer_id: str, status: str) -> int:
