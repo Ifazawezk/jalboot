@@ -47,7 +47,9 @@ PHONE = re.compile(r"(?<![\w-])\+?\d[\d\s-]{7,14}\d(?![\w-])")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 ARABIC_SEPARATORS = str.maketrans({"٫": ".", "٬": ","})
-SENTENCE_END = re.compile(r"(?<=[.!?;])\s+|\n+")
+# A marker can follow the full stop, and it still belongs to that sentence.
+SENTENCE_END = re.compile(r"(?<=[.!?;])\s+(?!\[\d)|\n+")
+ADDRESSED = re.compile(r"(?<!\w)(?:you|your|لك|اليك)(?!\w)|\w(?:ك|كم)(?!\w)")
 CLAUSE_END = re.compile(r"[,;:]|\bbut\b|لكن")
 
 
@@ -324,8 +326,8 @@ def check_claims(
     failed: set[str] = set()
     for claim in claims_in(reply):
         figures = list(_figures(claim.sentence))
-        policy_answer = not used_tools and CITATION.search(claim.sentence) and not any(money for _, money in figures)
-        if claim.promised and policy_answer:
+        names_a_sum = ADDRESSED.search(claim.sentence) and any(money for _, money in figures)
+        if claim.promised and not used_tools and CITATION.search(claim.sentence) and not names_a_sum:
             continue
         if claim.action not in done and not (claim.promised and asking and claim.action in offered):
             if claim.action not in failed:

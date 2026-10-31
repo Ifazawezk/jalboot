@@ -6,13 +6,14 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import func, select
 
+from jalboot.agent import checks
 from jalboot.agent.loop import MAX_STEPS, SupportAgent, relevant
 from jalboot.api.views import citation_view
 from jalboot.db.models import Customer, Order, Refund
 from jalboot.kb.store import KnowledgeBase, load_passages
 from jalboot.llm.cache import BudgetExhausted
 from jalboot.llm.client import LLMError, LLMReply, RateLimited, ToolCall
-from jalboot.llm.mock import MockPlanner, Turn
+from jalboot.llm.mock import MockPlanner, Turn, _plain
 from tests.conftest import ANCHOR, make_conversation, tools_for
 
 KB = KnowledgeBase(load_passages())
@@ -532,3 +533,22 @@ def test_arabic_replies_name_the_safety_team_and_avoid_the_guessing_line():
     assert "فريق الأمان" not in arabic
     assert "أخمّن" not in arabic
     assert "لست متأكدا من أنني" not in arabic
+
+
+def test_every_sentence_of_the_policy_passes_when_quoted_with_its_marker():
+    rejected = []
+    for passage in KB.all_passages:
+        if passage.visibility == "internal":
+            continue
+        for line in passage.text.splitlines():
+            if "|" in line:
+                continue
+            plain = _plain(line)
+            for sentence in re.split(r"(?<=[.!؟?])\s+", plain):
+                verdict = checks.check_reply(
+                    f"{sentence} [1]", source_count=1, evidence=[passage.text], done=set(), allowed_contacts=[],
+                    system_prompt="", canary="", used_tools=False,
+                )
+                if len(sentence) >= 12 and not verdict.ok:
+                    rejected.append((passage.id, sentence, verdict.problems))
+    assert rejected == []

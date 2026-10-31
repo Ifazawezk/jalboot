@@ -405,3 +405,12 @@ def test_word_forms_still_match_after_the_word_boundary(text, reason):
 
 def test_praise_with_a_complaint_in_arabic_is_still_a_complaint():
     assert triage_message("موظفكم كان غير محترم معي").handoff_reason == AGENT_COMPLAINT
+
+
+def test_a_marker_after_the_full_stop_still_counts_for_its_sentence():
+    assert run("You will be refunded within 48 hours. [1]", used_tools=False).ok
+
+
+def test_a_worked_example_is_not_a_promise_to_this_customer():
+    assert run("Delivery fee QAR 25 is refunded as well [1].", used_tools=False).ok
+    assert not run("Your delivery fee of QAR 25 is refunded as well.", used_tools=False).ok
