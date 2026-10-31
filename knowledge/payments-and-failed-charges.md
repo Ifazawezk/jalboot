@@ -107,7 +107,7 @@ A duplicate charge means two final charges of the same amount on the same order,
 
 - Report within 30 days of the charge date.
 - A confirmed duplicate goes back to the same method. The refund starts within 3 business days.
-- Automated support can approve up to QAR 300 for a confirmed duplicate. This is separate from the limit in REF-05, because the money was never owed. It needs no photo and is not counted as a claim.
+- A confirmed duplicate needs no photo and is not counted as a claim.
 
 **Not a duplicate:**
 
@@ -122,7 +122,7 @@ A duplicate charge means two final charges of the same amount on the same order,
 
 - يجب الإبلاغ خلال 30 يومًا من تاريخ الخصم.
 - يعود المبلغ المؤكد تكراره إلى الوسيلة نفسها، ويبدأ الرد خلال 3 أيام عمل.
-- يمكن للدعم الآلي الموافقة على ما يصل إلى 300 ر.ق في الخصم المكرر المؤكد. وهذا الحد منفصل عن الحد الوارد في REF-05، لأن المبلغ لم يكن مستحقًا أصلًا، ولا يحتاج إلى صورة ولا يُحسب مطالبة.
+- لا يحتاج الخصم المكرر المؤكد إلى صورة، ولا يُحسب مطالبة.
 
 **لا يُعد خصمًا مكررًا:**
 

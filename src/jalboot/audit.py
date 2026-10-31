@@ -1,11 +1,14 @@
 """The audit log.
 
 Every tool call, every refusal and every staff decision adds a row. Each row
-stores a hash of its own content and of the row before it, so changing or removing
-any past row breaks the chain from that point on, and verify_chain finds where.
+stores a hash of its own content and of the row before it, so changing a past row,
+or removing one with rows after it, breaks the chain from that point on, and
+verify_chain finds where.
 
-This shows tampering after the fact. It does not stop someone with database access
-from rewriting the whole chain, because the hashes carry no secret key.
+This shows some tampering after the fact, not all of it. Deleting the newest rows
+goes unnoticed, because the chain just ends sooner, and someone with database access
+can rewrite the whole chain, because the hashes carry no secret key. Keeping the
+latest hash outside the database would close both.
 """
 
 from __future__ import annotations

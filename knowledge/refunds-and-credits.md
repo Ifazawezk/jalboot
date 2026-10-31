@@ -226,6 +226,12 @@ An amount exactly at a limit stays at that level. For an account younger than 7 
 
 **Always a person, at any amount:** pharmacy refunds, safety cases, parcel claims and not-received cases that have proof of delivery.
 
+**Confirmed duplicate charge (PAY-03):** automated support can approve up to QAR 300. This is separate from the limits above, because the money was never owed.
+
+**Not received (LAT-04):** only 2 refunds are allowed in the rolling 90 days. The next case goes to a Trust review, even if there is no proof of delivery.
+
+**Reused photo (REF-06):** a photo already used on another claim sends the case to a Trust review.
+
 **Repeat claims:** send the claim to a support agent if the customer already has 3 or more approved claims in the rolling 30 days, or if this claim would take approved refunds in the rolling 30 days above QAR 300.
 
 **Trust review:** with 8 or more approved claims in the rolling 90 days, pause refunds on the account and open a Trust review. It takes up to 5 business days.
@@ -251,6 +257,12 @@ An amount exactly at a limit stays at that level. For an account younger than 7 
 
 **ما يتولاه موظف دائمًا مهما كان المبلغ:** عمليات استرداد الصيدلية، وحالات السلامة، ومطالبات الطرود، وحالات عدم الاستلام التي يوجد فيها إثبات تسليم.
 
+**الخصم المكرر المؤكد (PAY-03):** يمكن للدعم الآلي الموافقة على ما يصل إلى 300 ر.ق. وهذا الحد منفصل عن الحدود أعلاه، لأن المبلغ لم يكن مستحقًا أصلًا.
+
+**عدم الاستلام (LAT-04):** لا يُسمح إلا بعمليتي استرداد (2) خلال 90 يومًا متحركة، وتُحال الحالة التالية إلى مراجعة فريق الثقة حتى لو لم يوجد إثبات تسليم.
+
+**الصورة المعاد استخدامها (REF-06):** إذا كانت الصورة قد استُخدمت في مطالبة أخرى، تُحال الحالة إلى مراجعة فريق الثقة.
+
 **تكرار المطالبات:** تُحال المطالبة إلى موظف الدعم إذا كان لدى العميل 3 مطالبات معتمدة أو أكثر خلال 30 يومًا متحركة، أو إذا كانت هذه المطالبة سترفع مجموع المبالغ المعتمدة في الفترة نفسها فوق 300 ر.ق.
 
 **مراجعة فريق الثقة:** عند وجود 8 مطالبات معتمدة أو أكثر خلال 90 يومًا متحركة، يُوقف الاسترداد على الحساب وتُفتح مراجعة يتولاها فريق الثقة، وتستغرق مدة أقصاها 5 أيام عمل.
@@ -270,7 +282,7 @@ An amount exactly at a limit stays at that level. For an account younger than 7 
 
 Claim value is the total net amount the customer asks for in that report, not the listed price.
 
-The report must be made inside the window. The photo can follow up to 24 hours after the report, even if the window has ended by then. With no photo after 24 hours, the claim closes. A photo already used on another claim sends the case to a Trust review.
+The report must be made inside the window. The photo can follow up to 24 hours after the report, even if the window has ended by then. With no photo after 24 hours, the claim closes. A photo already used on another claim is not accepted, and a person reviews the case.
 
 <div lang="ar" dir="rtl">
 
@@ -285,7 +297,7 @@ The report must be made inside the window. The photo can follow up to 24 hours a
 
 وقيمة المطالبة هي إجمالي المبلغ الصافي الذي يطلبه العميل في ذلك البلاغ، لا السعر المعروض.
 
-يجب تقديم البلاغ داخل المهلة، ويجوز إرسال الصورة خلال 24 ساعة من البلاغ حتى لو انتهت المهلة في هذه الأثناء. فإذا مرت 24 ساعة دون صورة، تُغلق المطالبة. وإذا كانت الصورة قد استُخدمت في مطالبة أخرى، تُحال الحالة إلى مراجعة فريق الثقة.
+يجب تقديم البلاغ داخل المهلة، ويجوز إرسال الصورة خلال 24 ساعة من البلاغ حتى لو انتهت المهلة في هذه الأثناء. فإذا مرت 24 ساعة دون صورة، تُغلق المطالبة. وإذا كانت الصورة قد استُخدمت في مطالبة أخرى، فلا تُقبل ويراجع موظف الحالة.
 
 </div>
 

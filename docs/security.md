@@ -48,7 +48,7 @@ Implemented in `tools/executor.py` and `tools/specs.py`. This is the only code t
 1. The tool exists and its arguments match the definition. An unlisted argument is refused, because a call with `customer_id=C-2`, `skip_limits=true` or `approved_by=manager` is an attack, not a typo. Arguments that are not valid JSON are refused, not guessed at.
 2. The conversation has passed the identity check, if the tool needs one. Tickets, handoffs and policy search do not, because a customer can always reach a person.
 3. The order belongs to the verified customer. A foreign order and a missing one give the same answer, so order numbers cannot be probed.
-4. A repeat of the same action returns the first result and changes nothing. Refund keys use the order's own item names, so a different spelling cannot refund an item twice.
+4. A repeat of the same action returns the first result and changes nothing. Item claims are keyed on the order's own lines, so a different spelling cannot refund an item twice. Claims about the whole order, such as a duplicate charge, ignore any item list, so changing the list cannot make a repeat look new.
 5. The policy engine returns one of four outcomes: execute, approval, deny or escalate. A refund is also capped by what the claim is worth, from the order's own prices.
 6. The action and its audit row commit in one transaction, one writer at a time. Live events go out only after the commit.
 
@@ -152,7 +152,7 @@ Implemented in `api/app.py`, `api/guards.py` and `security/`.
 
 Implemented in `audit.py`. Every tool call, every refusal and every staff decision adds a row, and each row stores a hash of its own content and of the row before it. `GET /api/v1/desk/audit/verify` walks the chain and names the first bad row.
 
-This shows tampering after the fact. It does not stop someone with database access from rewriting the whole chain, because the hashes carry no secret key.
+This shows some tampering after the fact, not all of it. Changing a row, or removing one with rows after it, breaks the chain. Deleting the newest rows goes unnoticed, because the chain just ends sooner, and someone with database access can rewrite the whole chain, because the hashes carry no secret key. Keeping the latest hash outside the database would close both, and this project does not do that.
 
 ### 11. Production settings
 
