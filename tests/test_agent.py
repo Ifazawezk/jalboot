@@ -237,3 +237,10 @@ def test_mock_mode_answers_arabic_in_arabic(db):
 def test_mock_mode_refuses_when_unsure(layla):
     result = run(MockPlanner(), layla, "do you deliver helicopters to the moon on tuesdays")
     assert "not sure" in result.reply
+
+
+def test_a_safety_reply_gives_the_emergency_number_first():
+    from jalboot.agent.replies import handoff_reply
+
+    assert handoff_reply("safety", "en").startswith("If anyone is in danger")
+    assert "999" in handoff_reply("safety", "ar")

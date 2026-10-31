@@ -131,7 +131,7 @@ When a referred friend's first delivered order has an item subtotal of QAR 40 or
 
 **Expiry.** Points expire 12 months after they are earned.
 
-**After a refund.** Redeemed points come back under REF-04. Earned points on the refunded value are removed, rounded down. If the balance is too low, removal stops at zero and the rest is forgiven.
+**After a refund.** Redeemed points come back under REF-04. Earned points on the refunded value are removed, rounded down. If they have not posted yet, they post on the reduced value. If the balance is too low, removal stops at zero and the rest is forgiven.
 
 <div lang="ar" dir="rtl">
 
@@ -145,7 +145,7 @@ When a referred friend's first delivered order has an item subtotal of QAR 40 or
 
 **انتهاء الصلاحية:** تنتهي صلاحية النقاط بعد 12 شهرًا من كسبها.
 
-**بعد الاسترداد:** تعود النقاط المستبدلة وفق REF-04. وتُزال النقاط المكتسبة عن القيمة المردودة مع التقريب إلى الأسفل. وإذا لم يكفِ الرصيد، تتوقف الإزالة عند الصفر ويُعفى العميل من الباقي.
+**بعد الاسترداد:** تعود النقاط المستبدلة وفق REF-04. وتُزال النقاط المكتسبة عن القيمة المردودة مع التقريب إلى الأسفل. وإذا لم تكن قد أُضيفت بعد، تُضاف على القيمة المخفضة. وإذا لم يكفِ الرصيد، تتوقف الإزالة عند الصفر ويُعفى العميل من الباقي.
 
 </div>
 

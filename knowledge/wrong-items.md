@@ -143,7 +143,7 @@ Redelivery is free. The customer gets redelivery or a refund, never both. If the
 
 | Complaint | Window | Refund |
 |---|---|---|
-| Arrived cold or too warm | 2 hours | 50% of net item price |
+| Arrived at the wrong temperature | 2 hours | 50% of net item price |
 | Soggy, stale, overcooked or similar | 24 hours | 50% of net item price |
 | Spilled or crushed in transit | 24 hours | Treat as damaged: full net item price |
 | Taste or personal preference | Not applicable | None |
@@ -156,7 +156,7 @@ A quality claim does not count toward the 70% rule, even if every item in the or
 
 | الشكوى | المهلة | المبلغ المردود |
 |---|---|---|
-| وصل باردًا أو غير ساخن بما يكفي | ساعتان (2) | 50% من صافي سعر الصنف |
+| وصل بدرجة حرارة غير مناسبة | ساعتان (2) | 50% من صافي سعر الصنف |
 | طري أكثر من اللازم أو غير طازج أو محترق أو ما شابه | 24 ساعة | 50% من صافي سعر الصنف |
 | انسكب أو تضرر أثناء النقل | 24 ساعة | يُعامل معاملة التالف: كامل صافي سعر الصنف |
 | المذاق أو التفضيل الشخصي | لا ينطبق | لا يوجد |

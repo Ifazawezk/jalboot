@@ -38,7 +38,7 @@ sections:
     title_ar: "تعذر الوصول إلى العميل"
     visibility: public
     tags: [failed-delivery, edge-case]
-    rule_keys: [failed_delivery, cancellations.grocery.picking_charge_pct, cancellations.pharmacy.packed_charge_qar, payments.cod.outstanding_balance_cap_qar]
+    rule_keys: [failed_delivery, cancellations.grocery.picking_charge_pct, cancellations.grocery.picking_charge_min_qar, cancellations.grocery.picking_charge_max_qar, cancellations.pharmacy.packed_charge_qar, payments.cod.outstanding_balance_cap_qar]
 ---
 
 # Late or missing orders
@@ -137,7 +137,7 @@ Both time limits also apply during severe weather. The weather exception in LAT-
 
 | الوقت بعد `promised_at` والطلب لم يُسلَّم | النتيجة |
 |---|---|
-| أقل من 45 دقيقة | تُعرض الحالة المباشرة للطلب، وتنطبق رسوم الإلغاء المعتادة (CAN-01 وCAN-02). |
+| أقل من 45 دقيقة | تُعرض الحالة المباشرة للطلب، وتنطبق رسوم الإلغاء المعتادة (CAN-01 و CAN-02). |
 | 45 دقيقة فأكثر | يمكن للعميل الإلغاء مجانًا مع استرداد كامل يشمل الإكرامية، حتى لو كان الطلب في حالة `on_the_way`، ودون رصيد تأخير. |
 | 120 دقيقة فأكثر | تلغي جالبوت الطلب مع استرداد كامل يشمل الإكرامية، إضافة إلى رصيد إلغاء بقيمة 10 ر.ق. |
 
@@ -182,13 +182,13 @@ The driver waits 7 minutes at the delivery point and makes 2 calls through the a
 | Order type | Outcome |
 |---|---|
 | Food | No refund. Tip is returned. |
-| Grocery | Refund net items minus the picking charge in CAN-02. Delivery and service fees are kept. Tip is returned. |
+| Grocery | Refund net items minus the picking charge in CAN-02 (15% of net items, minimum QAR 10, maximum QAR 50). Delivery and service fees are kept. Tip is returned. |
 | Pharmacy | Refund net items minus QAR 10. Delivery and service fees are kept. Tip is returned. Cold-chain items are not refunded. |
 | Parcel | See PCL-05. |
 
 On a cash order, no money has been collected, so the amount owed becomes an outstanding balance capped at QAR 30 (CAN-05).
 
-If records show the driver waited less than 7 minutes or made fewer than 2 calls, this section does not apply. Treat the order as not delivered and give a full refund including tip.
+If records show the driver waited less than 7 minutes or made fewer than 2 calls, this section does not apply. Treat the order as not delivered and give a full refund including tip. The exception is a driver who left for safety reasons under DRV-04. That order stays `failed_customer`, and the outcomes in the table apply.
 
 <div lang="ar" dir="rtl">
 
@@ -199,12 +199,12 @@ If records show the driver waited less than 7 minutes or made fewer than 2 calls
 | نوع الطلب | النتيجة |
 |---|---|
 | طعام | لا يُرد المبلغ، وتُعاد الإكرامية. |
-| بقالة | يُرد صافي الأصناف بعد طرح رسوم التجهيز الواردة في CAN-02، ولا تُرد رسوم التوصيل والخدمة، وتُعاد الإكرامية. |
+| بقالة | يُرد صافي الأصناف بعد طرح رسوم التجهيز الواردة في CAN-02 (15% من صافي الأصناف، بحد أدنى 10 ر.ق وحد أقصى 50 ر.ق)، ولا تُرد رسوم التوصيل والخدمة، وتُعاد الإكرامية. |
 | صيدلية | يُرد صافي الأصناف بعد طرح 10 ر.ق، ولا تُرد رسوم التوصيل والخدمة، وتُعاد الإكرامية، ولا تُرد قيمة الأصناف التي تتطلب حفظًا مبردًا. |
 | طرد | انظر PCL-05. |
 
 وفي الطلب النقدي لم يُحصَّل أي مبلغ، فيتحول المبلغ المستحق إلى مديونية على الحساب بحد أقصى 30 ر.ق (CAN-05).
 
-وإذا أظهرت السجلات أن المندوب انتظر أقل من 7 دقائق أو أجرى أقل من مكالمتين، فلا ينطبق هذا القسم، ويُعامل الطلب على أنه لم يُسلَّم مع استرداد كامل يشمل الإكرامية.
+وإذا أظهرت السجلات أن المندوب انتظر أقل من 7 دقائق أو أجرى أقل من مكالمتين، فلا ينطبق هذا القسم، ويُعامل الطلب على أنه لم يُسلَّم مع استرداد كامل يشمل الإكرامية. ويُستثنى من ذلك المندوب الذي غادر لأسباب تتعلق بسلامته وفق DRV-04، إذ يبقى الطلب بحالة `failed_customer` وتنطبق نتائج الجدول.
 
 </div>
