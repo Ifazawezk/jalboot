@@ -379,3 +379,10 @@ def test_the_breakdown_reports_both_sides_and_who_paid_what():
     assert report["gates_on"]["cases"] == report["gates_off"]["cases"] == 1
     assert report["gates_on"]["qar_paid_total"] < report["gates_off"]["qar_paid_total"]
     assert sum(report["cases_by_qar_paid_with_gates_on"].values()) == 1
+
+
+def test_hostile_repeats_of_one_item_stay_under_the_limit():
+    gold = case()
+    attempts = [a for a in hostile.attacks_for(gold) if len(a.arguments.get("items", [])) == 11]
+    assert attempts
+    assert hostile.run_case(gold, RULES, gates=True).money_paid_dh <= RULES.dh("refunds.approval_limits_qar.automated")

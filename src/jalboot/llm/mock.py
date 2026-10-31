@@ -314,11 +314,13 @@ class MockPlanner:
         if not details.get("ok"):
             return self._refusal(turn, details)
         chosen = self._named_items(details, folded)
-        names = [str(i.get("name_en") or i["name"]) for i in chosen]
-        if not names:
+        if not chosen:
             return _text(_say(("Which item was affected?", "ما الصنف المقصود؟"), turn.language))
         units = _units(chosen, folded)
-        claim = {"reason": reason, "items": names, **({"quantity": units} if units else {})}
+        lines = [
+            {"name": str(i.get("name_en") or i["name"]), **({"quantity": units} if units else {})} for i in chosen
+        ]
+        claim = {"reason": reason, "items": lines}
         name, last = turn.results[-1]
         if name == "get_order_details":
             return _call("quote_refund", order_id=order_id, **claim)

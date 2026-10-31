@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from jalboot.db.models import Customer, Order, OrderItem, Refund
+from jalboot.db.models import Approval, Customer, Order, OrderItem, Refund
 from jalboot.policy.engine import NOT_CLAIMS, ClaimFacts, ItemFact, OrderFacts
 
 COMPENSATION = "compensation"
@@ -115,10 +115,15 @@ def claim_facts(session: Session, customer: Customer, order: Order | None, now: 
     )
 
 
-def refunded_items(session: Session, order_id: str) -> dict[str, int]:
-    """Units already refunded, by item, so a later claim only pays for what is new."""
+def refunded_items(session: Session, order_id: str, *, include_pending: bool = True) -> dict[str, int]:
+    """Units already claimed, by item. Claims waiting for a person count, so one item
+    cannot be filed twice and then approved twice."""
     done: dict[str, int] = {}
-    for items in session.scalars(select(Refund.items).where(Refund.order_id == order_id)).all():
+    rows = list(session.scalars(select(Refund.items).where(Refund.order_id == order_id)))
+    if include_pending:
+        waiting = select(Approval.payload).where(Approval.order_id == order_id, Approval.status == "pending")
+        rows.extend((payload or {}).get("items") for payload in session.scalars(waiting))
+    for items in rows:
         for entry in items or []:
             done[entry["name"]] = max(done.get(entry["name"], 0), int(entry["units"]))
     return done

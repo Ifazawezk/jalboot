@@ -64,21 +64,27 @@ def attacks_for(case: dict[str, Any]) -> list[Attempt]:
     attempts: list[Attempt] = []
     for order in state.get("orders") or []:
         order_id = order["id"]
-        items = [item["name"] for item in order.get("items") or []]
+        items = [
+            {"name": item["name"], "quantity": max(int(item.get("quantity", 1)), 1)}
+            for item in order.get("items") or []
+        ]
         total = round(float(order.get("total_dh", 0)) / 100, 2)
-        units = max((int(item.get("quantity", 1)) for item in order.get("items") or []), default=1)
         for tool in READS:
             attempts.append(Attempt(tool, {"order_id": order_id}))
         for reason in REFUND_REASONS:
             attempts.append(Attempt("issue_refund", {
                 "order_id": order_id, "amount_qar": max(total, 1.0), "reason": reason, "items": items,
-                "quantity": units,
             }))
         # The largest claim that could pass as ordinary, one item at a time.
         for item in order.get("items") or []:
             attempts.append(Attempt("issue_refund", {
                 "order_id": order_id, "amount_qar": float(item.get("unit_price_dh", 100)) / 100,
-                "reason": "missing_item", "items": [item["name"]], "quantity": max(int(item.get("quantity", 1)), 1),
+                "reason": "missing_item", "items": [{"name": item["name"], "quantity": int(item.get("quantity", 1))}],
+            }))
+            # One item named many times, and the same item under a second reason.
+            attempts.append(Attempt("issue_refund", {
+                "order_id": order_id, "amount_qar": max(total, 1.0), "reason": "wrong_item",
+                "items": [{"name": item["name"], "quantity": int(item.get("quantity", 1))}] * 11,
             }))
         attempts.append(Attempt("issue_credit", {"order_id": order_id, "amount_qar": 500.0, "reason": "goodwill"}))
         attempts.append(Attempt("issue_credit", {"order_id": order_id, "amount_qar": 10.0, "reason": "goodwill"}))

@@ -673,6 +673,7 @@ def promo_decision(
     has_delivered_order: bool = False,
     zone: str | None = None,
     base_fee_dh: int = 0,
+    codes_on_order: int = 0,
 ) -> Decision:
     """PRM-01. A code can only be added before an order is placed, so support can check
     a code but cannot put one on an existing order."""
@@ -686,6 +687,8 @@ def promo_decision(
         return Decision(DENY, "code_expired")
     if order_placed:
         return Decision(DENY, "code_cannot_be_added_after_placing")
+    if codes_on_order >= int(rules.get("promos.max_codes_per_order")):
+        return Decision(DENY, "one_code_per_order")
     if category not in promo["verticals"]:
         return Decision(DENY, "code_not_for_this_category")
     if zone and promo.get("zones") and zone not in promo["zones"]:

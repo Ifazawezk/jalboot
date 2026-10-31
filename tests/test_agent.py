@@ -113,7 +113,7 @@ def test_a_citation_maps_to_a_real_section(layla):
 
 def test_a_pending_refund_cannot_be_described_as_paid(db, layla):
     script = Script(
-        call("issue_refund", order_id="JB-700103", amount_qar=90.0, reason="wrong_item", items=["Grilled hammour"]),
+        call("issue_refund", order_id="JB-700103", amount_qar=90.0, reason="wrong_item", items=[{"name": "Grilled hammour"}]),
         LLMReply("Your order has been refunded."),
         LLMReply("Your order has been refunded."),
     )
@@ -161,7 +161,7 @@ def test_a_rate_limit_in_a_live_chat_reaches_a_person_not_the_customer(layla):
 
 def test_a_case_needing_a_person_hands_off_after_the_tool_says_so(db):
     tools = tools_for(db, make_conversation(db, customer_id="C-1002", language="ar"))
-    script = Script(call("issue_refund", order_id="JB-700204", amount_qar=45.0, reason="wrong_item", items=["Vitamin D3"]))
+    script = Script(call("issue_refund", order_id="JB-700204", amount_qar=45.0, reason="wrong_item", items=[{"name": "Vitamin D3"}]))
     result = run(script, tools, "وصلني منتج غلط في طلبي JB-700204")
     assert result.handoff["reason"] == "policy_requires_person"
     assert "JB-700204" in result.handoff["summary"]

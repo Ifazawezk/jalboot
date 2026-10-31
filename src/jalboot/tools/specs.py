@@ -9,6 +9,7 @@ No tool takes a customer id. The customer always comes from the conversation.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -66,12 +67,17 @@ class ToolSpec:
 
 ORDER_ID = {"type": "string", "description": "The order number, such as JB-500007"}
 ITEMS = {
-    "type": "array", "items": {"type": "string"},
-    "description": "Names of the affected items. Required for an item claim.",
-}
-QUANTITY = {
-    "type": "integer",
-    "description": "How many units of the item are affected, when it is not all of them",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "quantity": {"type": "integer", "description": "Units of this item affected in total"},
+        },
+        "required": ["name"],
+        "additionalProperties": False,
+    },
+    "description": "The affected items. Give quantity for any item with more than one unit. Required for an item claim.",
 }
 REASON_GUIDE = (
     " Reasons: missing_item, wrong_item, damaged_item, spoiled_item, quality (stale, soggy), cold_food, "
@@ -116,7 +122,6 @@ TOOLS = {
                 "order_id": ORDER_ID,
                 "reason": {"type": "string", "enum": REFUND_REASONS},
                 "items": ITEMS,
-                "quantity": QUANTITY,
             },
             ("order_id", "reason"),
         ),
@@ -128,7 +133,6 @@ TOOLS = {
                 "amount_qar": {"type": "number", "description": "Amount in QAR"},
                 "reason": {"type": "string", "enum": REFUND_REASONS},
                 "items": ITEMS,
-                "quantity": QUANTITY,
                 "method": {
                     "type": "string", "enum": ["original", "refund_credit"],
                     "description": "Where the money goes, if the customer chose",
@@ -215,14 +219,26 @@ TOOLS = {
     )
 }
 
+MAX_TEXT = 2000
+MAX_LINES = 50
+
+
+def _claim_line(entry: Any) -> bool:
+    if not isinstance(entry, dict) or set(entry) - {"name", "quantity"}:
+        return False
+    name, quantity = entry.get("name"), entry.get("quantity")
+    good_name = isinstance(name, str) and bool(name.strip()) and len(name) <= 200
+    good_quantity = quantity is None or (isinstance(quantity, int) and not isinstance(quantity, bool) and quantity > 0)
+    return good_name and good_quantity
+
+
 TYPE_CHECKS = {
     "string": lambda v: isinstance(v, str) and bool(v.strip()),
-    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
-    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool) and v > 0,
+    # JSON from a model can hold NaN or Infinity, which no amount of money can be.
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v),
     "boolean": lambda v: isinstance(v, bool),
-    "array": lambda v: isinstance(v, list) and all(isinstance(x, str) for x in v),
+    "array": lambda v: isinstance(v, list) and len(v) <= MAX_LINES and all(_claim_line(entry) for entry in v),
 }
-MAX_TEXT = 2000
 
 
 def validate(spec: ToolSpec, arguments: dict[str, Any]) -> str | None:

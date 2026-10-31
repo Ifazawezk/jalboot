@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 
 from jalboot import audit
 from jalboot.db.base import create_schema, make_engine, make_session_factory
-from jalboot.db.models import Approval, Conversation, Customer, Refund, StaffUser
+from jalboot.db.models import Approval, Conversation, Customer, Order, Refund, StaffUser
 from jalboot.policy.rules import Rules
 from jalboot.tools.approvals import DecisionError, decide
 from jalboot.tools.executor import ToolContext, ToolExecutor
@@ -24,8 +24,8 @@ from tests.conftest import database_url
 
 RULES = Rules.load()
 THREADS = 8
-REFUND = {"order_id": "JB-700102", "amount_qar": 4.0, "reason": "missing_item", "items": ["Karak tea"]}
-LARGE = {"order_id": "JB-700103", "amount_qar": 90.0, "reason": "wrong_item", "items": ["Grilled hammour"]}
+REFUND = {"order_id": "JB-700102", "amount_qar": 4.0, "reason": "missing_item", "items": [{"name": "Karak tea"}]}
+LARGE = {"order_id": "JB-700103", "amount_qar": 90.0, "reason": "wrong_item", "items": [{"name": "Grilled hammour"}]}
 
 
 @pytest.fixture
@@ -84,12 +84,12 @@ def test_the_same_refund_in_parallel_pays_once(sessions):
 
 def test_a_refund_in_parallel_moves_the_wallet_once(sessions):
     with sessions() as session:
-        session.get(Customer, "C-1001").orders[1].payment_method = "cash"
+        session.get(Order, "JB-700102").payment_method = "cash"
         before = session.get(Customer, "C-1001").wallet_dh
         session.commit()
     in_parallel(lambda n: call(sessions, "issue_refund", REFUND, f"t{n}"))
     with sessions() as session:
-        assert session.get(Customer, "C-1001").wallet_dh in {before, before + 400}
+        assert session.get(Customer, "C-1001").wallet_dh == before + 400
         assert session.scalar(select(func.count()).select_from(Refund)) == 1
 
 
