@@ -25,6 +25,7 @@ PROMO_CODE = re.compile(r"\b[A-Z]{3,}\d{1,3}\b|\bFREEDROP\b")
 MARKDOWN_LINE_START = re.compile(r"^\s*(?:#+|[-*]|\d+\.)\s+")
 MARKDOWN_MARKS = re.compile(r"\*\*|`")
 PAYMENT_TOOLS = {"issue_credit", "issue_refund"}
+MIN_QUOTE = 25
 
 STATUS_TEXT = {
     "placed": ("has been placed", "تم استلام طلبك"),
@@ -475,9 +476,11 @@ class MockPlanner:
         best = turn.sources[0]
         # The first plain sentence. Table rows and headings do not read as an answer.
         lines = [_plain(line) for line in str(best["text"]).splitlines()]
-        prose = next((line for line in lines if len(line) > 25 and "|" not in line), "")
+        prose = next((line for line in lines if len(line) > MIN_QUOTE and "|" not in line), "")
         if not prose:
             return _text(self._unsure(turn))
-        first = re.split(r"(?<=[.!؟?])\s+", prose, maxsplit=1)[0]
-        return _text(f"{first} [1]")
+        sentences = re.split(r"(?<=[.!؟?])\s+", prose)
+        # A bold lead-in such as "Open bank dispute." only names the rule that follows it.
+        count = 2 if len(sentences[0]) <= MIN_QUOTE else 1
+        return _text(f"{' '.join(sentences[:count])} [1]")
 

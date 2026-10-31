@@ -359,6 +359,10 @@ def test_a_cancelled_order_can_be_called_cancelled_after_tracking_it(db, layla):
     ("- **Missing item:** paid for but not in the bag. Refund the net price.", "Missing item: paid for but not in the bag. [1]"),
     ("**Allowed once per order, before `picked_up`,** if the pin is close.", "Allowed once per order, before picked_up, if the pin is close. [1]"),
     ("1. Tell them to contact emergency services at once.\n2. Stop any refund.", "Tell them to contact emergency services at once. [1]"),
+    (
+        "**Open bank dispute.** Once a customer disputes a charge, support cannot refund that order. Other text.",
+        "Open bank dispute. Once a customer disputes a charge, support cannot refund that order. [1]",
+    ),
 ])
 def test_mock_mode_quotes_a_source_without_its_markdown(source, reply):
     assert MockPlanner()._plan_question(Turn(sources=[{"text": source}]), None, "").content == reply
