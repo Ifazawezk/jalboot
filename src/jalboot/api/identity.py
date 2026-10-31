@@ -21,6 +21,7 @@ import hmac
 import re
 import secrets
 from datetime import datetime, timedelta
+from typing import Callable
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -116,6 +117,14 @@ def open_challenge(session: Session, conversation_id: str) -> OtpChallenge | Non
             OtpChallenge.conversation_id == conversation_id, OtpChallenge.consumed_at.is_(None)
         ).order_by(OtpChallenge.id.desc()).limit(1)
     )
+
+
+def code_check(secret: str, challenge: OtpChallenge | None) -> Callable[[str], bool] | None:
+    """Tells whether some digits are the open code, so chat text can be searched for it
+    while only its keyed hash is ever stored."""
+    if challenge is None:
+        return None
+    return lambda digits: hmac.compare_digest(_key(secret, challenge.conversation_id, digits), challenge.code_hash)
 
 
 def _try_code(

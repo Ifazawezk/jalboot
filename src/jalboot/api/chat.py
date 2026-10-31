@@ -34,7 +34,7 @@ CHUNK = 28
 TOOLS_WITH_ORDER = {"track_order", "get_order_details", "explain_delay"}
 NO_CODES_IN_CHAT = {
     "en": "For your safety, please do not type a code in the chat. Use the secure form instead.",
-    "ar": "حفاظا على أمانك، لا تكتب الرمز في المحادثة. استخدم النموذج الآمن.",
+    "ar": "حفاظًا على أمان حسابك، يُرجى عدم كتابة الرمز في المحادثة واستخدام نافذة التحقق الآمنة.",
 }
 LANGUAGES = ("en", "ar")
 HANDOFF_TOOL = "handoff_to_human"
@@ -130,8 +130,11 @@ def prepare_turn(runtime: Runtime, conversation_id: str, client_id: str, text: s
             now = runtime.clock.now()
             conversation.language = locale
             conversation.updated_at = now
-            code_expected = identity.open_challenge(session, conversation_id) is not None
-            clean, removed = redact(text, code_expected=code_expected)
+            challenge = identity.open_challenge(session, conversation_id)
+            clean, removed = redact(
+                text, code_expected=challenge is not None,
+                is_code=identity.code_check(runtime.settings.secret_key, challenge),
+            )
             if existing is None:
                 existing = Message(
                     conversation_id=conversation_id, role="customer", text=clean, client_id=client_id,
@@ -320,7 +323,7 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
         conversation_id=conversation.id, role="bot", text=result.reply, language=result.language,
         citations=result.citations, created_at=now,
         meta={
-            "tools": labels, "sources": [c.get("doc_title", "") for c in result.citations],
+            "tools": labels, "sources": views.source_titles(result.citations),
             "confidence": result.confidence, "flags": result.flags, "mode": result.mode,
         },
     )
