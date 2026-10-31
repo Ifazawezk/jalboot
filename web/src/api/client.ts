@@ -8,6 +8,7 @@ import type {
   ConversationEvent,
   DeskAgent,
   DeskEvent,
+  DeskPolicy,
   DeskSummary,
   Handoff,
   LiveConversation,
@@ -60,6 +61,10 @@ export interface SupportApi {
   listConversations(): Promise<LiveConversation[]>;
   getConversationDetail(id: string): Promise<ConversationDetail>;
   claimConversation(id: string): Promise<LiveConversation>;
+  /** Ends the conversation for the customer. Later messages are refused. */
+  closeConversation(id: string): Promise<LiveConversation>;
+  /** Internal limits, for signed-in staff. Null when they cannot be read. */
+  getDeskPolicy(): Promise<DeskPolicy | null>;
   replyToConversation(id: string, text: string): Promise<void>;
   listRefunds(): Promise<Refund[]>;
   decideRefund(id: string, decision: RefundDecision): Promise<Refund>;

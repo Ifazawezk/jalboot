@@ -63,11 +63,16 @@ const POLICY = {
   currency: 'QAR',
   assistant: 'mock',
   refund: {
+    cardBusinessDays: 7,
+    creditMinutes: 15,
+  },
+};
+const DESK_POLICY = {
+  refund: {
     automatedLimitQar: 50,
     newAccountAutomatedLimitQar: 25,
     agentLimitQar: 300,
-    cardBusinessDays: 7,
-    creditMinutes: 15,
+    supervisorLimitQar: 1500,
   },
 };
 const ORDER = {
@@ -222,6 +227,7 @@ async function deskApi(req, res, path) {
     state.csrf = null;
     return send(res, 204, undefined, { 'Set-Cookie': 'jalboot_desk=; Max-Age=0; Path=/' });
   }
+  if (path === '/desk/policy') return send(res, 200, DESK_POLICY);
   if (path === '/desk/summary') {
     const pending = state.refund.status === 'pending' ? 1 : 0;
     return send(res, 200, { live: 1, waiting: 0, refundsPending: pending, resolvedToday: 3 });

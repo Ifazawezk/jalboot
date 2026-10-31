@@ -98,8 +98,29 @@ def test_routes_are_really_registered(client):
 def test_policy_comes_from_the_rules_file(client):
     body = client.get(f"{V1}/policy").json()
     rules = json.loads(Path("knowledge/rules.json").read_text(encoding="utf-8"))
-    assert body["refund"]["automatedLimitQar"] == rules["refunds"]["approval_limits_qar"]["automated"]
+    assert body["refund"]["cardBusinessDays"] == rules["refunds"]["timing"]["card_business_days"]
     assert body["policyVersion"] == rules["meta"]["policy_version"]
+
+
+def test_the_public_policy_holds_no_internal_limit(client):
+    """ESC-03. Someone who knows the limit can size a claim to fit under it."""
+    body = client.get(f"{V1}/policy").json()
+    assert set(body["refund"]) == {"cardBusinessDays", "creditMinutes"}
+    assert "Limit" not in json.dumps(body)
+
+
+def test_internal_limits_need_a_desk_session(client):
+    assert client.get(f"{V1}/desk/policy").status_code == 401
+    _, auth = start(client)
+    assert client.get(f"{V1}/desk/policy", headers=auth).status_code == 401
+
+
+def test_signed_in_staff_can_read_the_internal_limits(client):
+    signed_in(client)
+    rules = json.loads(Path("knowledge/rules.json").read_text(encoding="utf-8"))
+    body = client.get(f"{V1}/desk/policy").json()
+    assert body["refund"]["automatedLimitQar"] == rules["refunds"]["approval_limits_qar"]["automated"]
+    assert body["refund"]["supervisorLimitQar"] == rules["refunds"]["approval_limits_qar"]["supervisor"]
 
 
 def test_every_response_carries_the_browser_protections(client):

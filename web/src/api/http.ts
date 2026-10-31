@@ -11,6 +11,7 @@ import {
   type ConversationEvent,
   type DeskAgent,
   type DeskEvent,
+  type DeskPolicy,
   type DeskSummary,
   type Handoff,
   type LiveConversation,
@@ -282,6 +283,15 @@ export function createHttpApi(
     getConversationDetail: (id) => desk<ConversationDetail>(`/desk/conversations/${id}`),
     claimConversation: (id) =>
       desk<LiveConversation>(`/desk/conversations/${id}/claim`, { method: 'POST' }),
+    closeConversation: (id) =>
+      desk<LiveConversation>(`/desk/conversations/${id}/close`, { method: 'POST' }),
+    async getDeskPolicy() {
+      try {
+        return await desk<DeskPolicy>('/desk/policy');
+      } catch {
+        return null;
+      }
+    },
     replyToConversation: (id, text) =>
       desk<void>(`/desk/conversations/${id}/reply`, {
         method: 'POST',

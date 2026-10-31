@@ -27,10 +27,10 @@ const SOURCES = {
   refunds: {
     sourceId: 'refunds-and-credits',
     title: { en: 'Refunds and credits', ar: 'الاسترداد والرصيد' },
-    section: { en: 'REF-05, Approval limits and repeat claims', ar: 'REF-05، حدود الموافقة والمطالبات المتكررة' },
+    section: { en: 'WRG-01, Wrong, missing and short items', ar: 'WRG-01، الأصناف الخاطئة والناقصة' },
     excerpt: {
-      en: `Automated support can approve up to QAR ${R.refundAutomatedLimitQar}. Anything above that goes to a support agent.`,
-      ar: `يمكن للدعم الآلي الموافقة على مبلغ يصل إلى ${R.refundAutomatedLimitQar} ريالًا. وما زاد عن ذلك يُحال إلى موظف الدعم.`,
+      en: 'Missing item: paid for but not in the bag. Refund the net item price.',
+      ar: 'صنف ناقص: دُفع ثمنه ولم يوجد في الكيس، فيُرد صافي سعره.',
     },
   },
   cancelGrace: {
@@ -163,8 +163,8 @@ const SCENARIOS: Partial<Record<Intent, Scenario>> = {
       {
         do: 'say',
         text: {
-          en: `I am sorry about that. The Khalas dates are on order JB-47902, and the store scanned only one of the two bags, so your report matches what I can see.\n\nThis refund is QAR 62.50. Anything above QAR ${R.refundAutomatedLimitQar} is decided by a person [1], so I have sent it to the team. The answer will appear here.`,
-          ar: `نأسف لذلك. تمر الخلاص موجود في الطلب JB-47902، وقد مسح المتجر كيسًا واحدًا فقط من الكيسين، لذا يتطابق بلاغك مع ما أراه.\n\nقيمة هذا الاسترداد 62.50 ريالًا. أي مبلغ فوق ${R.refundAutomatedLimitQar} ريالًا يقرره موظف [1]، وقد أرسلته إلى الفريق. سيظهر الرد هنا.`,
+          en: `I am sorry about that. The Khalas dates are on order JB-47902, and the store scanned only one of the two bags, so your report matches what I can see.\n\nThis refund is QAR 62.50 [1]. A person needs to review it, so I have sent it to the team. The answer will appear here.`,
+          ar: `نأسف لذلك. تمر الخلاص موجود في الطلب JB-47902، وقد مسح المتجر كيسًا واحدًا فقط من الكيسين، لذا يتطابق بلاغك مع ما أراه.\n\nقيمة هذا الاسترداد 62.50 ر.ق [1]، ويحتاج إلى مراجعة موظف، وقد أرسلته إلى الفريق. سيظهر الرد هنا.`,
         },
       },
     ],

@@ -126,7 +126,7 @@ export const en = {
   'case.orders': 'Orders',
   'case.sources': 'Sources used',
   'case.none': 'Nothing yet',
-  'case.rule': 'Refunds above {limit} are always decided by a person.',
+  'case.rule': 'Some refunds are reviewed by a person before they are paid.',
 
   'rec.heading': 'Scripted examples.',
   'rec.pick': 'Pick one.',
@@ -180,6 +180,7 @@ export const en = {
   'live.pick': 'Choose a conversation to read it here.',
   'live.back': 'All conversations',
   'live.takeOver': 'Take over',
+  'live.close': 'End conversation',
   'live.waitingFor': 'Waiting {clock}',
   'live.orderRef': 'Order {id}',
   'live.langEn': 'English',
@@ -267,6 +268,7 @@ export const en = {
   'audit.act.guardrail.blocked': 'Blocked an action',
   'audit.act.identity.verified': 'Confirmed the customer',
   'audit.act.identity.failed': 'Failed an identity check',
+  'audit.act.conversation.closed': 'Ended the conversation',
 
   'range.label': 'Period',
   'issues.caption': 'Customer contacts by issue, largest first',

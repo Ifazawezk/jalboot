@@ -273,6 +273,12 @@
   border-block-end: 2px solid var(--rule-strong);
 }
 
+.convo__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .convo__head h2 {
   font-size: 1.5rem;
 }

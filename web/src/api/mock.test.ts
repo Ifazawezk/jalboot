@@ -234,6 +234,23 @@ describe('handoff and desk', () => {
     expect(seen.map((e) => e.type)).toEqual(['handoff.update', 'agent.message']);
   });
 
+  it('ends a conversation for the customer and refuses later messages', async () => {
+    const api = setup();
+    const { id } = await api.createConversation('ar');
+    const seen: ConversationEvent[] = [];
+    api.subscribeConversation(id, (event) => seen.push(event));
+    const closed = await api.closeConversation(id);
+    expect(closed.state).toBe('closed');
+    expect(seen.map((e) => e.type)).toEqual(['conversation.closed']);
+    await expect(say(api, id, 'Hello?', 'c1')).rejects.toMatchObject({ code: 'conversation_closed' });
+  });
+
+  it('gives internal limits to the desk and not to the public policy', async () => {
+    const api = setup();
+    expect(JSON.stringify(await api.getPolicy())).not.toContain('Limit');
+    expect((await api.getDeskPolicy())?.refund.automatedLimitQar).toBe(MOCK_RULES.refundAutomatedLimitQar);
+  });
+
   it('signs out and back in', async () => {
     const api = setup();
     expect(await api.getDeskAgent()).toMatchObject({ role: 'agent' });

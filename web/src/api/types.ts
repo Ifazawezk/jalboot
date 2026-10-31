@@ -70,17 +70,24 @@ export interface ApiErrorBody {
   retryAfterSeconds?: number | null;
 }
 
-/** Limits and timings, always read from GET /policy. Never hardcode these in the UI. */
+/** Timings a customer may be told, read from the public GET /policy. */
 export interface Policy {
   policyVersion: string;
   currency: string;
   assistant?: AssistantMode;
   refund: {
+    cardBusinessDays: number | null;
+    creditMinutes: number | null;
+  };
+}
+
+/** Approval limits are internal (REF-05, ESC-03), so only signed-in staff can read them. */
+export interface DeskPolicy {
+  refund: {
     automatedLimitQar: number | null;
     newAccountAutomatedLimitQar: number | null;
     agentLimitQar: number | null;
-    cardBusinessDays: number | null;
-    creditMinutes: number | null;
+    supervisorLimitQar: number | null;
   };
 }
 
@@ -237,6 +244,7 @@ export const AUDIT_ACTIONS = [
   'guardrail.blocked',
   'identity.verified',
   'identity.failed',
+  'conversation.closed',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

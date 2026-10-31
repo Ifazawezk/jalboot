@@ -95,8 +95,9 @@ data: {"toolCallId":"t1","tool":"track_order","label":"Checking your order"}
 
 ### `GET /policy`
 
-Public. Called once at startup. **This is the only place the UI gets limits and timings.** If the call fails or a
-value is null, the UI leaves that sentence out, so it can never state a limit the backend does not enforce.
+Public. Called once at startup. It holds only what a customer may be told. Approval limits are internal (REF-05,
+ESC-03), because someone who knows a limit can size a claim to fit under it, so they are never in this response. If
+the call fails or a value is null, the UI leaves that sentence out.
 
 ```json
 {
@@ -104,9 +105,6 @@ value is null, the UI leaves that sentence out, so it can never state a limit th
   "currency": "QAR",
   "assistant": "mock",
   "refund": {
-    "automatedLimitQar": 50,
-    "newAccountAutomatedLimitQar": 25,
-    "agentLimitQar": 300,
     "cardBusinessDays": 7,
     "creditMinutes": 15
   }
@@ -119,9 +117,6 @@ Serve these from `knowledge/rules.json`:
 | --- | --- |
 | `policyVersion` | `meta.policy_version` |
 | `currency` | `meta.currency` |
-| `refund.automatedLimitQar` | `refunds.approval_limits_qar.automated` |
-| `refund.newAccountAutomatedLimitQar` | `refunds.new_account.automated_limit_qar` |
-| `refund.agentLimitQar` | `refunds.approval_limits_qar.agent` |
 | `refund.cardBusinessDays` | `refunds.timing.card_business_days` |
 | `refund.creditMinutes` | `refunds.timing.credit_minutes` |
 
@@ -319,6 +314,21 @@ A 401 means signed out, and the UI shows the sign-in form.
 ### `POST /desk/logout`
 
 Needs `X-CSRF-Token`. No body. Ends the session and clears the cookie. Response 204.
+
+### `GET /desk/policy`
+
+Needs a desk session. The only place the UI gets approval limits.
+
+```json
+{
+  "refund": {
+    "automatedLimitQar": 50,
+    "newAccountAutomatedLimitQar": 25,
+    "agentLimitQar": 300,
+    "supervisorLimitQar": 1500
+  }
+}
+```
 
 ### `GET /desk/summary`
 
