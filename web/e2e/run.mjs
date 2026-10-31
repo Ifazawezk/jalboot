@@ -410,8 +410,8 @@ async function recordings(browser, lang, width, port) {
   try {
     await page.waitForSelector('.rows button');
     const banner = await page.$eval('.mode--demo', (el) => el.textContent);
-    check(`${tag}: labelled as a recording`, /Recording|تسجيل/.test(banner));
-    check(`${tag}: no chat box in a recording`, (await page.$('#composer-input')) === null);
+    check(`${tag}: labelled as a scripted example`, /Scripted example|مثال مُعدّ مسبقًا/.test(banner));
+    check(`${tag}: no chat box in a scripted example`, (await page.$('#composer-input')) === null);
     await shot(page, `${tag}-01-pick`);
     await noSideScroll(page, `${tag} pick`);
     await axeCheck(page, `${tag} pick`);
@@ -422,7 +422,7 @@ async function recordings(browser, lang, width, port) {
     await page.waitForSelector('.identity');
     await shot(page, `${tag}-02-identity`);
     const identityText = await page.$eval('.identity', (el) => el.textContent);
-    check(`${tag}: recorded identity step has no forms`, (await page.$('.identity input')) === null, identityText.slice(0, 60));
+    check(`${tag}: scripted identity step has no forms`, (await page.$('.identity input')) === null, identityText.slice(0, 60));
     await page.waitForSelector('.trail__stop.is-running', { timeout: 30_000 });
     await shot(page, `${tag}-03-playing`);
     await page.click('.playback__actions .btn--primary');

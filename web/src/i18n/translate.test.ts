@@ -15,6 +15,17 @@ describe('dictionaries', () => {
     expect(slots(ar[key])).toEqual(slots(en[key]));
   });
 
+  it('call the demo conversations scripted examples, not saved or recorded ones', () => {
+    expect(en['mode.demo.title']).toBe('Scripted example');
+    expect(en['rec.label']).toBe('Scripted example');
+    expect(ar['rec.label']).toBe(ar['mode.demo.title']);
+    const demoKeys = keys.filter((key) => /^(rec\.|mode\.demo\.|identity\.recorded)/.test(key));
+    for (const key of demoKeys) {
+      expect(en[key]).not.toMatch(/saved|recorded|recording/i);
+      expect(ar[key]).not.toMatch(/محفوظ|مسجل|تسجيل/);
+    }
+  });
+
   it('have no list of tools, because labels come from the server', () => {
     expect(keys.filter((key) => key.startsWith('tool.'))).toEqual([]);
   });

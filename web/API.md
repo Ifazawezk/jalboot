@@ -588,10 +588,11 @@ tools. Send the language of the conversation.
 
 If a tool fails, send `status: "error"` and a `label` that says so in plain language.
 
-## Recordings
+## Scripted examples
 
-The GitHub Pages build plays back recordings with no backend. A recording is a list of `{ waitMs, event }` steps,
-using the events above plus `customer.message` and these three, which exist only in recordings. They hold no phone
+The GitHub Pages build plays scripted examples with no backend. They are written by hand, not captured from real
+conversations, and the page labels each one "Scripted example". An example is a list of `{ waitMs, event }` steps,
+using the events above plus `customer.message` and these three, which exist only in examples. They hold no phone
 number and no code.
 
 | Event | Data |

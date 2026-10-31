@@ -18,9 +18,10 @@ export interface RecordedStep {
 }
 
 /**
- * A recording is the event stream of a conversation, stored with its timing. Events captured
- * from the backend fit this shape unchanged, so they can replace this sample set. A recording
- * never holds a phone number or a code.
+ * A recording is the event stream of a conversation, stored with its timing. This set is
+ * scripted by hand, so the page labels each one a scripted example. Events captured from the
+ * backend fit this shape unchanged and can replace them. A recording never holds a phone
+ * number or a code.
  */
 export interface Recording {
   id: string;
