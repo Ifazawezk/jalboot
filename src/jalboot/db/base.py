@@ -17,6 +17,8 @@ ADDED_COLUMNS = {
     "login_throttle": {"window_start": "TIMESTAMP"},
     "drivers": {"name_ar": "VARCHAR(120) NOT NULL DEFAULT ''"},
 }
+# Columns it may still have. A NOT NULL one left behind would refuse every new row.
+DROPPED_COLUMNS = {"conversations": ("topic",)}
 
 
 class Base(DeclarativeBase):
@@ -84,15 +86,17 @@ def _upgrade_schema(engine: Engine) -> None:
     """create_all adds missing tables but never changes one that exists, so a database
     from an earlier version needs its columns brought up to date here."""
     inspector = inspect(engine)
-    missing = [
+    has = {table: {column["name"] for column in inspector.get_columns(table)} for table in (*ADDED_COLUMNS, *DROPPED_COLUMNS)}
+    statements = [
         f"ALTER TABLE {table} ADD COLUMN {name} {kind}"
-        for table, columns in ADDED_COLUMNS.items()
-        for name, kind in columns.items()
-        if name not in {column["name"] for column in inspector.get_columns(table)}
+        for table, columns in ADDED_COLUMNS.items() for name, kind in columns.items() if name not in has[table]
+    ] + [
+        f"ALTER TABLE {table} DROP COLUMN {name}"
+        for table, columns in DROPPED_COLUMNS.items() for name in columns if name in has[table]
     ]
-    if missing:
+    if statements:
         with engine.begin() as connection:
-            for statement in missing:
+            for statement in statements:
                 connection.execute(text(statement))
 
 

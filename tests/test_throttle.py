@@ -4,9 +4,10 @@ not that many ever. Otherwise a customer who verifies once a month gets blocked.
 from datetime import timedelta
 
 from sqlalchemy import text
+from sqlalchemy.schema import CreateTable
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
-from jalboot.db.models import Driver, LoginThrottle
+from jalboot.db.models import Conversation, Driver, LoginThrottle
 from jalboot.security import throttle
 from tests.conftest import ANCHOR
 
@@ -95,4 +96,19 @@ def test_a_database_from_before_arabic_driver_names_is_upgraded(tmp_path):
     create_schema(engine)
     with make_session_factory(engine)() as session:
         assert session.get(Driver, "D-1").name_ar == ""
+    engine.dispose()
+
+
+def test_a_database_with_the_removed_topic_column_can_still_add_conversations(tmp_path):
+    """The old column was NOT NULL, so leaving it behind would break every new chat."""
+    engine = make_engine(f"sqlite:///{(tmp_path / 'old.sqlite3').as_posix()}")
+    current = str(CreateTable(Conversation.__table__).compile(engine))
+    old = current.replace("PRIMARY KEY (id)", "topic VARCHAR(32) NOT NULL, PRIMARY KEY (id)")
+    assert "topic" in old
+    with engine.begin() as connection:
+        connection.execute(text(old))
+    create_schema(engine)
+    with make_session_factory(engine)() as session:
+        session.add(Conversation(id="cv-new", created_at=ANCHOR, updated_at=ANCHOR))
+        session.commit()
     engine.dispose()

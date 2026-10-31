@@ -12,12 +12,10 @@ from typing import Any, Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from jalboot.db.models import (
-    Approval, AuditEvent, Conversation, Customer, Message, Order, Refund, StaffUser,
-)
+from jalboot.db.models import Approval, AuditEvent, Conversation, Customer, Message, Order, StaffUser
 from jalboot.policy.rules import Rules, to_qar
 from jalboot.tools.approvals import can_decide
-from jalboot.tools.facts import claim_facts, order_facts
+from jalboot.tools.facts import claim_facts
 from jalboot.world.catalog import ZONE_AR
 
 TOOL_LABELS = {
@@ -107,7 +105,6 @@ POLICY_SECTIONS = {
     "cold_food": "WRG-05", "late_delivery": "LAT-01", "late_delivery_fee": "LAT-01", "not_received": "LAT-04",
     "duplicate_charge": "PAY-03", "modifier_missed": "WRG-02", "substitute_rejected": "GRC-04",
 }
-STAGE_STATE = {"bot": "bot", "waiting": "waiting", "agent": "agent", "closed": "closed"}
 
 
 def iso(moment: datetime | None) -> str | None:
@@ -235,7 +232,7 @@ def live_conversation(session: Session, conversation: Conversation) -> dict[str,
         "id": conversation.id,
         "customer": customer_name(session, conversation),
         "locale": conversation.language,
-        "state": STAGE_STATE.get(conversation.status, "bot"),
+        "state": conversation.status,
         "priority": "high" if conversation.priority in {"P1", "P2"} else "normal",
         "verified": bool(conversation.verified_at),
         "summary": (conversation.handoff_summary or first or "")[:300],
@@ -268,17 +265,13 @@ def conversation_detail(session: Session, conversation: Conversation) -> dict[st
     return {**live_conversation(session, conversation), "transcript": [transcript_entry(row) for row in rows]}
 
 
-def refund_status(approval: Approval) -> str:
-    return {"pending": "pending", "approved": "approved", "rejected": "rejected"}[approval.status]
-
-
 def refund_summary(approval: Approval, staff_name: str | None) -> dict[str, Any]:
     # An approval note is for the audit log. A rejection note is the reason the customer sees.
     return {
         "id": approval.id,
         "orderId": approval.order_id,
         "amountQar": to_qar(approval.amount_dh),
-        "status": refund_status(approval),
+        "status": approval.status,
         "decidedBy": staff_name,
         "note": approval.decision_note or None if approval.status == "rejected" else None,
         "destination": "credit" if approval.kind == "credit" else "original",
@@ -385,12 +378,3 @@ def desk_summary(session: Session, now: datetime) -> dict[str, int]:
         "resolvedToday": len(resolved),
     }
 
-
-def order_facts_paid(order: Order) -> float:
-    return to_qar(order_facts(order).paid_dh)
-
-
-__all__ = [
-    "Refund", "audit_entry", "citation_view", "conversation_detail", "desk_summary", "handoff_view", "iso",
-    "live_conversation", "order_card", "pick", "refund_summary", "refund_view", "tool_label", "transcript_entry",
-]

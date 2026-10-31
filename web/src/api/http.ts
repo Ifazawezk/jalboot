@@ -248,11 +248,8 @@ export function createHttpApi(
       });
     },
 
-    requestHandoff(conversationId, reason) {
-      return customer<Handoff>(`/conversations/${conversationId}/handoff`, conversationId, {
-        method: 'POST',
-        body: JSON.stringify({ reason }),
-      });
+    requestHandoff(conversationId) {
+      return customer<Handoff>(`/conversations/${conversationId}/handoff`, conversationId, { method: 'POST' });
     },
 
     subscribeConversation(conversationId, onEvent) {

@@ -155,7 +155,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         const id = await ensureConversation();
-        dispatch({ type: 'handoff.update', handoff: await api.requestHandoff(id, 'customer_request') });
+        dispatch({ type: 'handoff.update', handoff: await api.requestHandoff(id) });
       } catch {
         // The button stays on screen, so the customer can ask again.
         dispatch({ type: 'handoff.failed' });

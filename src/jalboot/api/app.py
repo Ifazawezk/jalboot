@@ -63,10 +63,6 @@ class VerifyConfirm(BaseModel):
     code: str = Field(min_length=1, max_length=12)
 
 
-class HandoffRequest(BaseModel):
-    reason: str = Field(default="customer_request", max_length=64)
-
-
 class DeskLogin(BaseModel):
     email: str = Field(min_length=3, max_length=160)
     password: str = Field(min_length=1, max_length=200)
@@ -311,7 +307,6 @@ def verify_confirm(
 
 @api.post("/conversations/{conversation_id}/handoff")
 def request_handoff(
-    body: HandoffRequest,
     conversation: Conversation = Depends(customer_auth),
     runtime: Runtime = Depends(get_runtime),
     session: Session = Depends(get_session),

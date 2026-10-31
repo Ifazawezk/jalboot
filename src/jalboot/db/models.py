@@ -185,7 +185,6 @@ class Conversation(Base):
     handoff_summary: Mapped[str] = mapped_column(Text, default="")
     handoff_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     resolved_by: Mapped[str] = mapped_column(String(16), default="")
-    topic: Mapped[str] = mapped_column(String(32), default="")
     failures: Mapped[int] = mapped_column(Integer, default=0)
 
     messages: Mapped[list["Message"]] = relationship(

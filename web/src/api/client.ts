@@ -47,7 +47,7 @@ export interface SupportApi {
   /** Phone and code go only through these two calls, never into chat text. */
   startVerification(conversationId: string, phone: string): Promise<VerifyStartResult>;
   confirmVerification(conversationId: string, code: string): Promise<VerifyConfirmResult>;
-  requestHandoff(conversationId: string, reason: string): Promise<Handoff>;
+  requestHandoff(conversationId: string): Promise<Handoff>;
   subscribeConversation(
     conversationId: string,
     onEvent: (event: ConversationEvent) => void,
