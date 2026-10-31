@@ -78,9 +78,9 @@ DELAY_TEXT = {
     "merchant_backlog": {"en": "the merchant had a backlog of orders", "ar": "كان لدى المتجر طلبات كثيرة قيد التحضير"},
     "driver_traffic": {"en": "heavy traffic on the route", "ar": "ازدحام مروري على الطريق"},
     "weather_dust": {"en": "dust and low visibility", "ar": "غبار وضعف في الرؤية"},
-    "high_demand": {"en": "very high demand in the area", "ar": "طلب مرتفع جدا في المنطقة"},
-    "address_problem": {"en": "the driver had trouble finding the address", "ar": "واجه السائق صعوبة في الوصول إلى العنوان"},
-    "driver_reassigned": {"en": "the order was moved to another driver", "ar": "تم تحويل الطلب إلى سائق آخر"},
+    "high_demand": {"en": "very high demand in the area", "ar": "ضغط كبير على الطلبات في المنطقة"},
+    "address_problem": {"en": "the driver had trouble finding the address", "ar": "واجه المندوب صعوبة في الوصول إلى العنوان"},
+    "driver_reassigned": {"en": "the order was moved to another driver", "ar": "تم تحويل الطلب إلى مندوب آخر"},
 }
 
 
@@ -256,7 +256,7 @@ class ToolExecutor:
             "promised_at": doha_time(order.promised_at),
             "delivered_at": doha_time(order.delivered_at),
             # A driver's first name only: their record is not the customer's to read.
-            "rider": driver.name.split()[0] if driver else None,
+            "rider": (driver.name_ar if arabic and driver.name_ar else driver.name).split()[0] if driver else None,
         }
 
     # Reads

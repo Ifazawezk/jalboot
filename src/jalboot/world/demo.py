@@ -73,13 +73,13 @@ def add_demo_customers(session: Session, anchor: datetime) -> None:
         created_at=anchor - timedelta(days=300),
     )
     home_l = Address(id="A-1001-1", customer_id=layla.id, label="Home", zone="West Bay",
-                     line="Zone 60, Street 812, Building 14, West Bay", lat=25.3201, lng=51.5302)
+                     line="Zone 160, Street 812, Building 14, West Bay", lat=25.3201, lng=51.5302)
     work_l = Address(id="A-1001-2", customer_id=layla.id, label="Work", zone="Al Dafna",
-                     line="Zone 61, Street 840, Building 3, Al Dafna", lat=25.3102, lng=51.5205)
+                     line="Zone 161, Street 840, Building 3, Al Dafna", lat=25.3102, lng=51.5205)
     home_n = Address(id="A-1002-1", customer_id=noura.id, label="Home", zone="Al Sadd",
-                     line="Zone 38, Street 240, Building 12, Al Sadd", lat=25.2831, lng=51.5001)
+                     line="Zone 138, Street 240, Building 12, Al Sadd", lat=25.2831, lng=51.5001)
     work_n = Address(id="A-1002-2", customer_id=noura.id, label="Work", zone="Bin Mahmoud",
-                     line="Zone 22, Street 410, Building 7, Bin Mahmoud", lat=25.2802, lng=51.5133)
+                     line="Zone 122, Street 410, Building 7, Bin Mahmoud", lat=25.2802, lng=51.5133)
     session.add_all([layla, noura])
     session.flush()
     session.add_all([home_l, work_l, home_n, work_n])

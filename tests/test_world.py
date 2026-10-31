@@ -6,9 +6,12 @@ from sqlalchemy.exc import IntegrityError
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
 from jalboot.db.models import (
-    Approval, Customer, Merchant, Order, Refund, Ticket, WorldMeta,
+    Approval, Customer, Driver, Merchant, Order, Refund, Ticket, WorldMeta,
 )
-from jalboot.world.generator import generate_world, world_digest
+from jalboot.policy.rules import Rules
+from jalboot.world.generator import DOHA, generate_world, world_digest
+
+RULES = Rules.load()
 
 SMALL = dict(customers=40, drivers=10, orders=200, tickets=30)
 
@@ -112,3 +115,32 @@ def test_the_database_refuses_a_duplicate_approval_key():
     session.add(Approval(id="AP-2", **row))
     with pytest.raises(IntegrityError):
         session.commit()
+
+
+def test_food_is_never_sent_to_zone_d():
+    session = fresh()
+    extended = set(RULES.get("fees.zones")["D"]["areas"])
+    for order in session.scalars(select(Order).where(Order.category == "food")):
+        assert order.address_text.rsplit(",", 1)[-1].strip() not in extended
+
+
+def test_parcels_follow_their_own_rules():
+    session = fresh()
+    parcels = session.scalars(select(Order).where(Order.category == "parcel")).all()
+    assert parcels
+    for order in parcels:
+        assert order.payment_method != "cash"
+        assert order.subtotal_dh == 0
+        assert order.promised_at.astimezone(DOHA).strftime("%H:%M:%S") == "23:59:59"
+
+
+def test_no_generated_address_can_match_a_real_doha_zone():
+    session = fresh()
+    for order in session.scalars(select(Order)):
+        zone = int(re.match(r"Zone (\d+)", order.address_text).group(1))
+        assert zone >= 110
+
+
+def test_drivers_have_arabic_names():
+    session = fresh()
+    assert all(driver.name_ar for driver in session.scalars(select(Driver)))

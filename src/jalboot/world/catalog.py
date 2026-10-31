@@ -42,7 +42,7 @@ LAST_NAMES = [
 MERCHANTS = {
     "food": [
         ("Lantern Shawarma", "شاورما الفانوس"), ("Bayt Al Luqma", "بيت اللقمة"),
-        ("Saffron Yard Biryani", "برياني ساحة الزعفران"), ("Harbour Fish Grill", "مشوى سمك المرفأ"),
+        ("Clove Yard Biryani", "برياني ساحة القرنفل"), ("Harbour Fish Grill", "مشوى سمك المرفأ"),
         ("Olive Courtyard", "فناء الزيتون"), ("Mandi Lane", "درب المندي"),
         ("Zaatar Oven", "فرن الزعتر"), ("Cardamom Cup", "فنجان الهيل"),
         ("Golden Tray Kitchen", "مطبخ الصينية الذهبية"), ("Date Palm Bakery", "مخبز نخلة التمر"),
@@ -50,10 +50,10 @@ MERCHANTS = {
     ],
     "grocery": [
         ("Daily Basket Mart", "سوق السلة اليومية"), ("Green Crate Grocers", "بقالة الصندوق الأخضر"),
-        ("Corner Pantry", "مؤونة الزاوية"), ("Fresh Dune Market", "سوق الكثيب الطازج"),
+        ("Corner Pantry", "بقالة الزاوية"), ("Fresh Dune Market", "سوق الكثبان"),
     ],
     "pharmacy": [
-        ("Crescent Care Pharmacy", "صيدلية رعاية الهلال"), ("Wellspring Pharmacy", "صيدلية النبع"),
+        ("Crescent Care Pharmacy", "صيدلية الهلال للرعاية"), ("Blue Dhow Pharmacy", "صيدلية المركب الأزرق"),
         ("Mint Leaf Pharmacy", "صيدلية ورقة النعناع"),
     ],
     "parcel": [("Jalboot Parcels", "طرود جالبوت")],
@@ -93,6 +93,7 @@ DELAY_REASONS = (
 )
 
 ITEM_TRANSLATIONS = {name: name_ar for group in ITEMS.values() for name, name_ar, _low, _high in group}
+ZONE_AR = {name: name_ar for name, name_ar, _lat, _lng in ZONES}
 
 TICKET_TOPICS = [
     # category, weight, English subject, Arabic subject
@@ -103,7 +104,7 @@ TICKET_TOPICS = [
     ("promo_issue", 9, "Promo code did not work", "رمز الخصم لم يعمل"),
     ("address_change", 7, "Need to change delivery address", "أريد تغيير عنوان التوصيل"),
     ("payment_issue", 6, "Charged twice for one order", "تم خصم المبلغ مرتين"),
-    ("driver_conduct", 4, "Complaint about the driver", "شكوى بخصوص السائق"),
+    ("driver_conduct", 4, "Complaint about the driver", "شكوى بخصوص المندوب"),
     ("pharmacy_prescription", 3, "Prescription order problem", "مشكلة في طلب وصفة طبية"),
     ("parcel_lost", 2, "Parcel not delivered", "لم يصل الطرد"),
 ]
