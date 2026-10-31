@@ -2,6 +2,7 @@ import tomllib
 
 import yaml
 
+from jalboot.api.runtime import STAFF_PASSWORD_VARIABLES
 from jalboot.env import ROOT
 
 
@@ -10,7 +11,13 @@ def test_compose_passes_on_the_settings_production_needs():
     passed = compose["services"]["app"]["environment"]
     assert {
         "ENVIRONMENT", "COOKIE_SECURE", "SHOW_SIMULATED_OTP", "ALLOWED_ORIGINS", "LLM_PROVIDER", "LLM_BASE_URL",
+        *STAFF_PASSWORD_VARIABLES.values(),
     } <= set(passed)
+
+
+def test_the_image_fails_closed_when_it_is_run_without_settings():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "ENV ENVIRONMENT=production" in dockerfile
 
 
 def test_unused_dependencies_stay_out_and_fastapi_stays_pinned():

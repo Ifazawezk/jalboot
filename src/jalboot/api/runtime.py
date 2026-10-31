@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import threading
 import time
 from dataclasses import dataclass, field
@@ -16,16 +17,23 @@ from jalboot.agent.loop import SupportAgent
 from jalboot.api.events import Broker
 from jalboot.config import ConfigError, Settings
 from jalboot.db.base import create_schema, make_engine, make_session_factory
-from jalboot.db.models import WorldMeta
+from jalboot.db.models import StaffUser, WorldMeta
 from jalboot.kb.store import KnowledgeBase, load_encoder, load_passages
 from jalboot.llm.client import LLMClient, client_from_env
 from jalboot.llm.mock import MockPlanner
 from jalboot.policy.rules import Rules
+from jalboot.security.passwords import hash_password, verify_password
 from jalboot.world.demo import add_demo_customers, add_staff
 from jalboot.world.generator import generate_world
 
 log = logging.getLogger("jalboot")
 DEV_STAFF_PASSWORD = "jalboot-local-demo"
+MIN_STAFF_PASSWORD = 12
+STAFF_PASSWORD_VARIABLES = {
+    "agent": "STAFF_PASSWORD_AGENT",
+    "supervisor": "STAFF_PASSWORD_SUPERVISOR",
+    "finance_lead": "STAFF_PASSWORD_FINANCE_LEAD",
+}
 
 
 class WorldClock:
@@ -40,6 +48,10 @@ class WorldClock:
         return self.anchor + timedelta(seconds=time.monotonic() - self.started)
 
 
+def _dev_password() -> str:
+    return os.environ.get("DEMO_STAFF_PASSWORD", "").strip() or DEV_STAFF_PASSWORD
+
+
 def build_llm(settings: Settings) -> LLMClient:
     if settings.llm_mode == "mock":
         return MockPlanner()
@@ -49,12 +61,31 @@ def build_llm(settings: Settings) -> LLMClient:
     return client
 
 
+def chosen_staff_passwords(environment: str) -> dict[str, str]:
+    """One password per role, so a leak of one does not open the finance lead's account."""
+    chosen = {role: os.environ.get(name, "").strip() for role, name in STAFF_PASSWORD_VARIABLES.items()}
+    if min(len(password) for password in chosen.values()) < MIN_STAFF_PASSWORD:
+        names = ", ".join(STAFF_PASSWORD_VARIABLES.values())
+        raise ConfigError(f"{environment} needs {names}, each at least {MIN_STAFF_PASSWORD} characters")
+    if len(set(chosen.values())) < len(chosen):
+        raise ConfigError("each staff account needs its own password")
+    if DEV_STAFF_PASSWORD in chosen.values():
+        raise ConfigError("a staff password cannot be the published development password")
+    return chosen
+
+
+def refuse_published_password(session: Session) -> None:
+    """Passwords are only read when seeding, so a database seeded for development would
+    otherwise keep the password printed in the README after it goes public."""
+    for staff in session.scalars(select(StaffUser)):
+        if verify_password(DEV_STAFF_PASSWORD, staff.password_hash):
+            raise ConfigError("a staff account still has the published development password. Start from a new database.")
+
+
 def seed_if_empty(session: Session, settings: Settings) -> None:
     if session.scalar(select(WorldMeta.id).limit(1)) is not None:
         return
-    password = os.environ.get("DEMO_STAFF_PASSWORD", "").strip()
-    if settings.is_production and not password:
-        raise ConfigError("production needs DEMO_STAFF_PASSWORD to create the first staff accounts")
+    chosen = chosen_staff_passwords(settings.environment) if settings.is_public else None
     scale = settings.world_scale
     meta_counts = generate_world(
         session, seed=settings.seed, customers=max(int(400 * scale), 10), drivers=max(int(80 * scale), 10),
@@ -63,7 +94,12 @@ def seed_if_empty(session: Session, settings: Settings) -> None:
     )
     meta = session.scalar(select(WorldMeta))
     add_demo_customers(session, meta.anchor)
-    add_staff(session, password or DEV_STAFF_PASSWORD)
+    # add_staff takes one password, so a public server gives it a throwaway one first.
+    add_staff(session, secrets.token_urlsafe(32) if chosen else _dev_password())
+    if chosen:
+        for staff in session.scalars(select(StaffUser)):
+            staff.password_hash = hash_password(chosen[staff.role])
+        session.commit()
     log.info("generated a simulated world: %s", meta_counts)
 
 
@@ -108,6 +144,8 @@ def build_runtime(settings: Settings, llm: LLMClient | None = None) -> Runtime:
     sessions = make_session_factory(engine)
     with sessions() as session:
         seed_if_empty(session, settings)
+        if settings.is_public:
+            refuse_published_password(session)
         anchor = session.scalar(select(WorldMeta)).anchor
     return Runtime(
         settings=settings,

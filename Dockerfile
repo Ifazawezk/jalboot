@@ -21,8 +21,10 @@ COPY --from=web /web/dist ./web/dist
 RUN useradd --create-home --uid 10001 jalboot && mkdir /data && chown jalboot /data
 USER jalboot
 
-# Paths are set here because an installed package has no repo around it.
-ENV KNOWLEDGE_DIR=/app/knowledge \
+# Paths are set here because an installed package has no repo around it. The image starts
+# as production so that it refuses to run on development settings once it is exposed.
+ENV ENVIRONMENT=production \
+    KNOWLEDGE_DIR=/app/knowledge \
     WEB_DIST=/app/web/dist \
     INDEX_DIR=/data/index \
     DATABASE_URL=sqlite:////data/jalboot.sqlite3

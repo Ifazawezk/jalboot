@@ -18,7 +18,10 @@ from typing import Mapping
 from jalboot.env import ROOT
 
 DEV_SECRET = "dev-only-secret-change-me"
-ENVIRONMENTS = ("development", "test", "production")
+ENVIRONMENTS = ("development", "test", "demo", "production")
+# Servers other people can reach. Demo keeps the simulated code, because a public demo
+# has no SMS provider, and everything else a public server needs.
+PUBLIC_ENVIRONMENTS = ("demo", "production")
 # The Vite dev server, only outside production and only when nothing else is set.
 DEV_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 
@@ -61,6 +64,10 @@ class Settings:
     def is_production(self) -> bool:
         return self.environment == "production"
 
+    @property
+    def is_public(self) -> bool:
+        return self.environment in PUBLIC_ENVIRONMENTS
+
     def validate(self) -> None:
         # A typo such as prod must stop the server, not quietly skip the checks below.
         if self.environment not in ENVIRONMENTS:
@@ -76,13 +83,13 @@ class Settings:
         if not (self.knowledge_dir / "rules.json").is_file():
             # The default only exists in a checkout. An installed package must be told.
             raise ConfigError(f"no rules.json in {self.knowledge_dir}. Set KNOWLEDGE_DIR to the knowledge folder.")
-        if self.is_production:
+        if self.is_public:
             if self.secret_key == DEV_SECRET or len(self.secret_key) < 32:
-                raise ConfigError("production needs a SECRET_KEY of at least 32 characters")
+                raise ConfigError(f"{self.environment} needs a SECRET_KEY of at least 32 characters")
             if not self.cookie_secure:
-                raise ConfigError("production needs COOKIE_SECURE=true")
-            if self.show_simulated_otp:
-                raise ConfigError("production must set SHOW_SIMULATED_OTP=false")
+                raise ConfigError(f"{self.environment} needs COOKIE_SECURE=true")
+        if self.is_production and self.show_simulated_otp:
+            raise ConfigError("production must set SHOW_SIMULATED_OTP=false")
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -90,7 +97,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     defaults = Settings()
     environment = env.get("ENVIRONMENT", "").strip().lower() or defaults.environment
     origins = _list(env.get("ALLOWED_ORIGINS"))
-    if not origins and environment != "production":
+    if not origins and environment not in PUBLIC_ENVIRONMENTS:
         origins = DEV_ORIGINS
     settings = Settings(
         database_url=env.get("DATABASE_URL", "").strip() or defaults.database_url,
