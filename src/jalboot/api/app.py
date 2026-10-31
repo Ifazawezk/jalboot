@@ -40,6 +40,8 @@ Locale = Literal["en", "ar"]
 SHIFT_HOURS = 12
 AUDIT_PAGE = 20
 STREAM_RETRY_SECONDS = 30
+# Still limits one address trying many accounts, without blocking an office after one typo.
+LOGIN_CLIENT_LIMIT = 20
 ALLOWED_HEADERS = ["Authorization", "Content-Type", "Accept-Language", "Last-Event-ID", "X-CSRF-Token"]
 
 
@@ -293,12 +295,16 @@ def verify_start(
 
 @api.post("/conversations/{conversation_id}/verify/confirm")
 def verify_confirm(
+    request: Request,
     body: VerifyConfirm,
     conversation: Conversation = Depends(customer_auth),
     runtime: Runtime = Depends(get_runtime),
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    result = identity.confirm(session, runtime.rules, runtime.settings.secret_key, conversation, body.code)
+    result = identity.confirm(
+        session, runtime.rules, runtime.settings.secret_key, conversation, body.code,
+        request.client.host if request.client else "",
+    )
     chat.publish_conversation(runtime, session, conversation)
     return result
 
@@ -363,23 +369,26 @@ def desk_login(
     now = utcnow()
     settings = runtime.settings
     client = request.client.host if request.client else ""
-    keys = [
-        tokens.hash_token(settings.secret_key, f"login:{body.email.lower()}"),
-        tokens.hash_token(settings.secret_key, f"login-client:{client}"),
-    ]
-    if any(throttle.is_blocked(session, key, now) for key in keys):
-        raise ApiError(429, "too_many_attempts", retryAfterSeconds=throttle.BLOCK_MINUTES * 60)
+    # Email and address together, so a wrong password neither locks out a colleague in
+    # the same office nor lets a stranger lock an account from elsewhere.
+    pair_key = tokens.hash_token(settings.secret_key, f"login:{body.email.lower()}:{client}")
+    client_key = tokens.hash_token(settings.secret_key, f"login-client:{client}")
+    # Counted before the hash, which stays outside the lock because it is slow on
+    # purpose. A burst of guesses cannot get past the limit, and a good one clears it.
+    with audit.serial_write(session):
+        session.expire_all()
+        if any(throttle.is_blocked(session, key, now) for key in (pair_key, client_key)):
+            raise ApiError(429, "too_many_attempts", retryAfterSeconds=throttle.BLOCK_MINUTES * 60)
+        throttle.note_failure(session, pair_key, now)
     staff = session.scalar(select(StaffUser).where(StaffUser.email == body.email.lower()))
     # The hash runs even for an unknown email, so timing does not reveal who has an account.
     good = verify_password(body.password, staff.password_hash if staff else DUMMY_HASH)
     if staff is None or not staff.active or not good:
-        for key in keys:
-            throttle.note_failure(session, key, now)
         with audit.serial_write(session):
+            throttle.note_failure(session, client_key, now, LOGIN_CLIENT_LIMIT)
             audit.record(session, actor_type="system", actor_id="desk", action="desk.login_failed", outcome="denied")
         raise ApiError(401, "invalid_credentials")
-    for key in keys:
-        throttle.note_success(session, key)
+    throttle.note_success(session, pair_key)
     token, row = tokens.create_session(session, settings.secret_key, "staff", staff_id=staff.id)
     session.commit()
     response.set_cookie(
