@@ -46,7 +46,9 @@ def test_every_order_has_consistent_money_and_a_timeline():
     session = fresh()
     for order in session.scalars(select(Order)):
         assert order.items
-        assert order.total_dh == order.subtotal_dh + order.delivery_fee_dh - order.discount_dh
+        assert order.total_dh == (
+            order.subtotal_dh - order.discount_dh + order.delivery_fee_dh + order.other_fees_dh + order.tip_dh
+        )
         assert sum(i.quantity * i.unit_price_dh for i in order.items) == order.subtotal_dh
         assert order.events[0].kind == "placed"
         if order.status == "delivered":
@@ -63,7 +65,7 @@ def test_all_four_verticals_exist():
 def test_some_orders_are_live_and_some_are_late():
     session = fresh()
     live = session.scalar(
-        select(func.count()).select_from(Order).where(Order.status.in_(("placed", "preparing", "on_the_way")))
+        select(func.count()).select_from(Order).where(Order.status.notin_(("delivered", "cancelled")))
     )
     late = session.scalar(select(func.count()).select_from(Order).where(Order.delay_reason != ""))
     assert live > 0 and late > 0
