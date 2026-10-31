@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import DateTime, Engine, create_engine, event
+from sqlalchemy import DateTime, Engine, create_engine, event, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -70,6 +70,16 @@ def create_schema(engine: Engine) -> None:
     from jalboot.db import models  # noqa: F401  (registers the tables)
 
     Base.metadata.create_all(engine)
+    _upgrade_schema(engine)
+
+
+def _upgrade_schema(engine: Engine) -> None:
+    """create_all adds missing tables but never changes one that exists, so a database
+    from an earlier version needs its columns brought up to date here."""
+    columns = {column["name"] for column in inspect(engine).get_columns("login_throttle")}
+    if "window_start" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE login_throttle ADD COLUMN window_start TIMESTAMP"))
 
 
 def utcnow() -> datetime:

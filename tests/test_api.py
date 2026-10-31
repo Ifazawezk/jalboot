@@ -6,6 +6,7 @@ e2e/, because a passing test client proves nothing about cookies, CORS or forms.
 
 import json
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -14,8 +15,9 @@ from sqlalchemy import select
 
 from jalboot import audit
 from jalboot.api.app import COOKIE, create_app
-from jalboot.api import chat as chat_api
+from jalboot.api import chat as chat_api, identity
 from jalboot.config import Settings
+from jalboot.db.base import utcnow
 from jalboot.db.models import Message, Refund, WebSession
 from jalboot.llm.client import LLMError, LLMReply, ToolCall
 from jalboot.tools.executor import ToolExecutor
@@ -684,3 +686,30 @@ def test_a_summary_is_cut_to_what_the_tool_accepts():
     assert len(chat_api.fit_summary("x" * 5000)) == MAX_TEXT
     assert chat_api.fit_summary("short") == "short"
     assert chat_api.fit_summary("   ") == "No summary was written."
+
+
+def send_code(client, cid, auth, phone=LAYLA):
+    return client.post(f"{V1}/conversations/{cid}/verify/start", headers=auth, json={"phone": phone})
+
+
+def test_codes_sent_on_different_days_do_not_add_up(client, monkeypatch):
+    """The fifth code ever sent to a number used to block it, even months after the first."""
+    base = utcnow()
+    clock = {"now": base}
+    monkeypatch.setattr(identity, "utcnow", lambda: clock["now"])
+    cid, auth = start(client)
+    for day in range(5):
+        clock["now"] = base + timedelta(days=day)
+        assert send_code(client, cid, auth).status_code == 200
+    clock["now"] += timedelta(minutes=1)
+    assert send_code(client, cid, auth).status_code == 200
+
+
+def test_too_many_codes_in_a_short_time_are_still_refused(client):
+    cid, auth = start(client)
+    for _ in range(5):
+        assert send_code(client, cid, auth).status_code == 200
+    refused = send_code(client, cid, auth)
+    assert refused.status_code == 429
+    assert refused.json()["error"]["code"] == "too_many_attempts"
+    assert int(refused.headers["retry-after"]) > 0

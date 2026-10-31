@@ -353,4 +353,5 @@ class LoginThrottle(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     failures: Mapped[int] = mapped_column(Integer, default=0)
+    window_start: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     blocked_until: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
