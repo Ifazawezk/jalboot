@@ -78,9 +78,12 @@ class Runtime:
     clock: WorldClock
     active_turns: set[str] = field(default_factory=set)
     turns_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Errors that should end a turn instead of falling back to a person. A live chat
+    # has none. A recording sets this, so a fallback is never saved as the model's reply.
+    propagate: tuple[type[BaseException], ...] = ()
 
     def agent(self) -> SupportAgent:
-        return SupportAgent(self.llm, self.knowledge)
+        return SupportAgent(self.llm, self.knowledge, propagate=self.propagate)
 
     @property
     def mode(self) -> str:
