@@ -22,7 +22,7 @@ from jalboot.evaluation import scoring
 from jalboot.evaluation.baseline import PlainBot
 from jalboot.evaluation.cases import EVAL_DIR, SETS, load_cases
 from jalboot.evaluation.harness import CaseRunner, RunConfig, run_cases
-from jalboot.kb.store import KnowledgeBase, load_passages
+from jalboot.kb.store import KnowledgeBase, load_encoder, load_passages
 from jalboot.llm.cache import Budget, CachedClient, ResponseCache
 from jalboot.llm.client import client_from_env
 from jalboot.llm.mock import MockPlanner
@@ -79,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-requests", type=int, default=None)
     parser.add_argument("--max-tokens", type=int, default=None)
     parser.add_argument("--daily-tokens", type=int, default=None)
+    parser.add_argument("--embeddings", default="", help="embedding preset, such as e5-small")
     parser.add_argument(
         "--sample", type=int, default=None,
         help="run only this many evenly spaced cases from each set, for a small run on a tight budget",
@@ -98,7 +99,9 @@ def main(argv: list[str] | None = None) -> int:
         cases = even_sample(cases, sets, args.sample)
     budget = Budget(requests=args.max_requests, tokens=args.max_tokens, daily_tokens=args.daily_tokens)
     llm = build_llm(args.mode, budget)
-    knowledge = KnowledgeBase(load_passages())
+    knowledge = KnowledgeBase(
+        load_passages(), encoder=load_encoder(args.embeddings), cache_dir=ROOT / "var" / "index",
+    )
     rules = Rules.load()
     baseline = args.system == "baseline"
     runner = CaseRunner(

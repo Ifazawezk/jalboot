@@ -17,7 +17,7 @@ from jalboot.api.events import Broker
 from jalboot.config import ConfigError, Settings
 from jalboot.db.base import create_schema, make_engine, make_session_factory
 from jalboot.db.models import WorldMeta
-from jalboot.kb.store import KnowledgeBase, load_passages
+from jalboot.kb.store import KnowledgeBase, load_encoder, load_passages
 from jalboot.llm.client import LLMClient, client_from_env
 from jalboot.llm.mock import MockPlanner
 from jalboot.policy.rules import Rules
@@ -110,7 +110,10 @@ def build_runtime(settings: Settings, llm: LLMClient | None = None) -> Runtime:
         engine=engine,
         sessions=sessions,
         rules=Rules.load(settings.knowledge_dir / "rules.json"),
-        knowledge=KnowledgeBase(load_passages(settings.knowledge_dir)),
+        knowledge=KnowledgeBase(
+            load_passages(settings.knowledge_dir), encoder=load_encoder(settings.embeddings),
+            cache_dir=settings.index_dir,
+        ),
         llm=llm or build_llm(settings),
         broker=Broker(),
         clock=WorldClock(anchor),
