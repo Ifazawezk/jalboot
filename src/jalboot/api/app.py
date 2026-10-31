@@ -198,7 +198,7 @@ def create_conversation(
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     token = tokens.new_token()
-    now = utcnow()
+    now = runtime.clock.now()
     conversation = Conversation(
         id=f"cv_{secrets.token_hex(8)}", language=body.locale, created_at=now, updated_at=now,
         token_hash=tokens.hash_token(runtime.settings.secret_key, token),
@@ -435,7 +435,7 @@ def desk_claim(
     with audit.serial_write(session):
         conversation.status = "agent"
         conversation.assigned_staff_id = staff.id
-        conversation.updated_at = utcnow()
+        conversation.updated_at = runtime.clock.now()
         audit.record(
             session, actor_type="staff", actor_id=staff.id, action="handoff.joined", outcome="allowed",
             conversation_id=conversation.id, customer_id=conversation.customer_id,
@@ -459,7 +459,7 @@ def desk_reply(
 ) -> Response:
     conversation = _conversation(session, conversation_id)
     mark = chat.last_audit_seq(session)
-    now = utcnow()
+    now = runtime.clock.now()
     message = Message(
         conversation_id=conversation.id, role="agent", text=body.text, language=conversation.language,
         created_at=now, meta={"agent_name": staff.name},
@@ -491,7 +491,7 @@ def desk_close(
     """Ends a conversation. A later customer message gets conversation_closed."""
     conversation = _conversation(session, conversation_id)
     mark = chat.last_audit_seq(session)
-    now = utcnow()
+    now = runtime.clock.now()
     with audit.serial_write(session):
         conversation.status = "closed"
         conversation.resolved_by = "agent"

@@ -21,7 +21,6 @@ from jalboot.agent.loop import TurnResult
 from jalboot.api import identity, views
 from jalboot.api.errors import ApiError, error_body
 from jalboot.api.runtime import Runtime
-from jalboot.db.base import utcnow
 from jalboot.db.models import Approval, AuditEvent, Conversation, Customer, Message, Order
 from jalboot.llm.client import LLMClient, LLMError, LLMReply
 from jalboot.policy.engine import ROLES
@@ -122,14 +121,15 @@ def prepare_turn(runtime: Runtime, conversation_id: str, client_id: str, text: s
             raise ApiError(409, "turn_in_progress")
 
         try:
+            now = runtime.clock.now()
             conversation.language = locale
-            conversation.updated_at = utcnow()
+            conversation.updated_at = now
             code_expected = identity.open_challenge(session, conversation_id) is not None
             clean, removed = redact(text, code_expected=code_expected)
             if existing is None:
                 existing = Message(
                     conversation_id=conversation_id, role="customer", text=clean, client_id=client_id,
-                    turn_state="running", language=locale, meta={"redacted": removed},
+                    turn_state="running", language=locale, meta={"redacted": removed}, created_at=now,
                 )
                 session.add(existing)
             else:
@@ -249,7 +249,10 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
 
     if plan.canned is not None:
         _text_events(plan.canned, emit)
-        session.add(Message(conversation_id=conversation.id, role="bot", text=plan.canned, language=language))
+        session.add(Message(
+            conversation_id=conversation.id, role="bot", text=plan.canned, language=language,
+            created_at=runtime.clock.now(),
+        ))
         message.turn_state = "complete"
         session.commit()
         emit({"type": "message.end", "finish": "complete"})
@@ -306,9 +309,10 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
         emit({"type": "identity.required", "reason": "order_tools"})
     _text_events(result.reply, emit)
 
+    now = runtime.clock.now()
     bot = Message(
         conversation_id=conversation.id, role="bot", text=result.reply, language=result.language,
-        citations=result.citations,
+        citations=result.citations, created_at=now,
         meta={
             "tools": labels, "sources": [c.get("doc_title", "") for c in result.citations],
             "confidence": result.confidence, "flags": result.flags, "mode": result.mode,
@@ -321,7 +325,7 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
     useful = any(entry["result"].get("ok") for entry in result.tool_log) or result.citations
     if result.finish == "complete" and useful:
         conversation.resolved_by = "bot"
-    conversation.updated_at = utcnow()
+    conversation.updated_at = now
     session.commit()
 
     publish_message(runtime, conversation.id, message)

@@ -6,7 +6,7 @@ e2e/, because a passing test client proves nothing about cookies, CORS or forms.
 
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -15,10 +15,11 @@ from sqlalchemy import select
 
 from jalboot import audit
 from jalboot.api.app import COOKIE, create_app
+from jalboot.api.runtime import WorldClock
 from jalboot.api import chat as chat_api, identity
 from jalboot.config import Settings
 from jalboot.db.base import utcnow
-from jalboot.db.models import Message, Refund, WebSession
+from jalboot.db.models import Conversation, Message, Refund, WebSession
 from jalboot.llm.client import LLMError, LLMReply, ToolCall
 from jalboot.tools.executor import ToolExecutor
 from jalboot.tools.specs import MAX_TEXT
@@ -713,3 +714,33 @@ def test_too_many_codes_in_a_short_time_are_still_refused(client):
     assert refused.status_code == 429
     assert refused.json()["error"]["code"] == "too_many_attempts"
     assert int(refused.headers["retry-after"]) > 0
+
+
+FAR_FUTURE = datetime(2030, 6, 1, 12, 0, tzinfo=timezone.utc)
+
+
+def test_closing_a_conversation_counts_as_resolved_today(client):
+    """The count reads the simulated clock, so conversations must be written on it too."""
+    runtime(client).clock = WorldClock(FAR_FUTURE)
+    headers = signed_in(client)
+    cid, _ = start(client)
+    assert client.get(f"{V1}/desk/summary").json()["resolvedToday"] == 0
+    client.post(f"{V1}/desk/conversations/{cid}/close", headers=headers)
+    assert client.get(f"{V1}/desk/summary").json()["resolvedToday"] == 1
+
+
+def test_every_conversation_write_uses_the_simulated_clock(client):
+    runtime(client).clock = WorldClock(FAR_FUTURE)
+    headers = signed_in(client)
+    cid, auth = start(client)
+    say(client, cid, auth, "how long does delivery take")
+    client.post(f"{V1}/conversations/{cid}/handoff", headers=auth, json={})
+    client.post(f"{V1}/desk/conversations/{cid}/claim", headers=headers)
+    client.post(f"{V1}/desk/conversations/{cid}/reply", headers=headers, json={"text": "Hello"})
+    client.post(f"{V1}/desk/conversations/{cid}/close", headers=headers)
+    with runtime(client).sessions() as session:
+        conversation = session.get(Conversation, cid)
+        times = [conversation.created_at, conversation.updated_at, conversation.handoff_at]
+        times += [row.created_at for row in session.scalars(select(Message).where(Message.conversation_id == cid))]
+    assert len(times) >= 6
+    assert all(abs(moment - FAR_FUTURE) < timedelta(minutes=5) for moment in times)
