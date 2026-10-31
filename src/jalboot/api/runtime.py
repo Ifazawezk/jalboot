@@ -59,6 +59,7 @@ def seed_if_empty(session: Session, settings: Settings) -> None:
     meta_counts = generate_world(
         session, seed=settings.seed, customers=max(int(400 * scale), 10), drivers=max(int(80 * scale), 10),
         orders=max(int(3000 * scale), 40), tickets=max(int(600 * scale), 20),
+        rules=Rules.load(settings.knowledge_dir / "rules.json"),
     )
     meta = session.scalar(select(WorldMeta))
     add_demo_customers(session, meta.anchor)

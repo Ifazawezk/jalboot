@@ -69,6 +69,9 @@ class Settings:
             raise ConfigError("COOKIE_SAMESITE=none needs COOKIE_SECURE=true")
         if "*" in self.allowed_origins:
             raise ConfigError("ALLOWED_ORIGINS cannot be * because the API uses cookies")
+        if not (self.knowledge_dir / "rules.json").is_file():
+            # The default only exists in a checkout. An installed package must be told.
+            raise ConfigError(f"no rules.json in {self.knowledge_dir}. Set KNOWLEDGE_DIR to the knowledge folder.")
         if self.is_production:
             if self.secret_key == DEV_SECRET or len(self.secret_key) < 32:
                 raise ConfigError("production needs a SECRET_KEY of at least 32 characters")
