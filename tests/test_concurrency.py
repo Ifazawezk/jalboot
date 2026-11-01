@@ -155,3 +155,18 @@ def test_two_credits_at_once_both_reach_the_wallet(sessions):
     second.close()
     with sessions() as session:
         assert session.get(Customer, "C-1001").wallet_dh == before + 4000
+
+
+def test_reads_outside_the_write_lock_do_not_collide_with_writers(sessions):
+    quote = {"order_id": "JB-700102", "reason": "not_received"}
+
+    def work(index):
+        if index % 2:
+            return call(sessions, "quote_refund", quote, f"t{index}")
+        return call(sessions, "track_order", {"order_id": "JB-700101"}, f"t{index}")
+
+    results, errors = in_parallel(work)
+    assert errors == []
+    assert len(results) == THREADS
+    with sessions() as session:
+        assert audit.verify_chain(session) == (True, None)

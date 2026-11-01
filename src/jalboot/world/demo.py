@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from jalboot.db.models import Address, Customer, Order, OrderEvent, OrderItem, StaffUser
-from jalboot.policy.rules import Rules
 from jalboot.security.passwords import hash_password
 from jalboot.world import catalog
 

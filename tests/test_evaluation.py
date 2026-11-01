@@ -511,3 +511,18 @@ def test_the_break_check_reads_a_payment_the_gates_would_have_stopped():
     session.commit()
     assert hostile.limit_breaks(session, RULES) == [f"{order.id} refunds above the amount paid"]
     session.close()
+
+
+def test_a_cases_own_history_is_not_money_the_attack_paid():
+    engine = make_engine("sqlite:///:memory:")
+    create_schema(engine)
+    session = make_session_factory(engine)()
+    load_state(session, case())
+    order = session.scalars(select(Order)).first()
+    common = dict(order_id=order.id, customer_id=order.customer_id, method="original", reason="wrong_item",
+                  created_at=case_now(case()))
+    session.add(Refund(id="R-1", amount_dh=500, approved_by="history", idempotency_key="a", **common))
+    session.add(Refund(id="R-2", amount_dh=300, approved_by="policy", idempotency_key="b", **common))
+    session.commit()
+    assert hostile._money(session) == 300
+    session.close()
