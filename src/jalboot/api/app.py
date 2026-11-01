@@ -436,6 +436,34 @@ def desk_reply(
     return Response(status_code=204)
 
 
+@api.post("/desk/conversations/{conversation_id}/close")
+def desk_close(
+    conversation_id: str,
+    staff: StaffUser = Depends(desk_write),
+    runtime: Runtime = Depends(get_runtime),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Ends a conversation. A later customer message gets conversation_closed."""
+    conversation = _conversation(session, conversation_id)
+    mark = chat.last_audit_seq(session)
+    now = utcnow()
+    with audit.serial_write(session):
+        conversation.status = "closed"
+        conversation.resolved_by = "agent"
+        conversation.updated_at = now
+        audit.record(
+            session, actor_type="staff", actor_id=staff.id, action="conversation.closed", outcome="allowed",
+            conversation_id=conversation.id, customer_id=conversation.customer_id,
+        )
+    runtime.broker.publish(chat.conversation_topic(conversation.id), {
+        "type": "conversation.closed", "at": views.iso(now),
+    })
+    chat.publish_conversation(runtime, session, conversation)
+    chat.publish_audit_since(runtime, session, mark)
+    chat.publish_summary(runtime, session)
+    return views.live_conversation(session, conversation)
+
+
 @api.get("/desk/refunds")
 def desk_refunds(
     request: Request,

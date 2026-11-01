@@ -62,3 +62,15 @@ def test_detect_language():
     assert detect_language("وين طلبي JB-1001") == "ar"
     assert detect_language("where is my order") == "en"
     assert detect_language("12345", default="ar") == "ar"
+
+
+def test_the_dev_server_is_allowed_outside_production_only():
+    assert "http://localhost:5173" in load_settings({}).allowed_origins
+    production = load_settings({
+        "ENVIRONMENT": "production", "SECRET_KEY": "x" * 40, "COOKIE_SECURE": "true", "SHOW_SIMULATED_OTP": "false",
+    })
+    assert production.allowed_origins == ()
+
+
+def test_named_origins_replace_the_dev_default():
+    assert load_settings({"ALLOWED_ORIGINS": "https://a.example"}).allowed_origins == ("https://a.example",)

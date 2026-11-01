@@ -227,10 +227,9 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
         elif kind == "tool.end":
             result = event["result"]
             good = bool(result.get("ok"))
-            label = views.tool_label(event["tool"], 1, language) if good else views.pick(views.TOOL_FAILED, language)
+            status, label = views.tool_end_view(event["tool"], result, language)
             labels.append(label)
-            emit({"type": "tool.end", "toolCallId": ids.get(event["id"], "t0"),
-                  "status": "ok" if good else "error", "label": label})
+            emit({"type": "tool.end", "toolCallId": ids.get(event["id"], "t0"), "status": status, "label": label})
             if good and event["tool"] in TOOLS_WITH_ORDER and result.get("order_id"):
                 order = session.get(Order, result["order_id"])
                 if order is not None:

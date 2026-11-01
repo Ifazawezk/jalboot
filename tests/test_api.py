@@ -523,3 +523,51 @@ def test_a_failed_turn_can_be_sent_again(tmp_path):
         say(test_client, cid, auth, "what is your policy on late orders")
         again = say(test_client, cid, auth, "what is your policy on late orders")
         assert again.status_code == 200
+
+
+def test_an_identity_refusal_is_not_shown_as_a_failure(client):
+    cid, auth = start(client)
+    response = say(client, cid, auth, "where is my order JB-700101")
+    ended = find(response, "tool.end")
+    assert ended["status"] == "ok"
+    assert ended["label"] == "Need to confirm it is you"
+
+
+def test_a_policy_refusal_is_not_an_error_state(client):
+    cid, auth = start(client)
+    verify(client, cid, auth)
+    response = say(client, cid, auth, "where is JB-700201")
+    assert find(response, "tool.end")["status"] == "ok"
+
+
+def test_only_a_broken_call_is_an_error():
+    from jalboot.api import views
+
+    assert views.tool_end_view("track_order", {"ok": False, "error": "invalid_argument"}, "en")[0] == "error"
+    assert views.tool_end_view("track_order", {"ok": False, "error": "order_not_found"}, "en")[0] == "ok"
+    assert views.tool_end_view("track_order", {"ok": True}, "en") == ("ok", "Checked your order")
+
+
+def test_a_person_can_close_a_conversation_and_it_stays_closed(client):
+    cid, auth = start(client)
+    say(client, cid, auth, "I want to talk to a human")
+    csrf = signed_in(client)
+    closed = client.post(f"{V1}/desk/conversations/{cid}/close", headers=csrf)
+    assert closed.json()["state"] == "closed"
+    response = say(client, cid, auth, "one more thing", "c2")
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "conversation_closed"
+
+
+def test_closing_needs_the_csrf_token(client):
+    cid, _ = start(client)
+    signed_in(client)
+    assert client.post(f"{V1}/desk/conversations/{cid}/close").status_code == 403
+
+
+def test_closing_ends_the_summary_count(client):
+    cid, _ = start(client)
+    csrf = signed_in(client)
+    before = client.get(f"{V1}/desk/summary").json()["live"]
+    client.post(f"{V1}/desk/conversations/{cid}/close", headers=csrf)
+    assert client.get(f"{V1}/desk/summary").json()["live"] == before - 1
