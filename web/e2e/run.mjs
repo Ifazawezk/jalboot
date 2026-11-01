@@ -165,7 +165,7 @@ async function customerJourney(browser, lang, width, port) {
     await page.waitForSelector('.simsms');
     const smsText = await page.$eval('.simsms', (el) => el.textContent);
     const code = /\d{6}/.exec(smsText)?.[0];
-    check(`${tag}: simulated SMS is labelled and has a code`, /Simulated SMS|محاكاة/.test(smsText) && Boolean(code));
+    check(`${tag}: simulated SMS is labelled and has a code`, /Simulated SMS|تجريبية/.test(smsText) && Boolean(code));
     check(
       `${tag}: code is not filled in for the customer`,
       (await page.$eval('.identity input[inputmode=numeric]', (el) => el.value)) === '',
