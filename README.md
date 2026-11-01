@@ -341,16 +341,16 @@ From [`eval/results/retrieval-dev.json`](eval/results/retrieval-dev.json): searc
 
 | System | Recall@3 | Recall@5 | MRR | Used by |
 | --- | --- | --- | --- | --- |
-| BM25 | 0.86 | 0.92 | 0.845 | |
-| Character n-grams | 0.84 | 0.94 | 0.785 | |
-| **BM25 + n-grams** | **0.86** | **0.94** | **0.832** | **The default** |
-| Dense (e5-small) | 0.94 | 0.98 | 0.868 | |
-| BM25 + dense | 0.94 | 1.00 | 0.897 | |
-| **BM25 + n-grams + dense** | **0.98** | **0.98** | **0.873** | **`EMBEDDINGS=e5-small`** |
-| Best system + reranker | 0.94 | 0.98 | 0.882 | Left out |
+| BM25 | 0.86 | 0.92 | 0.844 |  |
+| Character n-grams | 0.82 | 0.94 | 0.766 |  |
+| **BM25 + n-grams** | **0.86** | **0.94** | **0.844** | **The default** |
+| Dense (e5-small) | 0.94 | 0.98 | 0.872 |  |
+| BM25 + dense | 0.96 | 0.98 | 0.907 |  |
+| **BM25 + n-grams + dense** | **0.96** | **0.98** | **0.877** | **`EMBEDDINGS=e5-small`** |
+| Best system + reranker | 0.94 | 0.98 | 0.881 | Left out |
 | Held-out test set | TODO | TODO | TODO | |
 
-**These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so they are picked from their own test. One question moves a recall by 0.02. The held-out test set will give the honest number. On these questions, adding dense search to the default gained 6 questions at Recall@3 and lost none.
+**These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so they are picked from their own test. One question moves a recall by 0.02. The held-out test set will give the honest number. On these questions, adding dense search to the default gained 5 questions at Recall@3 and lost none.
 
 ### The compromised-model test
 

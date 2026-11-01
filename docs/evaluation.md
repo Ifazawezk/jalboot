@@ -127,13 +127,13 @@ From [`eval/results/retrieval-dev.json`](../eval/results/retrieval-dev.json), wi
 
 | System | Recall@3 | 95% interval | Recall@5 | MRR | Recall@3, English | Recall@3, Arabic |
 | --- | --- | --- | --- | --- | --- | --- |
-| BM25 | 0.86 | 0.74 to 0.93 | 0.92 | 0.845 | 22 of 24 | 21 of 26 |
-| Character n-grams | 0.84 | 0.71 to 0.92 | 0.94 | 0.785 | 22 of 24 | 20 of 26 |
-| BM25 + n-grams (the default) | 0.86 | 0.74 to 0.93 | 0.94 | 0.832 | 22 of 24 | 21 of 26 |
-| Dense (e5-small) | 0.94 | 0.84 to 0.98 | 0.98 | 0.868 | 24 of 24 | 23 of 26 |
-| BM25 + dense | 0.94 | 0.84 to 0.98 | 1.00 | 0.897 | 23 of 24 | 24 of 26 |
-| BM25 + n-grams + dense (`EMBEDDINGS=e5-small`) | 0.98 | 0.90 to 1.00 | 0.98 | 0.873 | 24 of 24 | 25 of 26 |
-| Best system + reranker (left out) | 0.94 | 0.84 to 0.98 | 0.98 | 0.882 | 22 of 24 | 25 of 26 |
+| BM25 | 0.86 | 0.74 to 0.93 | 0.92 | 0.844 | 22 of 24 | 21 of 26 |
+| Character n-grams | 0.82 | 0.69 to 0.90 | 0.94 | 0.766 | 21 of 24 | 20 of 26 |
+| BM25 + n-grams (the default) | 0.86 | 0.74 to 0.93 | 0.94 | 0.844 | 22 of 24 | 21 of 26 |
+| Dense (e5-small) | 0.94 | 0.84 to 0.98 | 0.98 | 0.872 | 24 of 24 | 23 of 26 |
+| BM25 + dense | 0.96 | 0.87 to 0.99 | 0.98 | 0.907 | 24 of 24 | 24 of 26 |
+| BM25 + n-grams + dense (`EMBEDDINGS=e5-small`) | 0.96 | 0.87 to 0.99 | 0.98 | 0.877 | 23 of 24 | 25 of 26 |
+| Best system + reranker (left out) | 0.94 | 0.84 to 0.98 | 0.98 | 0.881 | 22 of 24 | 25 of 26 |
 | Held-out test set | TODO | TODO | TODO | TODO | TODO | TODO |
 
 **These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so the winner is partly a product of the comparison. The intervals overlap. The held-out test set will give the honest number.
@@ -143,10 +143,10 @@ Against the default at Recall@3, on the same questions:
 | System | Questions gained | Questions lost |
 | --- | --- | --- |
 | BM25 alone | 1 | 1 |
-| Character n-grams alone | 2 | 3 |
-| Dense alone | 4 | 0 |
-| BM25 + dense | 4 | 0 |
-| BM25 + n-grams + dense | 6 | 0 |
+| Character n-grams alone | 2 | 4 |
+| Dense alone | 5 | 1 |
+| BM25 + dense | 5 | 0 |
+| BM25 + n-grams + dense | 5 | 0 |
 | Best system + reranker | 5 | 1 |
 
 ### The compromised-model test
