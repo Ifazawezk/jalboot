@@ -7,7 +7,8 @@ The rule behind every metric: **score what the tools logged and what the custome
 ## Read this first
 
 - **Everything is simulated.** Jalboot is a fictional company. The customers, orders, amounts and policies are invented, and customers in the cases are scripted.
-- **The test cases are not fully independent.** They were written after reading parts of the backend. Someone who knows the code can write cases that fit it without meaning to, so a good score here is weaker evidence than the same score on cases from an outsider. Three things limit this: the gold answers follow the policy documents and not the code, a case that disagrees with the code is meant to fail, and no case was moved between sets because of how the code handled it.
+- **The test cases are not fully independent.** The gold answers were written after reading `engine.py` and `triage.py`. Someone who knows the code can write cases that fit it without meaning to, so a good score here is weaker evidence than the same score on cases from an outsider. The gold answers follow the policy documents, and a development case only changed when the policy text supported the change. The held-out cases are frozen and have not been run.
+- **No Arabic speaker has reviewed the cases or the Arabic text.**
 - **Mock numbers are not product quality.** The mock planner is a keyword matcher that exists to run and test the system, so mock runs are not kept in the repo, and a report from one says so at the top. A comparison with the baseline refuses to run in mock mode, because both sides would be the same keyword rules.
 - **The sets are small.** Rates need their intervals beside them, and two runs whose intervals overlap are not clearly different.
 

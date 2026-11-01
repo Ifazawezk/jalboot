@@ -47,7 +47,7 @@ def test_arabic_search_finds_the_cancel_section():
 
 def test_results_carry_what_a_citation_needs():
     row = KB.search("promo code", "en", k=1)[0]
-    assert {"id", "title", "text", "doc_title", "updated", "confidence"} <= set(row)
+    assert {"id", "title", "text", "doc_title", "updated", "confidence", "ngram_similarity"} <= set(row)
 
 
 def figures(text):

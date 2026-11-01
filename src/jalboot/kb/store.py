@@ -121,6 +121,7 @@ class KnowledgeBase:
         self.by_key = {(p.language, p.id): p for p in self.all_passages}
         self.section_ids = {p.id for p in self.all_passages}
         self.bm25: dict[str, BM25Index] = {}
+        self.ngrams: dict[str, CharNgramIndex] = {}
         self.retrievers: dict[str, Retriever] = {}
         for language in LANGUAGES:
             visible = [
@@ -130,7 +131,8 @@ class KnowledgeBase:
             ids = [p.id for p in visible]
             texts = [p.search_text for p in visible]
             self.bm25[language] = BM25Index().fit(ids, texts)
-            members: list[Retriever] = [self.bm25[language], CharNgramIndex().fit(ids, texts)]
+            self.ngrams[language] = CharNgramIndex().fit(ids, texts)
+            members: list[Retriever] = [self.bm25[language], self.ngrams[language]]
             if encoder is not None:
                 from jalboot.retrieval.dense import DenseIndex
 
@@ -141,7 +143,11 @@ class KnowledgeBase:
         return self.retrievers.get(language, self.retrievers["en"]).search(query, k=k)
 
     def search(self, query: str, language: str, k: int = 4) -> list[dict[str, Any]]:
+        """Each row holds BM25 term coverage as confidence, and n-gram similarity beside
+        it, because typos and Gulf spellings can leave a good passage with no shared term."""
         language = language if language in LANGUAGES else "en"
+        ngrams = self.ngrams[language]
+        similarity = dict(zip(ngrams.doc_ids, ngrams.scores(query)))
         out = []
         for hit in self.hits(query, language, k):
             passage = self.by_key[(language, hit.doc_id)]
@@ -153,5 +159,6 @@ class KnowledgeBase:
                 "text": prompt_text(passage.text),
                 "updated": passage.updated,
                 "confidence": round(self.bm25[language].coverage(query, passage.id), 3),
+                "ngram_similarity": round(float(similarity[passage.id]), 3),
             })
         return out

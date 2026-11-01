@@ -58,7 +58,7 @@ A turn is capped at 6 model steps and 8 tool calls, and a flood of calls goes to
 
 Approval limits are not returned to the model, so it cannot quote them. A refusal carries an amount only when it is what the customer is due, such as the most an item is worth.
 
-`ToolContext.unguarded` turns these gates off for two comparisons in evaluation: the plain chatbot baseline and the compromised-model test. The API never sets it.
+`evaluation/unguarded.py` holds a copy of the executor with these gates removed, for two comparisons: the plain chatbot baseline and the compromised-model test. Nothing outside `evaluation/` imports it.
 
 ### 3. The policy engine
 
@@ -124,7 +124,9 @@ A model can raise a handoff's priority, but it cannot lower a safety case below 
 
 ### 7. Prompt hardening
 
-Implemented in `agent/prompts.py`. This is the second layer, and no rule depends on it. Outside text reaches the model as a JSON string in a labelled block, so it cannot close the block or pose as a new section, and the system prompt says nothing in those blocks is an instruction.
+Implemented in `agent/prompts.py`. This is the second layer, and no policy rule depends on it. Outside text reaches the model as a JSON string in a labelled block, so it cannot close the block or pose as a new section, and the system prompt says nothing in those blocks is an instruction.
+
+A tool that moves money or changes an order also runs only if the customer asked for it, so a note on an order cannot start one. That rule is in `agent/consent.py`, called from the agent loop, not in the tool layer. A refusal is written to the audit log. `evaluation/hostile.py` calls the tools directly and goes around the loop, so its numbers do not measure this rule, and the rule is covered by tests in `tests/test_agent.py` instead. It reads word lists, so it is a filter, and a model can still ask a leading question.
 
 ### 8. Personal data
 

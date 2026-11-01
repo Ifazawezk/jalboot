@@ -16,7 +16,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, Sequence
 
-from jalboot.agent import checks, prompts, replies
+from jalboot.agent import checks, consent, prompts, replies
 from jalboot.agent.triage import triage_message
 from jalboot.llm.client import LLMClient, LLMError, ToolCall
 
@@ -26,13 +26,15 @@ MAX_FAILED_ATTEMPTS = 2  # ESC-02, escalation.handoff_after_failed_attempts in r
 # sees it. With nothing relevant to cite, the honest answer is the only one left. Tuned
 # on the development questions only.
 MIN_COVERAGE = 0.25
+# Typos and Gulf spellings share no terms with the policy, so coverage reads near zero
+# on a good passage. Cosine scores sit on a much lower scale than coverage, so this has
+# its own limit. Also tuned on development questions only.
+MIN_SIMILARITY = 0.085
 MAX_STEPS = 6
 MAX_TOOL_CALLS = 8
 HISTORY_TURNS = 8
-WRITE_EFFECTS = {
-    "issue_refund": "refund", "issue_credit": "refund", "change_address": "address",
-    "cancel_order": "cancel",
-}
+SEARCH_TOOL = consent.SEARCH_TOOL
+CITATION_FIELDS = ("id", "doc", "doc_title", "title", "text", "updated")
 
 
 class Knowledge(Protocol):
@@ -45,6 +47,8 @@ class Tools(Protocol):
     def execute(self, name: str, arguments: dict[str, Any], *, malformed: bool = False) -> dict[str, Any]: ...
 
     def allowed_contacts(self) -> list[str]: ...
+
+    def refuse(self, name: str, arguments: dict[str, Any], code: str, **details: Any) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -64,6 +68,38 @@ class TurnResult:
 
 def _no_emit(_event: dict[str, Any]) -> None:
     return None
+
+
+def relevant(passages: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The passages worth showing the model. N-grams can only rescue a passage when the
+    top result looks similar too: a question about something else still shares common
+    runs of letters with long sections, so one middling score lower down proves nothing."""
+
+    def similar(passage: dict[str, Any]) -> bool:
+        return passage.get("ngram_similarity", 0.0) >= MIN_SIMILARITY
+
+    rescue = bool(passages) and similar(passages[0])
+    return [p for p in passages if p["confidence"] >= MIN_COVERAGE or (rescue and similar(p))]
+
+
+def _add_sources(outcome: dict[str, Any], passages: list[dict[str, Any]]) -> dict[str, Any]:
+    """Passages from a search join this turn's sources, so a reply can cite them. A
+    section the model already holds keeps its marker. The tool log keeps the full result;
+    this returns what the model reads."""
+    numbered = []
+    for found in relevant(outcome.get("passages") or []):
+        marker = next((n for n, p in enumerate(passages, start=1) if p["id"] == found["id"]), None)
+        if marker is None:
+            passages.append(found)
+            marker = len(passages)
+        numbered.append(prompts.numbered_source(marker, found))
+    return {**outcome, "passages": numbered}
+
+
+def _acted(result: TurnResult) -> bool:
+    """Whether a tool did real work this turn. A search is reading the same policy as
+    the sources, so an answer built on one still has to cite it."""
+    return any(entry["result"].get("ok") and entry["tool"] != SEARCH_TOOL for entry in result.tool_log)
 
 
 class SupportAgent:
@@ -98,7 +134,7 @@ class SupportAgent:
             self._close_with_handoff(result, "repeated_failure", text, tools, history, customer_label, emit)
             return result
 
-        passages = [p for p in self.knowledge.search(text, triage.language, k=4) if p["confidence"] >= MIN_COVERAGE]
+        passages = relevant(self.knowledge.search(text, triage.language, k=4))
         self._plan(result, text, tools, history, passages, customer_label, emit)
         return result
 
@@ -110,15 +146,29 @@ class SupportAgent:
         }), emit)
         if outcome.get("ok"):
             result.handoff = {"reason": reason, "summary": summary, "priority": outcome.get("priority", "P4")}
-        result.reply = replies.handoff_reply(reason, result.language)
+        result.reply = self._handoff_text(result, reason)
         result.finish = "handoff"
         result.confidence = 1.0
+
+    def _handoff_text(self, result: TurnResult, reason: str) -> str:
+        return " ".join([
+            *replies.action_lines(result.tool_log, result.language), replies.handoff_reply(reason, result.language),
+        ])
 
     def _run_tool(self, result: TurnResult, tools: Tools, call: ToolCall, emit: Emit) -> dict[str, Any]:
         emit({"type": "tool.start", "id": call.id, "tool": call.name, "arguments": call.arguments})
         outcome = tools.execute(call.name, call.arguments, malformed=call.malformed)
         result.tool_log.append({"tool": call.name, "arguments": call.arguments, "result": outcome})
         emit({"type": "tool.end", "id": call.id, "tool": call.name, "result": outcome})
+        return outcome
+
+    def _refuse_tool(self, result: TurnResult, tools: Tools, call: ToolCall, emit: Emit) -> dict[str, Any]:
+        """The customer did not ask for this action, so it never reaches the tools."""
+        emit({"type": "tool.start", "id": call.id, "tool": call.name, "arguments": call.arguments})
+        outcome = tools.refuse(call.name, call.arguments, consent.NEEDS_REQUEST, next_step=consent.ASK_THE_CUSTOMER)
+        result.tool_log.append({"tool": call.name, "arguments": call.arguments, "result": outcome})
+        emit({"type": "tool.end", "id": call.id, "tool": call.name, "result": outcome})
+        result.flags.append(f"blocked_action: {call.name}")
         return outcome
 
     def _plan(self, result, text, tools, history, passages, customer_label, emit) -> None:
@@ -133,6 +183,7 @@ class SupportAgent:
 
         repaired = False
         calls_made = 0
+        outside_text = False
         for _step in range(MAX_STEPS):
             try:
                 reply = self.llm.chat(messages, tools.specs())
@@ -151,8 +202,15 @@ class SupportAgent:
                         result.flags.append("too_many_tool_calls")
                         self._fall_back(result, text, tools, history, customer_label, emit)
                         return
-                    outcome = self._run_tool(result, tools, call, emit)
-                    messages.append(prompts.tool_result_message(call.id, call.name, outcome))
+                    # A malformed call goes on to the tools, which refuse it and audit that.
+                    gated = consent.needs_request(call.name) and not call.malformed
+                    if gated and not consent.customer_asked(call.name, text, history, outside_text):
+                        outcome = self._refuse_tool(result, tools, call, emit)
+                    else:
+                        outcome = self._run_tool(result, tools, call, emit)
+                    outside_text = outside_text or consent.reads_outside_text(call.name, outcome)
+                    shown = _add_sources(outcome, passages) if call.name == SEARCH_TOOL and outcome.get("ok") else outcome
+                    messages.append(prompts.tool_result_message(call.id, call.name, shown))
                     if outcome.get("error") == "identity_required":
                         result.reply = replies.identity_reply(result.language)
                         result.finish = "identity_required"
@@ -168,7 +226,7 @@ class SupportAgent:
                 continue
 
             content = checks.tidy_reply(reply.content)
-            verdict = self._check(content, text, passages, result, tools, system)
+            verdict = self._check(content, passages, result, tools, system)
             if verdict.ok:
                 self._accept(result, content, verdict, passages, text, emit)
                 return
@@ -185,36 +243,35 @@ class SupportAgent:
         arguments = entry["arguments"]
         reason = str(arguments.get("reason") or "low_confidence")
         result.handoff = {"reason": reason, "summary": arguments.get("summary", ""), "priority": entry["result"].get("priority", "P4")}
-        result.reply = replies.handoff_reply(reason, result.language)
+        result.reply = self._handoff_text(result, reason)
         result.finish = "handoff"
         result.confidence = 0.5
 
-    def _check(self, reply, text, passages, result, tools, system) -> checks.CheckResult:
-        evidence = [text, *(p["text"] for p in passages)]
-        evidence.extend(json.dumps(entry["result"], ensure_ascii=False, default=str) for entry in result.tool_log)
-        done = {
-            WRITE_EFFECTS[entry["tool"]] for entry in result.tool_log
-            if entry["tool"] in WRITE_EFFECTS and entry["result"].get("status") == "done"
-        }
+    def _check(self, reply, passages, result, tools, system) -> checks.CheckResult:
+        effects = checks.effects_of(result.tool_log)
         return checks.check_reply(
             reply,
             source_count=len(passages),
-            evidence=evidence,
-            done=done,
+            evidence=[p["text"] for p in passages],
+            tool_results=[entry["result"] for entry in result.tool_log if entry["tool"] != SEARCH_TOOL],
+            done=effects.done,
+            offered=effects.offered,
+            amounts=effects.amounts,
             allowed_contacts=tools.allowed_contacts(),
             system_prompt=system,
             canary=self.canary,
-            used_tools=any(entry["result"].get("ok") for entry in result.tool_log),
+            used_tools=_acted(result),
         )
 
     def _accept(self, result, reply, verdict, passages, text, emit) -> None:
-        result.reply = reply.strip()
+        unsaid = replies.action_lines(result.tool_log, result.language, skip=checks.claimed_actions(reply))
+        result.reply = " ".join([reply.strip(), *unsaid])
         for number in verdict.citations:
             passage = passages[number - 1]
-            citation = {"n": number, **{k: passage[k] for k in ("id", "title", "text") if k in passage}}
+            citation = {"n": number, **{k: passage[k] for k in CITATION_FIELDS if k in passage}}
             result.citations.append(citation)
             emit({"type": "citation", "citation": citation})
-        used_tools = any(entry["result"].get("ok") for entry in result.tool_log)
+        used_tools = _acted(result)
         best = max((p.get("confidence", 0.0) for p in passages), default=0.0)
         result.confidence = 0.9 if used_tools else (best if verdict.citations else 0.3)
         result.failed = not used_tools and not verdict.citations and len(text.split()) > 3
