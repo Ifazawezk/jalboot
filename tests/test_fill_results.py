@@ -76,3 +76,12 @@ def test_a_partial_run_is_never_presented_as_a_final_score():
 def test_nothing_run_says_nothing_has_run():
     text = fill_results.status(None, None, None)
     assert "held-out test has not been run" in text and "not final scores" in text
+
+
+def test_a_handful_of_cases_never_shows_as_a_rate():
+    few = report(cases_run=1)
+    table = fill_results.readme_table(few, None)
+    assert "| Resolution rate | at least 0.80 | Too few cases | Not run |" in table
+    assert "0.75" not in table
+    assert "| Too few cases |" in fill_results.against(few, None)
+    assert fill_results.coverage(few) == "1 of 259 cases, partial"

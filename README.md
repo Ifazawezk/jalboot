@@ -45,7 +45,7 @@ So Jalboot treats the model as an untrusted planner. It can read, draft and prop
 - **Knows when to stop.** Safety, legal threats, account takeover, complaints about staff, requests for a person and upset customers are caught in code before any model runs.
 - **Gives people a real desk.** Live conversations, a refund queue with role limits, an audit log, top issues and quality charts, in both languages. The desk's charts are built from simulated tickets and are not evaluation results.
 - **Runs with no key.** `LLM_MODE=mock` swaps the model for a rule based planner, so the whole system runs offline. Mock results are never offered as a measure of quality.
-- **Is set up to be measured on held-out cases.** 364 test cases, 105 of them held out and not yet run, score what the tools logged rather than what the bot said it did. See [Results](#results).
+- **Is set up to be measured on held-out cases.** 364 test cases score what the tools logged rather than what the bot said it did. The 105 held-out ones are sealed outside this repository and have not been run. See [Results](#results).
 - **Assumes the model can be taken over.** A [compromised-model test](#if-the-model-is-taken-over) skips the model and fires hostile tool calls straight at the tool layer, with the gates on and then off, and records what really changed.
 
 ## Screenshots
@@ -333,39 +333,41 @@ Full tables and intervals are in [docs/evaluation.md](docs/evaluation.md). No fi
 ### The agent
 
 <!-- results:status -->
-**The held-out test has not been run.** **These are not final scores.** The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 1 of 259 cases, partial for the agent and not run for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
 <!-- /results:status -->
 
 <!-- results:run -->
 | Run detail | Value |
 | --- | --- |
-| Model | Not run |
-| Dense search | Not run |
-| Code version | Not run |
-| Date | Not run |
-| Development cases | Not run |
+| Model | `openai-gpt-oss-20b` |
+| Dense search | e5-small |
+| Code version | `1d2bf61` |
+| Date | 2026-11-01 |
+| Development cases | 1 of 259 cases, partial |
 | Plain chatbot, development cases | Not run |
 | Held-out cases | Not run |
-| Why a run stopped | No run was stopped |
+| Why a run stopped | development: stopped at the provider's limit: provider returned HTTP 429; retry in 1447s |
 <!-- /results:run -->
 
-A gate must hold in each language, not only overall. Every figure below comes from a file in [`eval/results`](eval/results). A figure from a partial run covers only the cases counted in the table above.
+**The model has not been scored yet.** The one development case that has run is a safety report, which triage handles in code with no model call. On the next case the provider returned HTTP 429 with a wait of 1,447 seconds, so the run stopped there, as it is built to. Mock mode results are not shown, because they say nothing about quality.
+
+A gate must hold in each language, not only overall. Every figure below comes from a file in [`eval/results`](eval/results), and a run with fewer than 20 cases shows no rates.
 
 <!-- results:agent -->
 | Metric | Gate | Dev | Held-out | Held-out, English | Held-out, Arabic |
 | --- | --- | --- | --- | --- | --- |
-| Resolution rate | at least 0.80 | Not run | Not run | Not run | Not run |
-| Wrong-refund rate | at most 0.02 | Not run | Not run | Not run | Not run |
-| Missed-refund rate | at most 0.10 | Not run | Not run | Not run | Not run |
-| Unauthorized data access, `exposed` | 0 events | Not run | Not run | Not run | Not run |
-| Citation precision | at least 0.90 | Not run | Not run | Not run | Not run |
-| Citation recall | at least 0.80 | Not run | Not run | Not run | Not run |
-| Invented citations | 0 | Not run | Not run | Not run | Not run |
-| Abstention accuracy | at least 0.85 | Not run | Not run | Not run | Not run |
-| Escalation recall | at least 0.95 | Not run | Not run | Not run | Not run |
-| Escalation precision | at least 0.80 | Not run | Not run | Not run | Not run |
-| Red team, `critical` severity | every case passes | Not run | Not run | Not run | Not run |
-| Red team, overall | at least 0.95 | Not run | Not run | Not run | Not run |
+| Resolution rate | at least 0.80 | Too few cases | Not run | Not run | Not run |
+| Wrong-refund rate | at most 0.02 | Too few cases | Not run | Not run | Not run |
+| Missed-refund rate | at most 0.10 | Too few cases | Not run | Not run | Not run |
+| Unauthorized data access, `exposed` | 0 events | Too few cases | Not run | Not run | Not run |
+| Citation precision | at least 0.90 | Too few cases | Not run | Not run | Not run |
+| Citation recall | at least 0.80 | Too few cases | Not run | Not run | Not run |
+| Invented citations | 0 | Too few cases | Not run | Not run | Not run |
+| Abstention accuracy | at least 0.85 | Too few cases | Not run | Not run | Not run |
+| Escalation recall | at least 0.95 | Too few cases | Not run | Not run | Not run |
+| Escalation precision | at least 0.80 | Too few cases | Not run | Not run | Not run |
+| Red team, `critical` severity | every case passes | Too few cases | Not run | Not run | Not run |
+| Red team, overall | at least 0.95 | Too few cases | Not run | Not run | Not run |
 <!-- /results:agent -->
 
 ### Retrieval

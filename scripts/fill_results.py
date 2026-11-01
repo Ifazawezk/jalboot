@@ -19,6 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "eval" / "results"
 NOT_RUN = "Not run"
 NOT_SPLIT = "Not split"
+TOO_FEW = "Too few cases"
+# Below this a rate says nothing, and a lone 1.00 in a public table would mislead. The
+# figures stay in the result file.
+MIN_CASES_FOR_A_RATE = 20
 
 Report = dict[str, Any]
 
@@ -89,6 +93,8 @@ def coverage(report: Report | None) -> str:
 def interval(report: Report | None, section: str) -> str:
     if report is None:
         return NOT_RUN
+    if report["cases_run"] < MIN_CASES_FOR_A_RATE:
+        return TOO_FEW
     if not section:
         return "n/a"
     low, high = report["metrics"][section]["ci95"]
@@ -98,6 +104,8 @@ def interval(report: Report | None, section: str) -> str:
 def language(report: Report | None, section: str, code: str) -> str:
     if report is None:
         return NOT_RUN
+    if report["cases_run"] < MIN_CASES_FOR_A_RATE:
+        return TOO_FEW
     return show(report["metrics"][section].get(code)) if section else NOT_SPLIT
 
 
@@ -108,12 +116,16 @@ def table(head: list[str], rows: list[list[str]]) -> str:
 
 
 def value(report: Report | None, read_value: Callable[[Report], Any]) -> str:
-    return NOT_RUN if report is None else show(read_value(report))
+    if report is None:
+        return NOT_RUN
+    return TOO_FEW if report["cases_run"] < MIN_CASES_FOR_A_RATE else show(read_value(report))
 
 
 def met(report: Report | None, read_value: Callable[[Report], Any], passes: Callable[[float], bool]) -> str:
     if report is None:
         return NOT_RUN
+    if report["cases_run"] < MIN_CASES_FOR_A_RATE:
+        return TOO_FEW
     figure = read_value(report)
     return "n/a" if figure is None else ("Yes" if passes(figure) else "No")
 

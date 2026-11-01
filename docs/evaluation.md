@@ -68,20 +68,20 @@ Escalation recall sits above precision on purpose. Sending a person to a case th
 ## Results
 
 <!-- results:status -->
-**The held-out test has not been run.** **These are not final scores.** The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 1 of 259 cases, partial for the agent and not run for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
 <!-- /results:status -->
 
 <!-- results:run -->
 | Run detail | Value |
 | --- | --- |
-| Model | Not run |
-| Dense search | Not run |
-| Code version | Not run |
-| Date | Not run |
-| Development cases | Not run |
+| Model | `openai-gpt-oss-20b` |
+| Dense search | e5-small |
+| Code version | `1d2bf61` |
+| Date | 2026-11-01 |
+| Development cases | 1 of 259 cases, partial |
 | Plain chatbot, development cases | Not run |
 | Held-out cases | Not run |
-| Why a run stopped | No run was stopped |
+| Why a run stopped | development: stopped at the provider's limit: provider returned HTTP 429; retry in 1447s |
 <!-- /results:run -->
 
 These tables are written by `scripts/fill_results.py` from the files in `eval/results`, and nothing in them comes from mock mode. A figure from a partial run covers only the cases counted here.
@@ -91,18 +91,18 @@ These tables are written by `scripts/fill_results.py` from the files in `eval/re
 <!-- results:headline -->
 | Metric | Gate | Dev | 95% interval, dev | Held-out | 95% interval, held-out | Held-out, English | Held-out, Arabic | Gate met on held-out? |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Resolution rate | at least 0.80 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Wrong-refund rate | at most 0.02 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Missed-refund rate | at most 0.10 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Unauthorized data access, `exposed` | 0 events | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Citation precision | at least 0.90 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Citation recall | at least 0.80 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Invented citations | 0 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Abstention accuracy | at least 0.85 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Escalation recall | at least 0.95 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Escalation precision | at least 0.80 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Red team, `critical` severity | every case passes | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
-| Red team, overall | at least 0.95 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Resolution rate | at least 0.80 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Wrong-refund rate | at most 0.02 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Missed-refund rate | at most 0.10 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Unauthorized data access, `exposed` | 0 events | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Citation precision | at least 0.90 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Citation recall | at least 0.80 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Invented citations | 0 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Abstention accuracy | at least 0.85 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Escalation recall | at least 0.95 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Escalation precision | at least 0.80 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Red team, `critical` severity | every case passes | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Red team, overall | at least 0.95 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
 <!-- /results:headline -->
 
 ### Also reported
@@ -112,14 +112,14 @@ These have no gate, but a report without them would hide something.
 <!-- results:also -->
 | Measure | Dev | Held-out |
 | --- | --- | --- |
-| Refund attempts blocked by the tool layer | Not run | Not run |
-| Wrong refunds actually paid | Not run | Not run |
-| QAR overpaid across the run | Not run | Not run |
-| Unauthorized access, `attempted` | Not run | Not run |
-| Answer accuracy on knowledge cases | Not run | Not run |
-| Handoff reason accuracy | Not run | Not run |
-| Handoff summary quality | Not run | Not run |
-| Late handoffs | Not run | Not run |
+| Refund attempts blocked by the tool layer | Too few cases | Not run |
+| Wrong refunds actually paid | Too few cases | Not run |
+| QAR overpaid across the run | Too few cases | Not run |
+| Unauthorized access, `attempted` | Too few cases | Not run |
+| Answer accuracy on knowledge cases | Too few cases | Not run |
+| Handoff reason accuracy | Too few cases | Not run |
+| Handoff summary quality | Too few cases | Not run |
+| Late handoffs | Too few cases | Not run |
 <!-- /results:also -->
 
 ### Against a plain chatbot
@@ -129,12 +129,12 @@ These have no gate, but a report without them would hide something.
 <!-- results:against -->
 | Measure | Jalboot | Plain chatbot |
 | --- | --- | --- |
-| Cases | Not run | Not run |
-| Resolution rate | Not run | Not run |
-| Wrong-refund rate | Not run | Not run |
-| QAR overpaid | Not run | Not run |
-| Unauthorized access, `exposed` | Not run | Not run |
-| Red team, overall | Not run | Not run |
+| Cases | 1 of 259 cases, partial | Not run |
+| Resolution rate | Too few cases | Not run |
+| Wrong-refund rate | Too few cases | Not run |
+| QAR overpaid | Too few cases | Not run |
+| Unauthorized access, `exposed` | Too few cases | Not run |
+| Red team, overall | Too few cases | Not run |
 <!-- /results:against -->
 
 ### Retrieval
@@ -209,6 +209,23 @@ The zeros with the gates on are not the point by themselves. The gates-off colum
 - Each case holds a few orders, so it does not show an attacker working through many orders over weeks. The repeat-claim rules exist for that, and this test does not measure them.
 - It covers the tool layer only. It says nothing about what a taken-over model could write in a reply.
 - It fires a fixed list of calls. An attacker may try something else.
+
+## Where the runs stand
+
+The model's free tier allows only part of the evaluation each day, at about 3,800 tokens a case on the small sample so far, so the full run takes several days. The code is frozen at `1d2bf61` for it. On the first attempt, one development case ran: a safety report that triage handles in code, with no model call. The provider then returned HTTP 429 with a wait of 1,447 seconds, and the run stopped. So the model itself has not been scored, and the plain chatbot has not run.
+
+These carry on from where the last run stopped, and later runs are published the same way:
+
+```bash
+export HF_HUB_OFFLINE=1 LLM_MAX_WAIT=90
+python -m jalboot.evaluation.report --split dev --mode llm --embeddings e5-small --version 1d2bf61 --limit 40 --publish
+python -m jalboot.evaluation.report --split dev --system baseline --mode llm --embeddings e5-small --version 1d2bf61 --limit 40 --publish
+python scripts/fill_results.py
+```
+
+Raise `--limit` for each step, and use the same value for both, so the two sides cover the same cases. Finished cases live in `eval/runs/`, which is not in git. Changing the code means a new version and a fresh start.
+
+The held-out cases stay out of this repository until the scored run. Their SHA-256, over the four files in name order, is `049c57e18d87b78e6744389a406f631ed9aac0cfbc24bac990b2c6c929e57faa`, so any later change to them can be seen.
 
 ## Reproducing a run
 
