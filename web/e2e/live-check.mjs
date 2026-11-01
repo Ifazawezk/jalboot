@@ -298,7 +298,8 @@ try {
   check('live: mock replies are labelled from GET /policy', banner.includes('Mock replies'), banner.slice(0, 40));
   check('live: no sample data banner', !banner.includes('Sample data'));
   const rule = await page.waitForFunction(() => document.querySelector('.case .fine')?.textContent);
-  check('live: limit comes from GET /policy', (await rule.jsonValue()).includes('50.00'));
+  const ruleText = await rule.jsonValue();
+  check('live: the rule line names no internal limit', ruleText.includes('reviewed by a person') && !/\d/.test(ruleText), ruleText);
 
   await page.click('.rows li:nth-child(1) button');
   await page.waitForSelector('.identity input[type=tel]');
