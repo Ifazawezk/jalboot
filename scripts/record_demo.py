@@ -179,6 +179,19 @@ def check_clean(recording: dict[str, Any]) -> None:
         raise SystemExit(f"{recording['id']} holds a phone number or code, so it was not saved")
 
 
+def count_tokens(llm) -> dict[str, int]:
+    spent = {"tokens": 0}
+    chat = llm.chat
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        reply = chat(*args, **kwargs)
+        spent["tokens"] += int((reply.usage or {}).get("total_tokens") or 0)
+        return reply
+
+    llm.chat = counted
+    return spent
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
@@ -191,6 +204,7 @@ def main() -> int:
     if llm is None:
         print("no key found")
         return 1
+    spent = count_tokens(llm)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     # A TestClient raises the server's errors into this script. That is what a stopped
@@ -207,11 +221,12 @@ def main() -> int:
         try:
             recording = play(scene, llm)
         except (RateLimited, LLMError, RuntimeError) as stop:
-            print(f"stopped at {scene['id']}: {stop}. Saved scenes are kept.")
+            print(f"stopped at {scene['id']}: {stop}. Saved scenes are kept. Tokens used: {spent['tokens']}")
             return 2
         check_clean(recording)
         path.write_text(json.dumps(recording, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
         print(f"saved {path.name}, {len(recording['steps'])} steps, source {recording['source']}", flush=True)
+    print(f"tokens used: {spent['tokens']}")
     return 0
 
 
