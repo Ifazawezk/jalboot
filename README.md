@@ -21,6 +21,7 @@
 
 | You are... | Go to |
 | --- | --- |
+| Wanting to see it with nothing to install | [Public demo](https://ifazawezk.github.io/jalboot/), which plays recordings and needs no key |
 | Reviewing this as a portfolio project | [Why](#why), [Results](#results) and [Limits](#limits) |
 | Building an AI agent that can take actions | [Security model](#security-model) and [docs/security.md](docs/security.md) |
 | Checking how it was measured | [docs/evaluation.md](docs/evaluation.md) |
@@ -209,7 +210,7 @@ The same attack also ran with a double charge, a change shortfall or a failed de
 You need Python 3.11 or newer and Node for the web app. It was developed and run on Windows 11 with Python 3.12 and Node 24, and other setups have not been tried. No API key is needed.
 
 ```bash
-git clone <this repository> jalboot && cd jalboot
+git clone https://github.com/Ifazawezk/jalboot.git jalboot && cd jalboot
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
