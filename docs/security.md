@@ -58,7 +58,7 @@ A turn is capped at 6 model steps and 8 tool calls, and a flood of calls goes to
 
 Approval limits are not returned to the model, so it cannot quote them. A refusal carries an amount only when it is what the customer is due, such as the most an item is worth.
 
-`ToolContext.unguarded` turns these gates off for two comparisons in evaluation: the plain chatbot baseline and the compromised-model test. The API never sets it.
+`evaluation/unguarded.py` holds a copy of the executor with these gates removed, for two comparisons: the plain chatbot baseline and the compromised-model test. Nothing outside `evaluation/` imports it.
 
 ### 3. The policy engine
 
