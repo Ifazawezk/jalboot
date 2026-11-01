@@ -159,14 +159,26 @@ This shows some tampering after the fact, not all of it. Changing a row, or remo
 
 ### 11. Production settings
 
-`config.py` and `api/runtime.py` refuse to start with `ENVIRONMENT=production` unless:
+`ENVIRONMENT` must be `development`, `test`, `demo` or `production`. Anything else refuses to start, so a typo cannot skip these checks.
+
+`demo` and `production` are for servers other people can reach. `config.py` and `api/runtime.py` refuse to start either one unless:
 
 - `SECRET_KEY` is at least 32 characters and is not the development default
 - `COOKIE_SECURE=true`
-- `SHOW_SIMULATED_OTP=false`
-- `DEMO_STAFF_PASSWORD` is set, if the database still has to be seeded
+- `STAFF_PASSWORD_AGENT`, `STAFF_PASSWORD_SUPERVISOR` and `STAFF_PASSWORD_FINANCE_LEAD` are set, if the database still has to be seeded. Each needs at least 12 characters, and no two can match
+- no staff account still has the published development password
+
+`production` also needs `SHOW_SIMULATED_OTP=false`. `demo` keeps the simulated code, because a public demo has no SMS provider.
 
 `ALLOWED_ORIGINS=*` is refused everywhere, because the API uses cookies. `.env` is ignored by git, and the settings loader never logs or returns a value it reads. Model client errors carry only a status and a short code, because providers can echo part of a key or a prompt.
+
+### 12. Staying up
+
+A turn cut off by a crash leaves its message marked as running, and the list of running turns lives in memory. At startup every such message is marked failed, so the customer can send it again, and the action records stop a second payment. This assumes one server process: a second one starting would fail the first one's live turns.
+
+Event streams hold no database connection, and neither does a model call. Each conversation and each client has a limit on open streams.
+
+On Windows, `jalboot serve` uses a selector loop. Uvicorn's default Windows loop stopped accepting for good after 100 connection resets in 3 of 3 runs, with the process still running. The selector loop took 1,500 resets in 3 of 3 runs. It has a limit of its own: `select()` fails at about 510 open sockets, and that ends the event loop. So connections past 480 are dropped, and the server recovers when they close, which was checked at 520, 600 and 900 sockets. Other platforms keep uvicorn's default loop, and none of this was tested on them.
 
 ## If the model is taken over
 
@@ -198,7 +210,8 @@ These are the parts of the design that would need work before real use. The [REA
 - **Docker has never been run.** Any hardening in the image is untested.
 - **Chat has no rate limits.** Conversations and messages are not throttled, so a script can spend model tokens or fill the database.
 - **The client key is the socket address.** Behind a proxy, every client could share one throttle key unless the proxy is set up to pass the real address. The same setup affects the Origin check, which compares against the scheme the server sees. Neither has been tested behind a proxy.
-- **Conversation tokens do not expire**, and nothing closes a conversation.
+- **Conversation tokens do not expire** while a chat is open. Closing a chat ends what its token can do.
+- **One client can fill the Windows connection limit.** Holding 480 idle connections keeps others out until they close. The stream limits do not cover a connection that never sends a request.
 - **Staff have no second factor.** Any signed-in staff member can read any conversation. Roles limit money decisions, not reading.
 - **A citation check is not a truth check.** It proves the passage was retrieved, not that it supports the sentence.
 - **A figure check matches values.** A true number from the wrong rule passes it.
