@@ -359,7 +359,7 @@ Full tables and intervals are in [docs/evaluation.md](docs/evaluation.md). No fi
 ### The agent
 
 <!-- results:status -->
-**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 1 of 259 cases, partial for the agent and not run for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 11 of 259 cases, partial for the agent and 1 of 259 cases, partial for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
 <!-- /results:status -->
 
 <!-- results:run -->
@@ -369,10 +369,10 @@ Full tables and intervals are in [docs/evaluation.md](docs/evaluation.md). No fi
 | Dense search | e5-small |
 | Code version | `1d2bf61` |
 | Date | 2026-11-01 |
-| Development cases | 1 of 259 cases, partial |
-| Plain chatbot, development cases | Not run |
+| Development cases | 11 of 259 cases, partial |
+| Plain chatbot, development cases | 1 of 259 cases, partial |
 | Held-out cases | Not run |
-| Why a run stopped | development: stopped at the provider's limit: provider returned HTTP 429; retry in 1447s |
+| Why a run stopped | development: stopped at the provider's limit: provider returned HTTP 429; retry in 228s ; plain chatbot: stopped at the provider's limit: provider returned HTTP 429; retry in 379s |
 <!-- /results:run -->
 
 **The model has not been scored yet.** The one development case that has run is a safety report, which triage handles in code with no model call. On the next case the provider returned HTTP 429 with a wait of 1,447 seconds, so the run stopped there, as it is built to. Mock mode results are not shown, because they say nothing about quality.
