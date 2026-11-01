@@ -29,6 +29,20 @@ async function verify(api: SupportApi, id: string) {
   await api.confirmVerification(id, CODE);
 }
 
+describe('desk honesty', () => {
+  it.each(['en', 'ar'] as const)('never shows a customer photo as real (%s)', async (locale) => {
+    const api = setup();
+    api.setLocale(locale);
+    const refunds = await api.listRefunds();
+    const photos = refunds
+      .flatMap((refund) => refund.evidence)
+      .filter((item) => /photo|صورة/i.test(item.label));
+    expect(photos.length).toBeGreaterThan(0);
+    expect(photos.every((item) => item.simulated)).toBe(true);
+    expect(photos.some((item) => /received|وصلت/.test(item.value))).toBe(false);
+  });
+});
+
 describe('identity', () => {
   it('refuses order tools until the conversation is verified', async () => {
     const api = setup();

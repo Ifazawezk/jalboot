@@ -119,7 +119,7 @@ function PlaybackBar() {
 
 function Composer() {
   const { t } = useI18n();
-  const { state, send, stop, requestPerson } = useChat();
+  const { state, send, stop, requestPerson, reset } = useChat();
   const [text, setText] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
   const locked = identityOpen(state.identity);
@@ -182,7 +182,14 @@ function Composer() {
         )}
       </div>
       <div className="composer__foot">
-        {locked ? (
+        {state.closed ? (
+          <p className="composer__hint">
+            {t('chat.closed')}{' '}
+            <button type="button" className="link" onClick={reset}>
+              {t('chat.newChat')}
+            </button>
+          </p>
+        ) : locked ? (
           <p id="composer-locked" className="composer__hint">
             {t('identity.locked')}
           </p>

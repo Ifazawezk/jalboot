@@ -140,7 +140,9 @@ function Docket({ refund, onDecide }: { refund: Refund; onDecide: (refund: Refun
                 {refund.evidence.map((item) => (
                   <div key={item.label}>
                     <dt>{item.label}</dt>
-                    <dd>{item.value}</dd>
+                    <dd>
+                      {item.simulated && <span className="tag">{t('queue.simulated')}</span>} {item.value}
+                    </dd>
                   </div>
                 ))}
               </dl>

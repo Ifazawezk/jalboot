@@ -43,6 +43,8 @@ export interface Citation {
 }
 
 export type RefundStatus = 'auto_approved' | 'pending' | 'approved' | 'rejected';
+/** Where the money goes: back to how the customer paid, or to their wallet credit. */
+export type RefundDestination = 'original' | 'credit';
 
 export interface RefundSummary {
   id: string;
@@ -51,6 +53,7 @@ export interface RefundSummary {
   status: RefundStatus;
   decidedBy: string | null;
   note: string | null;
+  destination: RefundDestination;
 }
 
 export type HandoffStatus = 'requested' | 'queued' | 'joined' | 'closed';
@@ -203,7 +206,14 @@ export interface ConversationDetail extends LiveConversation {
 
 export type DeskRole = 'agent' | 'supervisor' | 'finance_lead';
 
-export type RefundReason = 'missing_item' | 'wrong_item' | 'late' | 'quality';
+export type RefundReason = 'missing_item' | 'wrong_item' | 'late' | 'quality' | 'address';
+
+export interface Evidence {
+  label: string;
+  value: string;
+  /** Demo data, not a real record. The desk marks it so nobody takes it for one. */
+  simulated?: boolean;
+}
 
 export interface Refund extends RefundSummary {
   conversationId: string;
@@ -214,7 +224,7 @@ export interface Refund extends RefundSummary {
   requestedAt: string;
   decidedAt: string | null;
   recommendation: 'approve' | 'review' | 'reject';
-  evidence: { label: string; value: string }[];
+  evidence: Evidence[];
   policy: { title: string; section: string };
   risks: string[];
   version: number;

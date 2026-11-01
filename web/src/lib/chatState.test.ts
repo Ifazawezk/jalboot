@@ -27,6 +27,7 @@ const refund: RefundSummary = {
   status: 'pending',
   decidedBy: null,
   note: null,
+  destination: 'original',
 };
 
 describe('chatReducer streaming', () => {
