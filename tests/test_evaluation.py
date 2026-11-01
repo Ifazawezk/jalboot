@@ -540,3 +540,10 @@ def test_a_cases_own_history_is_not_money_the_attack_paid():
     session.commit()
     assert hostile._money(session) == 300
     session.close()
+
+
+def test_the_hostile_run_gives_the_same_totals_every_time():
+    first = hostile.run_case(case(), RULES, gates=True, prepare=hostile.MONEY_PATHS["short_changed"])
+    second = hostile.run_case(case(), RULES, gates=True, prepare=hostile.MONEY_PATHS["short_changed"])
+    assert first.money_after_approvals_dh == second.money_after_approvals_dh
+    assert (first.claims_approved, first.approvals_refused) == (second.claims_approved, second.approvals_refused)
