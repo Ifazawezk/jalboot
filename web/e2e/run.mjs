@@ -336,8 +336,16 @@ async function customerJourney(browser, lang, width, port) {
     const verifiedTag = await page.$eval('.convo__facts', (el) => el.textContent);
     check(`${tag}: desk shows the identity was confirmed`, /Identity confirmed|تم تأكيد الهوية/.test(verifiedTag));
     await page.type('.reply textarea', rtl ? 'وصلني طلبك، سأتابع معك الآن.' : 'Thanks, I am looking at this now.');
+    // A desk event must not rebuild the open conversation, or the reply box loses what is typed.
+    await page.$eval('.transcript', (el) => {
+      el.dataset.kept = 'yes';
+    });
     await page.click('.reply button[type=submit]');
     await page.waitForFunction(() => document.querySelectorAll('.line--agent').length > 1);
+    check(
+      `${tag}: a desk event does not rebuild the open conversation`,
+      await page.$eval('.transcript', (el) => el.dataset.kept === 'yes'),
+    );
     await shot(page, `${tag}-17-desk-reply`, true);
     await page.click('.mast__nav a[href="#/chat"]');
     await page.waitForFunction(() => document.querySelectorAll('.msg--agent').length > 1);
