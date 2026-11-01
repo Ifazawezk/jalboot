@@ -10,14 +10,14 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from jalboot.agent.loop import SupportAgent
 from jalboot.api.events import Broker
 from jalboot.config import ConfigError, Settings
 from jalboot.db.base import create_schema, make_engine, make_session_factory
-from jalboot.db.models import StaffUser, WorldMeta
+from jalboot.db.models import Message, StaffUser, WorldMeta
 from jalboot.kb.store import KnowledgeBase, load_encoder, load_passages
 from jalboot.llm.client import LLMClient, client_from_env
 from jalboot.llm.mock import MockPlanner
@@ -147,6 +147,11 @@ def build_runtime(settings: Settings, llm: LLMClient | None = None) -> Runtime:
         if settings.is_public:
             refuse_published_password(session)
         anchor = session.scalar(select(WorldMeta)).anchor
+        # active_turns is memory only, so at startup no turn can still be running. Left
+        # alone, a turn cut off by a crash would answer turn_in_progress forever. The
+        # customer can now send it again, and the action records stop a second payment.
+        session.execute(update(Message).where(Message.turn_state == "running").values(turn_state="error"))
+        session.commit()
     return Runtime(
         settings=settings,
         engine=engine,
