@@ -12,6 +12,7 @@ import json
 import time
 from datetime import timedelta
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
@@ -106,6 +107,24 @@ def test_open_desk_streams_hold_no_database_connection(app):
         return held, {stream.status for stream in streams}
 
     assert asyncio.run(run()) == (0, {200})
+
+
+def test_a_request_still_gets_a_connection_with_more_streams_open_than_the_pool_holds(app):
+    """The pool holds 15. If each stream kept one, this request would wait 30 seconds and fail."""
+    opened = conversations(app, MAX_STREAMS_PER_CLIENT)
+    pool = app.state.runtime.engine.pool
+    assert MAX_STREAMS_PER_CLIENT > pool.size() + pool._max_overflow
+
+    async def run():
+        streams = [Stream(app, f"{V1}/conversations/{cid}/events", auth) for cid, auth in opened]
+        await asyncio.gather(*(stream.ready() for stream in streams))
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as http:
+            created = await asyncio.wait_for(http.post(f"{V1}/conversations", json={"locale": "en"}), 5)
+        await asyncio.gather(*(stream.close() for stream in streams))
+        return created.status_code
+
+    assert asyncio.run(run()) == 201
 
 
 def test_a_stream_still_checks_who_is_asking(app):
