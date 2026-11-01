@@ -46,6 +46,18 @@ CLAIM_WORDS = {
 }
 
 
+# Models like typographic hyphens and spaces. An order number holding one cannot be
+# searched or copied, and it slips past every pattern here.
+LOOKALIKES = str.maketrans({
+    "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-", "\u2014": "-",
+    "\u00a0": " ", "\u202f": " ", "\u2009": " ", "\u2007": " ",
+})
+
+
+def tidy_reply(reply: str) -> str:
+    return reply.translate(LOOKALIKES).strip()
+
+
 @dataclass
 class CheckResult:
     ok: bool = True
@@ -93,6 +105,24 @@ def check_citations(reply: str, source_count: int, result: CheckResult) -> None:
         elif number not in seen:
             seen.append(number)
     result.citations = seen
+
+
+UNSURE_WORDS = tuple(normalize(word) for word in (
+    "not sure", "don't know", "do not know", "no information", "cannot find", "can't find", "ticket", "a person",
+    "لست متاكد", "لا اعرف", "ليس لدي", "لا املك", "تذكره", "موظف",
+))
+
+
+def check_cited(reply: str, source_count: int, used_tools: bool, result: CheckResult) -> None:
+    """An answer drawn from the policy has to say where it came from. A short greeting,
+    a reply built on tool results and an honest "I do not know" do not need a source."""
+    if used_tools or not source_count or result.citations:
+        return
+    folded = normalize(reply)
+    if any(word in folded for word in UNSURE_WORDS):
+        return
+    if re.search(r"\d", folded) or len(folded) > 120:
+        result.fail("the answer does not cite its source with a marker such as [1]")
 
 
 def check_figures(reply: str, evidence: Sequence[str], result: CheckResult) -> None:
@@ -151,9 +181,11 @@ def check_reply(
     allowed_contacts: Iterable[str],
     system_prompt: str,
     canary: str,
+    used_tools: bool = True,
 ) -> CheckResult:
     result = CheckResult()
     check_citations(reply, source_count, result)
+    check_cited(reply, source_count, used_tools, result)
     check_figures(reply, evidence, result)
     check_claims(reply, done, result)
     check_leaks(reply, allowed_contacts, system_prompt, canary, result)

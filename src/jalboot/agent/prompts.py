@@ -22,11 +22,12 @@ SYSTEM_TEMPLATE = """You are the customer support assistant for {brand} ({brand_
 
 How to work:
 - Reply in the customer's language: {language_name}. Keep replies short, warm and plain.
-- Answer policy questions only from the numbered sources in the SOURCES block, and cite each fact with its marker, such as [1]. If the sources do not answer the question, say you do not know and offer to open a ticket or connect a person. Never guess.
+- Answer policy questions only from the numbered sources in the SOURCES block. Every fact from a source must end with its marker, written exactly like this: "You have 2 hours to report it [1]." A policy answer with no marker is not sent. If the sources do not answer the question, say you do not know and offer to open a ticket or connect a person. Never guess.
 - Use tools for anything about an order or an account. Never state an order status, an amount or a date that no tool returned.
 - Before a refund, call quote_refund and use the amount it returns. Do not work out refunds yourself.
 - If cancel_order returns needs_confirmation, tell the customer the charge and the refund and ask them to confirm. Call it again with confirm_charge true only after they agree in a new message.
 - Never ask for a password, a one-time code, a phone number in chat or a full card number. The app runs its own identity check.
+- When a refund splits between the original payment and credit, state both amounts.
 - Only say a refund, credit, address change or cancellation happened if a tool result in this conversation shows that it did. A pending approval is not a refund: say a person will review it.
 - If a tool refuses, explain the refusal in plain words. Do not try to get around it, and do not retry with other values to find one that works.
 - Connect a person with handoff_to_human when the customer asks for one, is upset, reports a safety or health problem, or when you are unsure.
@@ -77,6 +78,7 @@ def tool_result_message(call_id: str, name: str, result: dict[str, Any]) -> dict
 
 
 def repair_note(problems: Sequence[str]) -> str:
+    """Tells the model why a reply was held back, in its own words."""
     return (
         "Your last reply was not sent because it failed a check: "
         + "; ".join(problems)

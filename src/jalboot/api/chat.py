@@ -8,6 +8,7 @@ told about a row it cannot read yet.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Callable
@@ -20,10 +21,12 @@ from jalboot.api.errors import ApiError, error_body
 from jalboot.api.runtime import Runtime
 from jalboot.db.base import utcnow
 from jalboot.db.models import Approval, AuditEvent, Conversation, Customer, Message, Order
+from jalboot.llm.client import LLMError
 from jalboot.policy.engine import ROLES
 from jalboot.security.redact import redact
 from jalboot.tools.executor import ToolContext, ToolExecutor
 
+log = logging.getLogger("jalboot.chat")
 Emit = Callable[[dict[str, Any]], None]
 CHUNK = 28
 TOOLS_WITH_ORDER = {"track_order", "get_order_details", "explain_delay"}
@@ -166,7 +169,10 @@ def run_turn(runtime: Runtime, plan: TurnPlan, emit: Emit) -> None:
     session = runtime.sessions()
     try:
         _run(runtime, session, plan, emit)
-    except Exception:  # noqa: BLE001  (the customer gets a clean error, never a trace)
+    except Exception as failure:  # noqa: BLE001  (the customer gets a clean error, never a trace)
+        # The type and the safe text of model errors only. Customer text is never logged.
+        detail = str(failure) if isinstance(failure, LLMError) else ""
+        log.error("turn failed: %s %s", type(failure).__name__, detail)
         session.rollback()
         message = session.get(Message, plan.message_id)
         if message is not None:

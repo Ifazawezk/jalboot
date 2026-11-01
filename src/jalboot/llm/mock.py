@@ -300,6 +300,13 @@ class MockPlanner:
                 f"I have filed QAR {amount} for review. A person will decide and you will see the result here.{cite}",
                 f"أرسلت طلب استرداد {amount} ريال إلى موظف للمراجعة، وستظهر لك النتيجة هنا.{cite}",
             ), turn.language))
+        split = result.get("to_credit_qar") and result.get("to_original_payment_qar")
+        if split:
+            card, credit = _number(result["to_original_payment_qar"]), _number(result["to_credit_qar"])
+            return _text(_say((
+                f"Your order has been refunded QAR {amount}: QAR {card} to your card and QAR {credit} as credit.{cite}",
+                f"تم استرداد {amount} ريال لطلبك: {card} ريال إلى البطاقة و{credit} ريال رصيدا.{cite}",
+            ), turn.language))
         return _text(_say((
             f"Your order has been refunded QAR {amount}.{cite}",
             f"تم استرداد {amount} ريال لطلبك.{cite}",

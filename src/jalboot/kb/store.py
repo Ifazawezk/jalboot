@@ -88,6 +88,16 @@ def load_passages(folder: Path | None = None) -> list[Passage]:
     return passages
 
 
+def load_encoder(name: str) -> Any:
+    """Loads an embedding model by preset name. Empty means none. It needs the embeddings
+    extra, so the default install runs with no model at all."""
+    if not name:
+        return None
+    from jalboot.retrieval.dense import MODEL_PRESETS, SentenceTransformerEncoder
+
+    return SentenceTransformerEncoder(MODEL_PRESETS[name])
+
+
 def prompt_text(text: str) -> str:
     if len(text) <= PROMPT_CHARS:
         return text
@@ -95,15 +105,17 @@ def prompt_text(text: str) -> str:
 
 
 class KnowledgeBase:
-    """Hybrid search per language. Extra retrievers, such as dense embeddings or a
-    reranker, are plugged in by build_retriever after they are measured."""
+    """Hybrid search per language: BM25 and character n-grams, plus dense embeddings
+    when they are installed and switched on. A reranker is left out, because it lowered
+    recall on the development questions (eval/results/retrieval-dev.json)."""
 
     def __init__(
         self,
         passages: Sequence[Passage],
         *,
         include_internal: bool = False,
-        retrievers: dict[str, Retriever] | None = None,
+        encoder: Any = None,
+        cache_dir: Path | None = None,
     ):
         self.all_passages = list(passages)
         self.by_key = {(p.language, p.id): p for p in self.all_passages}
@@ -118,10 +130,12 @@ class KnowledgeBase:
             ids = [p.id for p in visible]
             texts = [p.search_text for p in visible]
             self.bm25[language] = BM25Index().fit(ids, texts)
-            if retrievers and language in retrievers:
-                self.retrievers[language] = retrievers[language]
-            else:
-                self.retrievers[language] = HybridRetriever([self.bm25[language], CharNgramIndex().fit(ids, texts)])
+            members: list[Retriever] = [self.bm25[language], CharNgramIndex().fit(ids, texts)]
+            if encoder is not None:
+                from jalboot.retrieval.dense import DenseIndex
+
+                members.append(DenseIndex(encoder, ids, texts, cache_dir))
+            self.retrievers[language] = HybridRetriever(members)
 
     def hits(self, query: str, language: str, k: int = 5) -> list[Hit]:
         return self.retrievers.get(language, self.retrievers["en"]).search(query, k=k)

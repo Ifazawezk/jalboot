@@ -48,6 +48,8 @@ class Settings:
     # Shrinks the generated world, for tests and small machines.
     world_scale: float = 1.0
     show_simulated_otp: bool = True
+    # An embedding preset such as e5-small. Empty keeps search model free.
+    embeddings: str = ""
     web_dist: Path = field(default_factory=lambda: ROOT / "web" / "dist")
     knowledge_dir: Path = field(default_factory=lambda: ROOT / "knowledge")
     index_dir: Path = field(default_factory=lambda: ROOT / "var" / "index")
@@ -88,6 +90,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         seed=int(env.get("WORLD_SEED", "").strip() or defaults.seed),
         world_scale=float(env.get("WORLD_SCALE", "").strip() or defaults.world_scale),
         show_simulated_otp=_flag(env.get("SHOW_SIMULATED_OTP"), True),
+        embeddings=env.get("EMBEDDINGS", "").strip(),
         web_dist=Path(env.get("WEB_DIST", "").strip() or defaults.web_dist),
         knowledge_dir=Path(env.get("KNOWLEDGE_DIR", "").strip() or defaults.knowledge_dir),
         index_dir=Path(env.get("INDEX_DIR", "").strip() or defaults.index_dir),

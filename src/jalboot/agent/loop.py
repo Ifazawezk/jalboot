@@ -138,8 +138,8 @@ class SupportAgent:
                 reply = self.llm.chat(messages, tools.specs())
             except self.propagate:
                 raise
-            except LLMError:
-                result.flags.append("llm_error")
+            except LLMError as error:
+                result.flags.append(f"llm_error: {error}")
                 self._fall_back(result, text, tools, history, customer_label, emit)
                 return
 
@@ -167,15 +167,16 @@ class SupportAgent:
                     return
                 continue
 
-            verdict = self._check(reply.content, text, passages, result, tools, system)
+            content = checks.tidy_reply(reply.content)
+            verdict = self._check(content, text, passages, result, tools, system)
             if verdict.ok:
-                self._accept(result, reply.content, verdict, passages, text, emit)
+                self._accept(result, content, verdict, passages, text, emit)
                 return
             result.flags.extend(f"check_failed: {problem}" for problem in verdict.problems)
             if repaired:
                 break
             repaired = True
-            messages.append({"role": "assistant", "content": reply.content})
+            messages.append({"role": "assistant", "content": content})
             messages.append({"role": "user", "content": prompts.repair_note(verdict.problems)})
         self._fall_back(result, text, tools, history, customer_label, emit)
 
@@ -203,6 +204,7 @@ class SupportAgent:
             allowed_contacts=tools.allowed_contacts(),
             system_prompt=system,
             canary=self.canary,
+            used_tools=any(entry["result"].get("ok") for entry in result.tool_log),
         )
 
     def _accept(self, result, reply, verdict, passages, text, emit) -> None:

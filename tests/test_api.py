@@ -16,7 +16,9 @@ from jalboot import audit
 from jalboot.api.app import COOKIE, create_app
 from jalboot.config import Settings
 from jalboot.db.models import Message, Refund, WebSession
+from jalboot.llm.client import LLMError
 from jalboot.world.demo import DEMO_PHONES
+from tests.conftest import database_url
 
 V1 = "/api/v1"
 PASSWORD = "jalboot-local-demo"
@@ -28,7 +30,7 @@ ALLOWED = "http://allowed.test"
 @pytest.fixture
 def client(tmp_path):
     settings = Settings(
-        database_url=f"sqlite:///{(tmp_path / 't.sqlite3').as_posix()}",
+        database_url=database_url(tmp_path),
         allowed_origins=(ALLOWED,),
         web_dist=tmp_path / "missing",
         world_scale=0.05,
@@ -482,3 +484,42 @@ def test_an_arabic_conversation_gets_arabic_labels_and_text(client):
 
 def test_demo_phones_match_the_verify_format():
     assert DEMO_PHONES["C-1001"].replace(" ", "") == LAYLA
+
+
+class Down:
+    provider, model = "test", "down"
+
+    def chat(self, messages, tools=None):
+        raise LLMError("test returned HTTP 503")
+
+
+def app_with(tmp_path, llm):
+    settings = Settings(
+        database_url=database_url(tmp_path), web_dist=tmp_path / "missing", world_scale=0.05,
+    )
+    return create_app(settings, llm)
+
+
+def test_when_the_model_is_down_a_live_chat_reaches_a_person(tmp_path):
+    with TestClient(app_with(tmp_path, Down()), base_url="http://testserver") as test_client:
+        cid, auth = start(test_client)
+        response = say(test_client, cid, auth, "what is your policy on late orders")
+        assert find(response, "message.end") == {"finish": "handoff"}
+
+
+def test_a_recording_stops_at_a_model_error_rather_than_saving_a_fallback(tmp_path):
+    with TestClient(app_with(tmp_path, Down()), base_url="http://testserver") as test_client:
+        runtime(test_client).propagate = (LLMError,)
+        cid, auth = start(test_client)
+        response = say(test_client, cid, auth, "what is your policy on late orders")
+        assert find(response, "error")["error"]["code"] == "internal_error"
+        assert "message.end" not in names(response)
+
+
+def test_a_failed_turn_can_be_sent_again(tmp_path):
+    with TestClient(app_with(tmp_path, Down()), base_url="http://testserver") as test_client:
+        runtime(test_client).propagate = (LLMError,)
+        cid, auth = start(test_client)
+        say(test_client, cid, auth, "what is your policy on late orders")
+        again = say(test_client, cid, auth, "what is your policy on late orders")
+        assert again.status_code == 200

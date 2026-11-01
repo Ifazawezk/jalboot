@@ -1,0 +1,39 @@
+# Local stack: the app and PostgreSQL. Mock mode by default, so it needs no key.
+#
+#   POSTGRES_PASSWORD=choose-one docker compose up --build
+#
+# The app listens on 127.0.0.1 only. Set the production values in .env.example, and put
+# it behind HTTPS, before exposing it to anyone.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: jalboot
+      POSTGRES_DB: jalboot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jalboot -d jalboot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://jalboot:${POSTGRES_PASSWORD}@db:5432/jalboot
+      LLM_MODE: ${LLM_MODE:-mock}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-20b}
+      SECRET_KEY: ${SECRET_KEY:-}
+      DEMO_STAFF_PASSWORD: ${DEMO_STAFF_PASSWORD:-}
+    ports:
+      - "127.0.0.1:8000:8000"
+
+volumes:
+  pgdata:

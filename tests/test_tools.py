@@ -401,3 +401,100 @@ def test_a_first_report_inside_the_window_counts_after_the_window_ends(db):
 def test_without_a_first_report_the_same_claim_is_too_late(db):
     tools = tools_for(db, make_conversation(db), now=ANCHOR + timedelta(hours=30))
     assert tools.execute("issue_refund", MISSING)["error"] == "outside_reporting_window"
+
+
+def test_a_mixed_payment_refunds_the_card_part_first(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.extra = {**(order.extra or {}), "credit_paid_dh": 2000}
+    db.commit()
+    before = db.get(Customer, "C-1001").wallet_dh
+    paid_card = order.total_dh - 2000
+    result = layla.execute("issue_refund", {
+        "order_id": "JB-700102", "amount_qar": 4.0, "reason": "missing_item", "items": ["Karak tea"],
+    })
+    assert result["to_original_payment_qar"] == 4.0 and paid_card > 400
+    assert db.get(Customer, "C-1001").wallet_dh == before
+
+
+def test_a_cash_refund_goes_to_credit(db):
+    order = db.get(Order, "JB-700102")
+    order.payment_method = "cash"
+    db.commit()
+    tools = tools_for(db, make_conversation(db))
+    before = db.get(Customer, "C-1001").wallet_dh
+    result = tools.execute("issue_refund", MISSING)
+    assert result["to_credit_qar"] == 4.0
+    assert db.get(Customer, "C-1001").wallet_dh == before + 400
+
+
+def test_tool_results_give_doha_time_so_a_model_cannot_quote_utc(layla):
+    result = layla.execute("track_order", {"order_id": "JB-700101"})
+    assert result["promised_at"] == "2026-11-03 18:20 Doha time"
+
+
+def bogo(db):
+    order = db.get(Order, "JB-700102")
+    item = order.items[0]
+    item.extra = {"offer": "buy_one_get_one", "charged_units": 1}
+    item.quantity = 2
+    db.commit()
+    return item.name
+
+
+def test_wrg03_one_missing_unit_of_a_pair_is_the_free_one(db, layla):
+    name = bogo(db)
+    args = {"order_id": "JB-700102", "reason": "missing_item", "items": [name]}
+    assert layla.execute("quote_refund", args)["error"] == "no_refund_value"
+    assert layla.execute("issue_refund", {**args, "amount_qar": 20.0})["error"] == "no_refund_value"
+    assert refund_count(db) == 0
+
+
+def test_wrg03_both_units_missing_refunds_the_price_paid(db, layla):
+    name = bogo(db)
+    quote = layla.execute("quote_refund", {
+        "order_id": "JB-700102", "reason": "missing_item", "items": [name], "quantity": 2,
+    })
+    assert quote["amount_qar"] == 20.0
+
+
+def test_wrg01_a_short_quantity_refunds_only_the_missing_units(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.items[0].quantity = 3
+    db.commit()
+    quote = layla.execute("quote_refund", {
+        "order_id": "JB-700102", "reason": "missing_item", "items": [order.items[0].name], "quantity": 1,
+    })
+    assert quote["amount_qar"] == 20.0
+
+
+def test_a_zero_or_negative_quantity_is_refused(layla):
+    args = {"order_id": "JB-700102", "reason": "missing_item", "items": ["Karak tea"]}
+    assert layla.execute("quote_refund", {**args, "quantity": 0})["error"] == "invalid_argument"
+    assert layla.execute("quote_refund", {**args, "quantity": -2})["error"] == "invalid_argument"
+
+
+def test_grc04_an_approved_substitute_cannot_be_rejected(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.items[0].extra = {"substitute_for": "Something", "customer_approved": True}
+    db.commit()
+    result = layla.execute("quote_refund", {
+        "order_id": "JB-700102", "reason": "substitute_rejected", "items": [order.items[0].name],
+    })
+    assert result["error"] == "approved_substitute"
+
+
+def test_lat04_a_door_drop_with_proof_is_delivered(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.extra = {"proof_of_delivery": True, "gps_distance_m": 40, "leave_at_door": True}
+    db.commit()
+    result = layla.execute("issue_refund", {"order_id": "JB-700102", "amount_qar": 10.0, "reason": "not_received"})
+    assert result["error"] == "delivered_at_door_with_proof"
+
+
+def test_order_details_list_only_chosen_facts(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.extra = {"proof_of_delivery": True, "internal_score": 7}
+    db.commit()
+    details = layla.execute("get_order_details", {"order_id": "JB-700102"})
+    assert details["proof_of_delivery"] is True
+    assert "internal_score" not in details
