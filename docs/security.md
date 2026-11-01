@@ -91,13 +91,14 @@ sequenceDiagram
   T-->>M: pending_approval, nothing paid
   M-->>C: A person will review it
   D->>T: Approve, with role, CSRF token and version
-  T->>T: Recheck role and the cap on the order
+  T->>T: Rerun the policy rules and the role for the new total
   T-->>D: Refund and audit row commit together
   T-->>C: refund.update
 ```
 
 - The server works out whether the signed-in person can decide. The page never compares amounts against a limit.
-- The cap is checked again at decision time, because the order may have changed since the claim was filed.
+- The policy rules run again at decision time, because the order may have changed since the claim was filed. They use the time the customer reported the issue, so a slow decision does not close the window.
+- Claims waiting for a person count toward the total on the order when another claim is filed. At decision time the required role is worked out from the total after this payment and can only rise, so small approvals cannot add up past a role's limit.
 - A stale `version` is refused, so two people cannot decide one refund.
 - A rejection needs a reason, and the customer sees it.
 
@@ -169,7 +170,7 @@ This shows some tampering after the fact, not all of it. Changing a row, or remo
 
 ## If the model is taken over
 
-A prompt can fail, so `evaluation/hostile.py` assumes it has. It skips the model and fires hostile tool calls straight at the tool layer, with the gates on and then off, and records what really changed. The numbers and how to reproduce them are in [evaluation.md](evaluation.md#the-compromised-model-test).
+A prompt can fail, so `evaluation/hostile.py` assumes it has. It skips the model and fires hostile tool calls straight at the tool layer, with the gates on and then off, and records what really changed. It then approves every waiting claim in a row and checks what was paid against what the records allow. It goes around the agent loop, so it says nothing about the customer's-own-request rule. The numbers and how to reproduce them are in [evaluation.md](evaluation.md#the-compromised-model-test).
 
 With the gates on, no call has read another customer's data, and no call from an unverified session has paid anything. Money still moves, though, and that matters more than the headline. The gates decide whether a claim fits the rules. They cannot tell whether it is true, so a false report of a missing item on the attacker's own delivered order pays out like an honest one, up to the automated limits. The damage is bounded in code and it is not zero. Reducing it further takes a person or fraud signals.
 

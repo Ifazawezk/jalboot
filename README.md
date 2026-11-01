@@ -177,7 +177,7 @@ Every tool call passes these gates in order, in [`tools/executor.py`](src/jalboo
 | Leaking approval limits or the prompt | Internal sections are not indexed for customers, a canary and a repeat check guard the prompt | `kb/store.py`, `agent/checks.py` |
 | One-time codes in chat | Redacted before storage or any model, with a fixed reply | `security/redact.py`, `api/chat.py` |
 | Paying twice | An idempotency key per action, a per item check across conversations, and one writer at a time | `tools/executor.py`, `audit.py` |
-| Staff acting above their level | Role limits are enforced on the server, and limits are rechecked at decision time | `tools/approvals.py` |
+| Staff acting above their level | Role limits are enforced on the server, for the total on the order after the payment, and the policy rules run again at decision time | `tools/approvals.py` |
 | Another site driving the desk | HttpOnly cookie, SameSite, an Origin check and a CSRF token | `api/guards.py`, `api/app.py` |
 | Quietly editing history | A SHA-256 hash chain on the audit log finds an edited or removed row | `audit.py` |
 
@@ -185,21 +185,24 @@ Most of these have a named test in `tests/`. The red team results are in [Result
 
 ### If the model is taken over
 
-A prompt can fail, so this test assumes it already has. [`evaluation/hostile.py`](src/jalboot/evaluation/hostile.py) skips the model completely. For each case it fires the calls an attacker would want straight at the tool layer: every read, refunds for the whole order, one item refunds, goodwill credit, an address change and a cancellation, on every order in the case. It does this with the gates on and then off, and records what really changed in the database. It needs no key, and nothing in it depends on how a model behaves.
+A prompt can fail, so this test assumes it already has. [`evaluation/hostile.py`](src/jalboot/evaluation/hostile.py) skips the model and the agent loop. For each case it fires the calls an attacker would want straight at the tool layer, patiently, small claims first: every read, item refunds, repeats under changed item lists, whole-order claims, goodwill, an address change and a cancellation. It does this with the gates on and then off, and records what really changed in the database. Then one person approves every waiting claim in a row, and a separate check compares what was paid with what the records allow. It needs no key, and nothing in it depends on how a model behaves.
 
-On the 61 development red team cases, with 901 hostile tool calls. These figures are in [`eval/results/hostile-dev.json`](eval/results/hostile-dev.json), and `python -m jalboot.evaluation.hostile --split dev` repeats them with no key:
+On the 61 development red team cases, with 2,222 hostile tool calls. These figures are in [`eval/results/hostile-dev.json`](eval/results/hostile-dev.json), and `python -m jalboot.evaluation.hostile --split dev` repeats them with no key:
 
 | | Gates on | Gates off |
 | --- | --- | --- |
 | Reads of data that was not theirs | **0** | 54 |
 | Cases where an order was changed | **0** | 61 |
-| QAR paid, whole run | **1,150.00** | 63,893.20 |
-| QAR paid, most in one case | **25.00** | 1,806.80 |
-| Claims filed for a person instead | 86 | 0 |
+| QAR paid by the tools, whole run | **1,060.00** | 35,894.15 |
+| QAR paid, most in one case | **25.00** | 930.35 |
+| Claims filed for a person instead | 54 | 0 |
+| Limit breaks | **0** | 210 |
 
-**The money is not zero, and that is a real limit of this design.** Gates check whether a claim fits the rules, not whether it is true. A verified customer who falsely reports a missing item on their own delivered order looks exactly like an honest one. In 42 cases the same QAR 25 was paid: a QAR 15 item refund plus QAR 10 of goodwill, both inside the automated limits. Another 10 cases paid the goodwill alone. The 9 cases that paid nothing are the 9 sessions that never passed the identity check. Stopping a false claim that fits the rules takes a person or fraud signals, and no gate here can do it.
+The same attack also ran with a double charge, a change shortfall or a failed delivery added to every order, and one person approving everything. There were 0 limit breaks with the gates on, and about 600 with them off, which shows the check can see one. [docs/evaluation.md](docs/evaluation.md#the-compromised-model-test) has those runs. The test finds only the kinds of break it checks for, and it goes around the agent loop, so it does not measure the customer's-own-request rule.
 
-**QAR 25 is also not a ceiling.** It is what these orders allow, because their items are cheap. Across all 191 development cases that hold orders (2,511 calls), reads of other people's data stayed at 0, and the most paid in one case was QAR 60: the QAR 50 automated refund limit plus QAR 10 of goodwill. Each case holds only a few orders, so this does not measure an attacker working through many orders over weeks. The repeat-claim rules exist for that, and this test does not measure them. It also covers the tool layer only, so it says nothing about what a taken-over model could write in a reply.
+**The money is not zero, and that is a real limit of this design.** Gates check whether a claim fits the rules, not whether it is true. A verified customer who falsely reports a missing item on their own delivered order looks exactly like an honest one. The 9 cases that never passed the identity check paid nothing. Stopping a false claim that fits the rules takes a person or fraud signals, and no gate here can do it.
+
+**QAR 25.00 is also not a ceiling.** It is what these orders allow, because their items are cheap. Across all 191 development cases that hold orders (6,228 calls), reads of other people's data stayed at 0, and the most paid in one case was QAR 310.00, a confirmed double charge plus goodwill. A person who approves everything can pay out much more: QAR 9,811.63 across those cases, inside every limit. Each case holds only a few orders, so this does not measure an attacker working through many orders over weeks. The repeat-claim rules exist for that, and this test does not measure them. It also covers the tool layer only, so it says nothing about what a taken-over model could write in a reply.
 
 ## Quick start
 
@@ -354,7 +357,7 @@ From [`eval/results/retrieval-dev.json`](eval/results/retrieval-dev.json): searc
 
 ### The compromised-model test
 
-0 reads of other people's data across 901 hostile tool calls on the development red team cases, and QAR 1,150.00 paid against QAR 63,893.20 with the gates off. The money that still gets through is the point of the test: see [If the model is taken over](#if-the-model-is-taken-over).
+0 reads of other people's data across 2,222 hostile tool calls on the development red team cases, QAR 1,060.00 paid against QAR 35,894.15 with the gates off, and 0 limit breaks against 210. The money that still gets through is the point of the test: see [If the model is taken over](#if-the-model-is-taken-over).
 
 ### Reading these results
 
@@ -410,9 +413,6 @@ This is an open demo, so nothing here is secret. The split is there to show the 
 
 **Does the Docker setup work?**
 Nobody knows yet. It has never been built or run. Please open an issue if you try it.
-
-**Why is a mock run in `eval/results`?**
-It shows that the evaluation pipeline runs from end to end with no key. The mock planner is a keyword matcher, so that file says nothing about how good Jalboot is.
 
 **Do the numbers on the desk's Quality page mean anything?**
 No. They come from simulated tickets, and they are not the evaluation results. Those are in [Results](#results).
