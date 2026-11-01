@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import func, select
 
 from jalboot.agent import checks, consent
+from jalboot.tools import specs
 from jalboot.agent.loop import MAX_STEPS, SupportAgent, relevant
 from jalboot.api.views import citation_view
 from jalboot.db.models import Customer, Order, Refund
@@ -666,3 +667,16 @@ def test_the_ways_of_asking_to_cancel_are_recognised(text):
 @pytest.mark.parametrize("tool", ["issue_refund", "cancel_order", "change_address"])
 def test_a_word_that_only_looks_like_a_request_does_not_count(tool):
     assert not consent.customer_asked(tool, "وقت الغداء عندكم؟", [], True)
+
+
+def test_consent_and_the_tool_definitions_agree_on_what_needs_a_request():
+    flagged = {name for name, spec in specs.TOOLS.items() if spec.moves_money}
+    assert flagged == set(consent.ACTIONS)
+    assert all(consent.needs_request(name) for name in flagged)
+    assert not consent.needs_request("track_order") and not consent.needs_request("no_such_tool")
+
+
+def test_a_promo_code_is_spent_only_if_the_customer_asked():
+    assert consent.customer_asked("apply_promo", "please apply my code", [], False)
+    assert consent.customer_asked("apply_promo", "عندي كود خصم", [], False)
+    assert not consent.customer_asked("apply_promo", "where is my order?", [], False)

@@ -1114,3 +1114,11 @@ def test_a_change_shortfall_is_never_a_parcel_claim(db, layla):
     order = parcel(db)
     claim = {"order_id": order.id, "amount_qar": 140.0, "reason": "driver_change_short"}
     assert layla.execute("issue_refund", claim)["error"] == "no_change_shortfall_recorded"
+
+
+def test_a_refusal_from_outside_the_tools_is_on_the_audit_log(db, layla):
+    outcome = layla.refuse("issue_refund", MISSING, "needs_customer_request", next_step="ask")
+    assert outcome == {"ok": False, "error": "needs_customer_request", "next_step": "ask"}
+    row = audit_rows(db, "guardrail.blocked")[-1]
+    assert (row.outcome, row.detail["tool"], row.detail["error"]) == ("denied", "issue_refund", "needs_customer_request")
+    assert refund_count(db) == 0

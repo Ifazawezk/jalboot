@@ -48,6 +48,8 @@ class Tools(Protocol):
 
     def allowed_contacts(self) -> list[str]: ...
 
+    def refuse(self, name: str, arguments: dict[str, Any], code: str, **details: Any) -> dict[str, Any]: ...
+
 
 @dataclass
 class TurnResult:
@@ -160,10 +162,10 @@ class SupportAgent:
         emit({"type": "tool.end", "id": call.id, "tool": call.name, "result": outcome})
         return outcome
 
-    def _refuse_tool(self, result: TurnResult, call: ToolCall, emit: Emit) -> dict[str, Any]:
+    def _refuse_tool(self, result: TurnResult, tools: Tools, call: ToolCall, emit: Emit) -> dict[str, Any]:
         """The customer did not ask for this action, so it never reaches the tools."""
         emit({"type": "tool.start", "id": call.id, "tool": call.name, "arguments": call.arguments})
-        outcome = {"ok": False, "error": consent.NEEDS_REQUEST, "next_step": consent.ASK_THE_CUSTOMER}
+        outcome = tools.refuse(call.name, call.arguments, consent.NEEDS_REQUEST, next_step=consent.ASK_THE_CUSTOMER)
         result.tool_log.append({"tool": call.name, "arguments": call.arguments, "result": outcome})
         emit({"type": "tool.end", "id": call.id, "tool": call.name, "result": outcome})
         result.flags.append(f"blocked_action: {call.name}")
@@ -203,7 +205,7 @@ class SupportAgent:
                     # A malformed call goes on to the tools, which refuse it and audit that.
                     gated = consent.needs_request(call.name) and not call.malformed
                     if gated and not consent.customer_asked(call.name, text, history, outside_text):
-                        outcome = self._refuse_tool(result, call, emit)
+                        outcome = self._refuse_tool(result, tools, call, emit)
                     else:
                         outcome = self._run_tool(result, tools, call, emit)
                     outside_text = outside_text or consent.reads_outside_text(call.name, outcome)

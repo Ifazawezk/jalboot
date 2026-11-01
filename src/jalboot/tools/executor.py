@@ -192,6 +192,10 @@ class ToolExecutor:
     def _identity_missing(self, spec: specs.ToolSpec) -> bool:
         return spec.needs_identity and self.customer is None
 
+    def refuse(self, name: str, arguments: dict[str, Any], code: str, **details: Any) -> dict[str, Any]:
+        """For a caller that stops a tool before it runs, so the refusal is still on record."""
+        return self._block(name, arguments, refused(code, **details))
+
     def _block(self, name: str, arguments: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         with audit.serial_write(self.session):
             self._audit("guardrail.blocked", "denied", name, arguments, result)

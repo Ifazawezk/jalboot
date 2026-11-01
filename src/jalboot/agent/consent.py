@@ -24,6 +24,7 @@ from typing import Any, Mapping, Sequence
 
 from jalboot.agent.triage import word_pattern
 from jalboot.text.normalize import normalize
+from jalboot.tools import specs
 
 NEEDS_REQUEST = "needs_customer_request"
 ASK_THE_CUSTOMER = (
@@ -61,12 +62,15 @@ ADDRESS_WORDS = word_pattern(
     "شارع", "مبني",
 )
 ADDRESS_OFFER = word_pattern("address", "عنوان")
+# A code is spent once, so a note or a document must not be able to spend it.
+PROMO_WORDS = word_pattern("promo*", "code*", "coupon*", "voucher*", "discount*", "كود", "كوبون", "قسيمه", "خصم", "رمز")
 # What the customer can say to ask for each action, and what a bot offer of it looks like.
 ACTIONS = {
     "issue_refund": (MONEY_CLAIM, MONEY_OFFER),
     "issue_credit": (MONEY_CLAIM, MONEY_OFFER),
     "cancel_order": (CANCEL_WORDS, CANCEL_WORDS),
     "change_address": (ADDRESS_WORDS, ADDRESS_OFFER),
+    "apply_promo": (PROMO_WORDS, PROMO_WORDS),
 }
 AGREES = re.compile(
     r"(?<!\w)(?:yes|yeah|yep|sure|ok|okay|please do|go ahead|do it|confirm\w*|agreed?"
@@ -76,7 +80,8 @@ DECLINES = re.compile(r"(?<!\w)(?:no|not|never|don't|dont|cancel|لا|مو|ما)
 
 
 def needs_request(tool: str) -> bool:
-    return tool in ACTIONS
+    spec = specs.TOOLS.get(tool)
+    return spec is not None and spec.moves_money
 
 
 def reads_outside_text(tool: str, outcome: Mapping[str, Any]) -> bool:

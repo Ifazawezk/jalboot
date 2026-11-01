@@ -49,6 +49,8 @@ class ToolSpec:
     required: tuple[str, ...] = ()
     needs_identity: bool = True
     writes: bool = False
+    # Changes what a customer pays or gets. It runs only if the customer asked (agent/consent.py).
+    moves_money: bool = False
 
     def openai(self) -> dict[str, Any]:
         return {
@@ -144,6 +146,7 @@ TOOLS = {
             },
             ("order_id", "amount_qar", "reason"),
             writes=True,
+            moves_money=True,
         ),
         ToolSpec(
             "issue_credit",
@@ -155,6 +158,7 @@ TOOLS = {
             },
             ("order_id", "amount_qar", "reason"),
             writes=True,
+            moves_money=True,
         ),
         ToolSpec(
             "apply_promo",
@@ -165,6 +169,7 @@ TOOLS = {
             },
             ("code",),
             writes=True,
+            moves_money=True,
         ),
         ToolSpec(
             "change_address",
@@ -175,6 +180,7 @@ TOOLS = {
             },
             ("order_id", "new_address"),
             writes=True,
+            moves_money=True,
         ),
         ToolSpec(
             "cancel_order",
@@ -187,6 +193,7 @@ TOOLS = {
             },
             ("order_id",),
             writes=True,
+            moves_money=True,
         ),
         ToolSpec(
             "create_ticket",
