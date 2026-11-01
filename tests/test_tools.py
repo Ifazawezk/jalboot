@@ -732,7 +732,7 @@ def test_bug4_a_unit_waiting_for_a_person_counts_as_claimed(db, layla):
     quote = layla.execute("quote_refund", {
         "order_id": "JB-700103", "reason": "damaged_item", "items": [{"name": "Grilled hammour"}],
     })
-    assert quote["error"] == "item_already_refunded"
+    assert quote["error"] == "refund_pending_review"
 
 
 def test_bug4_a_rejected_claim_frees_nothing_up_by_replaying_as_paid(db, layla):
@@ -908,7 +908,7 @@ def test_a_duplicate_charge_is_paid_once_whatever_items_are_listed(db, layla):
     for items in ([{"name": "Karak tea"}], [{"name": "Hummus plate"}], [{"name": "Karak tea"}, {"name": "Hummus plate"}]):
         assert layla.execute("issue_refund", {**claim, "items": items})["replayed"] is True
     assert paid_on(db, order.id) == 3000
-    assert layla.execute("quote_refund", {"order_id": order.id, "reason": "duplicate_charge"})["amount_qar"] == 0.0
+    assert layla.execute("quote_refund", {"order_id": order.id, "reason": "duplicate_charge"})["error"] == "already_refunded"
 
 
 def test_a_change_shortfall_is_paid_once_whatever_items_are_listed(db, layla):
@@ -1140,3 +1140,69 @@ def test_an_approval_does_not_warn_about_itself(db, layla):
     approval_id = file_large_refund(db, layla)
     risks = views._risks(db, RULES, db.get(Approval, approval_id), db.get(Order, "JB-700103"), ANCHOR, "en")
     assert not any("waiting on this order" in risk for risk in risks)
+
+
+def test_a_claim_waiting_for_a_person_is_not_called_refunded(db, layla):
+    """Nothing has been paid, so saying it was would be false."""
+    layla.execute("issue_refund", {**HAMMOUR, "reason": "wrong_item"})
+    again = layla.execute("quote_refund", {
+        "order_id": "JB-700103", "reason": "damaged_item", "items": [{"name": "Grilled hammour"}],
+    })
+    assert again["error"] == "refund_pending_review"
+    assert "do not say" in again["next_step"]
+    assert refund_count(db) == 0
+    assert db.scalar(select(func.count()).select_from(Approval)) == 1
+
+
+def test_once_a_person_pays_it_the_same_item_reads_as_refunded(db, layla):
+    first = layla.execute("issue_refund", {**HAMMOUR, "reason": "wrong_item"})
+    decide(db, first["approval_id"], staff(db), "approve", "", 1, ANCHOR, RULES)
+    again = layla.execute("quote_refund", {
+        "order_id": "JB-700103", "reason": "damaged_item", "items": [{"name": "Grilled hammour"}],
+    })
+    assert again["error"] == "item_already_refunded"
+
+
+def test_a_line_part_paid_and_part_waiting_says_which(db, layla):
+    order = db.get(Order, "JB-700103")
+    line = next(item for item in order.items if item.name == "Mixed grill plate")
+    assert line.quantity == 2
+    claim = {"order_id": order.id, "reason": "missing_item"}
+    db.add(Refund(id="R-X", order_id=order.id, customer_id="C-1001", amount_dh=8000, method="original", reason="missing_item",
+                  items=[{"name": "mixed grill plate", "units": 1}], idempotency_key="other", created_at=ANCHOR))
+    db.commit()
+    assert layla.execute("issue_refund", {**claim, "amount_qar": 80.0, "items": [{"name": line.name, "quantity": 2}]})["status"] == "pending_approval"
+    assert layla.execute("quote_refund", {**claim, "items": [{"name": line.name, "quantity": 1}]})["error"] == "item_already_refunded"
+    assert layla.execute("quote_refund", {**claim, "items": [{"name": line.name, "quantity": 2}]})["error"] == "refund_pending_review"
+
+
+def test_parcel_cover_held_by_a_waiting_claim_is_not_called_used(db, layla):
+    order = parcel(db)
+    approval_id = layla.execute("issue_refund", {
+        "order_id": order.id, "amount_qar": 200.0, "reason": "damaged_item",
+    })["approval_id"]
+    quote = {"order_id": order.id, "reason": "not_received"}
+    assert layla.execute("quote_refund", quote)["error"] == "refund_pending_review"
+    decide(db, approval_id, staff(db), "approve", "", 1, ANCHOR, RULES)
+    assert layla.execute("quote_refund", quote)["error"] == "parcel_cover_used"
+
+
+def test_a_duplicate_waiting_for_a_person_is_not_called_refunded(db, layla):
+    order = db.get(Order, "JB-700102")
+    charge = {"at": ANCHOR.isoformat(), "amount_dh": 40000, "kind": "final"}
+    with_extra(order, charges=[charge, charge])
+    db.commit()
+    filed = layla.execute("issue_refund", {"order_id": order.id, "amount_qar": 400.0, "reason": "duplicate_charge"})
+    assert filed["status"] == "pending_approval"
+    quote = layla.execute("quote_refund", {"order_id": order.id, "reason": "duplicate_charge"})
+    assert quote["error"] == "refund_pending_review"
+
+
+def test_a_paid_failed_delivery_is_not_called_uncollected(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.status, order.tip_dh, order.delivered_at = "failed_customer", 500, None
+    with_extra(order, driver_wait_minutes=10, driver_calls=3)
+    db.commit()
+    layla.execute("issue_refund", {"order_id": order.id, "amount_qar": 5.0, "reason": "failed_contact_refund"})
+    quote = layla.execute("quote_refund", {"order_id": order.id, "reason": "failed_contact_refund"})
+    assert quote["error"] == "already_refunded"
