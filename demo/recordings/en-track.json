@@ -1,0 +1,197 @@
+{
+ "id": "en-track",
+ "locale": "en",
+ "title": "Where is my order",
+ "summary": "Confirms who is asking, then reads the live status.",
+ "recordedAt": "2026-11-01T01:43:09Z",
+ "conversationId": "rec-en-track",
+ "source": "groq/openai/gpt-oss-20b",
+ "steps": [
+  {
+   "waitMs": 500,
+   "event": {
+    "type": "customer.message",
+    "id": "c1",
+    "text": "Hi, where is my order JB-700101?"
+   }
+  },
+  {
+   "waitMs": 600,
+   "event": {
+    "type": "message.start",
+    "messageId": "m1"
+   }
+  },
+  {
+   "waitMs": 300,
+   "event": {
+    "type": "tool.start",
+    "toolCallId": "t1",
+    "tool": "track_order",
+    "label": "Checking your order"
+   }
+  },
+  {
+   "waitMs": 700,
+   "event": {
+    "type": "tool.end",
+    "toolCallId": "t1",
+    "status": "ok",
+    "label": "Need to confirm it is you"
+   }
+  },
+  {
+   "waitMs": 200,
+   "event": {
+    "type": "identity.required",
+    "reason": "order_tools"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "I need to confirm it is you "
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "before I can open your order"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "."
+   }
+  },
+  {
+   "waitMs": 200,
+   "event": {
+    "type": "message.end",
+    "finish": "identity_required"
+   }
+  },
+  {
+   "waitMs": 1400,
+   "event": {
+    "type": "identity.code_sent",
+    "maskedPhone": "+974 •••• 1001"
+   }
+  },
+  {
+   "waitMs": 1500,
+   "event": {
+    "type": "identity.verified"
+   }
+  },
+  {
+   "waitMs": 600,
+   "event": {
+    "type": "message.start",
+    "messageId": "m1"
+   }
+  },
+  {
+   "waitMs": 300,
+   "event": {
+    "type": "tool.start",
+    "toolCallId": "t1",
+    "tool": "track_order",
+    "label": "Checking your order"
+   }
+  },
+  {
+   "waitMs": 700,
+   "event": {
+    "type": "tool.end",
+    "toolCallId": "t1",
+    "status": "ok",
+    "label": "Checked your order"
+   }
+  },
+  {
+   "waitMs": 200,
+   "event": {
+    "type": "order.card",
+    "order": {
+     "id": "JB-700101",
+     "vertical": "food",
+     "status": "on_the_way",
+     "store": "Lantern Shawarma, Al Dafna",
+     "area": "West Bay",
+     "placedAt": "2026-11-03T14:35:00Z",
+     "etaAt": "2026-11-03T15:20:00Z",
+     "deliveredAt": null,
+     "rider": "Lina",
+     "items": [
+      {
+       "name": "Chicken biryani",
+       "qty": 1,
+       "priceQar": 38.0
+      },
+      {
+       "name": "Karak tea",
+       "qty": 2,
+       "priceQar": 4.0
+      }
+     ],
+     "feesQar": 11.0,
+     "totalQar": 57.0
+    }
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "Your order JB-700101 is on t"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "he way from Lantern Shawarma"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": ", Al Dafna. It’s expected to"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": " arrive around 18:20 Doha ti"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "me. If you need more details"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": ", let me know!"
+   }
+  },
+  {
+   "waitMs": 200,
+   "event": {
+    "type": "message.end",
+    "finish": "complete"
+   }
+  }
+ ]
+}

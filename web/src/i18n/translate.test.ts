@@ -19,7 +19,10 @@ describe('dictionaries', () => {
     expect(en['mode.demo.title']).toBe('Scripted example');
     expect(en['rec.label']).toBe('Scripted example');
     expect(ar['rec.label']).toBe(ar['mode.demo.title']);
-    const demoKeys = keys.filter((key) => /^(rec\.|mode\.demo\.|identity\.recorded)/.test(key));
+    const real = ['rec.headingMixed', 'rec.pickBodyMixed', 'rec.recorded', 'rec.recordedBody'];
+    const demoKeys = keys.filter(
+      (key) => /^(rec\.|mode\.demo\.|identity\.recorded)/.test(key) && !real.includes(key),
+    );
     for (const key of demoKeys) {
       expect(en[key]).not.toMatch(/saved|recorded|recording/i);
       expect(ar[key]).not.toMatch(/محفوظ|مسجل|تسجيل/);

@@ -1,0 +1,68 @@
+{
+ "id": "en-policy",
+ "locale": "en",
+ "title": "Policy question",
+ "summary": "Answers from the written policy and cites the section.",
+ "recordedAt": "2026-11-01T01:53:39Z",
+ "conversationId": "rec-en-policy",
+ "source": "groq/openai/gpt-oss-20b",
+ "steps": [
+  {
+   "waitMs": 500,
+   "event": {
+    "type": "customer.message",
+    "id": "c1",
+    "text": "How long do I have to report that my food arrived cold?"
+   }
+  },
+  {
+   "waitMs": 600,
+   "event": {
+    "type": "message.start",
+    "messageId": "m1"
+   }
+  },
+  {
+   "waitMs": 200,
+   "event": {
+    "type": "citation",
+    "citation": {
+     "n": 1,
+     "sourceId": "refunds-and-credits",
+     "title": "Refunds and credits",
+     "section": "REF-02: Reporting windows",
+     "excerpt": "Unless the table says otherwise, the window starts at `delivered_at`.\n\n| Issue | Window |\n|---|---|\n| Restaurant food: missing, wrong or damaged | 24 hours |\n| Restaurant food: quality other than temperature | 24 hours |\n| Restaurant food: arrived at the wrong temperature | 2 hou",
+     "updatedAt": "2026-11-01T00:00:00Z"
+    }
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "You have 2 hours to report t"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "hat your food arrived at the"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": " wrong temperature. [1]"
+   }
+  },
+  {
+   "waitMs": 200,
+   "event": {
+    "type": "message.end",
+    "finish": "complete"
+   }
+  }
+ ]
+}

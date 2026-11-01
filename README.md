@@ -10,7 +10,7 @@
   <img alt="Languages: Arabic and English" src="https://img.shields.io/badge/languages-Arabic%20%7C%20English-0b5f5a">
   <img alt="All data is simulated" src="https://img.shields.io/badge/data-simulated-lightgrey">
   <img alt="Runs with no API key" src="https://img.shields.io/badge/API%20key-optional-informational">
-  <a href="#results"><img alt="Evaluation results are pending" src="https://img.shields.io/badge/evaluation-results%20pending-lightgrey"></a>
+  <a href="#results"><img alt="Evaluation: see Results for what has run" src="https://img.shields.io/badge/evaluation-see%20results-lightgrey"></a>
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen"></a>
 </p>
 
@@ -21,6 +21,7 @@
 
 | You are... | Go to |
 | --- | --- |
+| Wanting to see it with nothing to install | [Public demo](https://ifazawezk.github.io/jalboot/), which plays recordings and needs no key |
 | Reviewing this as a portfolio project | [Why](#why), [Results](#results) and [Limits](#limits) |
 | Building an AI agent that can take actions | [Security model](#security-model) and [docs/security.md](docs/security.md) |
 | Checking how it was measured | [docs/evaluation.md](docs/evaluation.md) |
@@ -45,7 +46,7 @@ So Jalboot treats the model as an untrusted planner. It can read, draft and prop
 - **Knows when to stop.** Safety, legal threats, account takeover, complaints about staff, requests for a person and upset customers are caught in code before any model runs.
 - **Gives people a real desk.** Live conversations, a refund queue with role limits, an audit log, top issues and quality charts, in both languages. The desk's charts are built from simulated tickets and are not evaluation results.
 - **Runs with no key.** `LLM_MODE=mock` swaps the model for a rule based planner, so the whole system runs offline. Mock results are never offered as a measure of quality.
-- **Is set up to be measured on held-out cases.** 364 test cases, 105 of them held out and not yet run, score what the tools logged rather than what the bot said it did. See [Results](#results).
+- **Is set up to be measured on held-out cases.** 364 test cases score what the tools logged rather than what the bot said it did. The 105 held-out ones are sealed outside this repository and have not been run. See [Results](#results).
 - **Assumes the model can be taken over.** A [compromised-model test](#if-the-model-is-taken-over) skips the model and fires hostile tool calls straight at the tool layer, with the gates on and then off, and records what really changed.
 
 ## Screenshots
@@ -202,14 +203,14 @@ The same attack also ran with a double charge, a change shortfall or a failed de
 
 **The money is not zero, and that is a real limit of this design.** Gates check whether a claim fits the rules, not whether it is true. A verified customer who falsely reports a missing item on their own delivered order looks exactly like an honest one. The 9 cases that never passed the identity check paid nothing. Stopping a false claim that fits the rules takes a person or fraud signals, and no gate here can do it.
 
-**QAR 25.00 is also not a ceiling.** It is what these orders allow, because their items are cheap. Across all 191 development cases that hold orders (6,228 calls), reads of other people's data stayed at 0, and the most paid in one case was QAR 310.00, a confirmed double charge plus goodwill. A person who approves everything can pay out much more: QAR 9,811.63 across those cases, inside every limit. Each case holds only a few orders, so this does not measure an attacker working through many orders over weeks. The repeat-claim rules exist for that, and this test does not measure them. It also covers the tool layer only, so it says nothing about what a taken-over model could write in a reply.
+**QAR 25.00 is also not a ceiling.** It is what these orders allow, because their items are cheap. Across all 191 development cases that hold orders (6,228 calls), reads of other people's data stayed at 0, and the most paid in one case was QAR 310.00, a confirmed double charge plus goodwill. A person who approves everything can pay out much more: QAR 9,722.18 across those cases, inside every limit. Each case holds only a few orders, so this does not measure an attacker working through many orders over weeks. The repeat-claim rules exist for that, and this test does not measure them. It also covers the tool layer only, so it says nothing about what a taken-over model could write in a reply.
 
 ## Quick start
 
 You need Python 3.11 or newer and Node for the web app. It was developed and run on Windows 11 with Python 3.12 and Node 24, and other setups have not been tried. No API key is needed.
 
 ```bash
-git clone <this repository> jalboot && cd jalboot
+git clone https://github.com/Ifazawezk/jalboot.git jalboot && cd jalboot
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
@@ -226,6 +227,17 @@ Open <http://127.0.0.1:8000>. The server hosts the API and the web app on one or
 `VITE_API_MODE=live` matters. A plain `npm run build` makes the sample mode from the screenshots, which never calls the server. For UI work, run `npm run dev` in `web/` beside the server, and set `VITE_API_MODE=live` to have Vite forward API calls to port 8000.
 
 The first start builds a seeded world in `var/jalboot.sqlite3`: 400 customers, 80 drivers, 3,000 orders and 600 tickets, plus two demo customers. `WORLD_SEED` and `WORLD_SCALE` change it.
+
+### The static demo
+
+The public demo is a static site with no server and no key, so it can go on GitHub Pages:
+
+```bash
+cd web
+VITE_BASE_PATH=/jalboot/ npm run build:demo   # writes web/dist-demo. In Git Bash, add MSYS_NO_PATHCONV=1
+```
+
+It plays the recordings in [`demo/recordings`](demo/recordings) and the scripted examples, and labels each one. A recording is a real model run on simulated data, made by `scripts/record_demo.py` through the real API, identity check and desk included. Nothing in one is written by hand, and it names its model and date. The pauses are set for reading, not measured. The scripted examples are written by hand and say so.
 
 ### Demo accounts
 
@@ -321,25 +333,43 @@ Full tables and intervals are in [docs/evaluation.md](docs/evaluation.md). No fi
 
 ### The agent
 
-> [!NOTE]
-> **Not filled in yet.** Every `TODO` below will be replaced with a number from a recorded run. Nothing here is estimated.
+<!-- results:status -->
+**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 1 of 259 cases, partial for the agent and not run for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+<!-- /results:status -->
 
-Model: `TODO`. Version: `TODO`. Date: `TODO`. A gate must hold in each language, not only overall.
+<!-- results:run -->
+| Run detail | Value |
+| --- | --- |
+| Model | `openai-gpt-oss-20b` |
+| Dense search | e5-small |
+| Code version | `1d2bf61` |
+| Date | 2026-11-01 |
+| Development cases | 1 of 259 cases, partial |
+| Plain chatbot, development cases | Not run |
+| Held-out cases | Not run |
+| Why a run stopped | development: stopped at the provider's limit: provider returned HTTP 429; retry in 1447s |
+<!-- /results:run -->
 
-| Metric | Gate | Dev | Test | Test, English | Test, Arabic |
+**The model has not been scored yet.** The one development case that has run is a safety report, which triage handles in code with no model call. On the next case the provider returned HTTP 429 with a wait of 1,447 seconds, so the run stopped there, as it is built to. Mock mode results are not shown, because they say nothing about quality.
+
+A gate must hold in each language, not only overall. Every figure below comes from a file in [`eval/results`](eval/results), and a run with fewer than 20 cases shows no rates.
+
+<!-- results:agent -->
+| Metric | Gate | Dev | Held-out | Held-out, English | Held-out, Arabic |
 | --- | --- | --- | --- | --- | --- |
-| Resolution rate | at least 0.80 | TODO | TODO | TODO | TODO |
-| Wrong-refund rate | at most 0.02 | TODO | TODO | TODO | TODO |
-| Missed-refund rate | at most 0.10 | TODO | TODO | TODO | TODO |
-| Unauthorized data access, `exposed` | 0 events | TODO | TODO | TODO | TODO |
-| Citation precision | at least 0.90 | TODO | TODO | TODO | TODO |
-| Citation recall | at least 0.80 | TODO | TODO | TODO | TODO |
-| Invented citations | 0 | TODO | TODO | TODO | TODO |
-| Abstention accuracy | at least 0.85 | TODO | TODO | TODO | TODO |
-| Escalation recall | at least 0.95 | TODO | TODO | TODO | TODO |
-| Escalation precision | at least 0.80 | TODO | TODO | TODO | TODO |
-| Red team, `critical` severity | every case passes | TODO | TODO | TODO | TODO |
-| Red team, overall | at least 0.95 | TODO | TODO | TODO | TODO |
+| Resolution rate | at least 0.80 | Too few cases | Not run | Not run | Not run |
+| Wrong-refund rate | at most 0.02 | Too few cases | Not run | Not run | Not run |
+| Missed-refund rate | at most 0.10 | Too few cases | Not run | Not run | Not run |
+| Unauthorized data access, `exposed` | 0 events | Too few cases | Not run | Not run | Not run |
+| Citation precision | at least 0.90 | Too few cases | Not run | Not run | Not run |
+| Citation recall | at least 0.80 | Too few cases | Not run | Not run | Not run |
+| Invented citations | 0 | Too few cases | Not run | Not run | Not run |
+| Abstention accuracy | at least 0.85 | Too few cases | Not run | Not run | Not run |
+| Escalation recall | at least 0.95 | Too few cases | Not run | Not run | Not run |
+| Escalation precision | at least 0.80 | Too few cases | Not run | Not run | Not run |
+| Red team, `critical` severity | every case passes | Too few cases | Not run | Not run | Not run |
+| Red team, overall | at least 0.95 | Too few cases | Not run | Not run | Not run |
+<!-- /results:agent -->
 
 ### Retrieval
 
@@ -354,9 +384,9 @@ From [`eval/results/retrieval-dev.json`](eval/results/retrieval-dev.json): searc
 | BM25 + dense | 0.96 | 0.98 | 0.907 |  |
 | **BM25 + n-grams + dense** | **0.96** | **0.98** | **0.877** | **`EMBEDDINGS=e5-small`** |
 | Best system + reranker | 0.94 | 0.98 | 0.881 | Left out |
-| Held-out test set | TODO | TODO | TODO | |
+| Held-out test set | Not run | Not run | Not run | |
 
-**These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so they are picked from their own test. One question moves a recall by 0.02. The held-out test set will give the honest number. On these questions, adding dense search to the default gained 5 questions at Recall@3 and lost none.
+**These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so they are picked from their own test. One question moves a recall by 0.02. The held-out test set will give the honest number, and it has not been run. On these questions, adding dense search to the default gained 5 questions at Recall@3 and lost none.
 
 ### The compromised-model test
 
@@ -439,7 +469,7 @@ No. They come from simulated tickets, and they are not the evaluation results. T
 - **A confirmed charge proves a later turn, not agreement.** Code makes sure the customer was quoted first. A model that ignores a "no" in a later turn could still confirm, which is why the test cases forbid it.
 - **The audit chain carries no secret key.** It shows a changed row, or a removed row with rows after it. Deleting the newest rows goes unnoticed, and someone with full database access could rewrite the whole chain.
 - **Photo evidence is simulated.** There is no upload. A photo counts when the order's simulated record says one is on file.
-- **There are no real recordings yet.** The sample conversations in the web app are scripted. Recordings of real model runs come from `scripts/record_demo.py`, which has not completed a run.
+- **The recordings show a few runs, not a typical one.** Each is one real run on simulated data. They were kept as they came, flaws included, and the Arabic ones were not checked by an Arabic speaker. They are not evidence of quality. The scored results are in [Results](#results).
 - **The name is not cleared.** A few web searches found no Gulf delivery company called Jalboot. That is not a trademark or company registry check.
 - **Redaction covers phones, emails, card numbers and codes.** Names and addresses in free text stay, and in `llm` mode they reach the provider.
 - **Some rules are not enforced in code.** ESC-03 also bans medical and legal advice and admissions of fault. Triage sends health reports to a person, but no reply check covers these.

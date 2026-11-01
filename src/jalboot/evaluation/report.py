@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 
 from jalboot.env import ROOT, load_env_file
@@ -27,6 +28,7 @@ from jalboot.llm.client import client_from_env
 from jalboot.llm.mock import MockPlanner
 from jalboot.policy.rules import Rules
 
+GOLDEN_RATIO = (5 ** 0.5 - 1) / 2
 RUNS = EVAL_DIR / "runs"
 RESULTS = EVAL_DIR / "results"
 TEST_LOG = EVAL_DIR / "test_runs.md"
@@ -47,14 +49,16 @@ def note_test_run(version: str, why: str) -> None:
         handle.write(f"| {day} | {version} | {test_files_hash()} | {why} |\n")
 
 
-def even_sample(cases: list[dict], sets: tuple[str, ...], size: int) -> list[dict]:
-    """The same evenly spaced cases each time, so a sample can be repeated and compared."""
-    chosen = []
-    for name in sets:
-        group = [case for case in cases if case["set"] == name]
-        step = max(len(group) // size, 1)
-        chosen.extend(group[::step][:size])
-    return chosen
+def spread(cases: list[dict]) -> list[dict]:
+    """A fixed order in which any first N cases are spread evenly over every set and every
+    topic, so a run stopped by a limit is a fair cross-section and not just the first set.
+    The agent and the baseline get the same order, so their first N cases are the same."""
+    seen: Counter[str] = Counter()
+    keyed = []
+    for case in cases:
+        keyed.append(((seen[case["set"]] * GOLDEN_RATIO) % 1, case["id"], case))
+        seen[case["set"]] += 1
+    return [case for _position, _id, case in sorted(keyed, key=lambda row: row[:2])]
 
 
 def build_llm(mode: str, budget: Budget):
@@ -84,8 +88,8 @@ def main(argv: list[str] | None = None) -> int:
         help="write to eval/results, which is tracked. Without it the report stays in eval/runs",
     )
     parser.add_argument(
-        "--sample", type=int, default=None,
-        help="run only this many evenly spaced cases from each set, for a small run on a tight budget",
+        "--limit", type=int, default=None,
+        help="stop after this many cases of the spread order. A run with no limit carries on from here",
     )
     args = parser.parse_args(argv)
 
@@ -93,15 +97,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("a run on test/ needs --why, which goes in eval/test_runs.md")
     if args.system == "baseline" and args.mode == "mock":
         parser.error("the baseline needs a real model: both sides of a mock comparison are the same keyword rules")
-    if args.publish and (args.mode == "mock" or args.sample):
-        parser.error("only a full run on a real model can be published")
+    if args.publish and args.mode == "mock":
+        parser.error("only a run on a real model can be published")
+    if args.split == "test" and args.limit:
+        parser.error("--limit is for dev: a test run covers every case, unless a provider limit stops it")
 
     sets = tuple(args.sets.split(","))
-    cases = load_cases(args.split, sets)
-    if args.sample:
-        if args.split == "test":
-            parser.error("--sample is for dev: a test run covers every case")
-        cases = even_sample(cases, sets, args.sample)
+    cases = spread(load_cases(args.split, sets))
+    in_split = len(cases)
+    cases = cases[:args.limit] if args.limit else cases
     budget = Budget(requests=args.max_requests, tokens=args.max_tokens, daily_tokens=args.daily_tokens)
     llm = build_llm(args.mode, budget)
     knowledge = KnowledgeBase(
@@ -129,14 +133,16 @@ def main(argv: list[str] | None = None) -> int:
         cases, done, knowledge.section_ids, version=args.version, split=args.split, date=day,
     )
     report.update(
-        system=args.system, mode=args.mode, model=model, stopped_early=stopped, sampled=bool(args.sample),
+        system=args.system, mode=args.mode, model=model, stopped_early=stopped,
+        cases_in_split=in_split, partial=report["cases_run"] < in_split,
+        embeddings=args.embeddings or "none", tokens_used=budget.tokens_used, requests_used=budget.requests_used,
         note="" if args.mode == "llm" else "Mock mode: a keyword planner, not a model.",
     )
     folder = RESULTS if args.publish else RUNS
     folder.mkdir(parents=True, exist_ok=True)
     out = folder / f"{name}.json"
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-    print(f"{report['cases_run']} of {report['cases_total']} cases. Report: {out.relative_to(ROOT)}")
+    print(f"{report['cases_run']} of {in_split} cases. Report: {out.relative_to(ROOT)}")
     print(f"requests {budget.requests_used}, tokens {budget.tokens_used}, cache hits {budget.cache_hits}")
     if stopped:
         print(f"Stopped early: {stopped}. Run the same command later to continue.")

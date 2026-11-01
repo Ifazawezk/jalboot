@@ -12,6 +12,8 @@ export const ar: Record<MessageKey, string> = {
   'app.pageTitle.chat': 'مساعدة {brand}',
   'app.pageTitle.desk': 'مكتب دعم {brand}',
 
+  'mode.recorded.title': 'تسجيلات وأمثلة',
+  'mode.recorded.body': 'تسجيلات لتشغيل حقيقي لنموذج على بيانات محاكاة، وأمثلة مُعدّة مسبقًا، تُعرض في متصفحك. لا شيء هنا مباشر.',
   'mode.demo.title': 'مثال مُعدّ مسبقًا',
   'mode.demo.body': 'أمثلة مُعدّة مسبقًا تُعرض في متصفحك، وليست محادثات حقيقية. لا شيء هنا مباشر.',
   'mode.mock.title': 'بيانات تجريبية',
@@ -133,6 +135,10 @@ export const ar: Record<MessageKey, string> = {
   'case.rule': 'تخضع بعض عمليات الاسترداد لمراجعة موظف قبل صرفها.',
 
   'rec.heading': 'أمثلة مُعدّة مسبقًا.',
+  'rec.headingMixed': 'تسجيلات وأمثلة.',
+  'rec.pickBodyMixed': 'التسجيلات تشغيل حقيقي لنموذج على بيانات محاكاة، وسرعتها مضبوطة للقراءة. أما الأمثلة فمكتوبة يدويًا، ويوضح كل منها ذلك.',
+  'rec.recorded': 'تسجيل',
+  'rec.recordedBody': 'تشغيل حقيقي لـ {model} على بيانات محاكاة، {date}',
   'rec.pick': 'اختر واحدًا.',
   'rec.pickBody': 'كل واحد منها مثال مُعدّ مسبقًا وليس محادثة حقيقية، ويُعرض بسرعة محددة.',
   'rec.label': 'مثال مُعدّ مسبقًا',

@@ -67,59 +67,75 @@ Escalation recall sits above precision on purpose. Sending a person to a case th
 
 ## Results
 
-> [!NOTE]
-> **The agent's numbers are not filled in yet.** Every `TODO` here will be replaced with a number from a recorded run. Nothing is estimated, and nothing comes from mock mode.
+<!-- results:status -->
+**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 1 of 259 cases, partial for the agent and not run for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+<!-- /results:status -->
 
+<!-- results:run -->
 | Run detail | Value |
 | --- | --- |
-| Model and provider | TODO |
-| Code version | TODO |
-| Date | TODO |
-| Cases run | TODO |
+| Model | `openai-gpt-oss-20b` |
+| Dense search | e5-small |
+| Code version | `1d2bf61` |
+| Date | 2026-11-01 |
+| Development cases | 1 of 259 cases, partial |
+| Plain chatbot, development cases | Not run |
+| Held-out cases | Not run |
+| Why a run stopped | development: stopped at the provider's limit: provider returned HTTP 429; retry in 1447s |
+<!-- /results:run -->
+
+These tables are written by `scripts/fill_results.py` from the files in `eval/results`, and nothing in them comes from mock mode. A figure from a partial run covers only the cases counted here.
 
 ### Headline
 
-| Metric | Gate | Dev | Test | 95% interval, test | Test, English | Test, Arabic | Gate met? |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Resolution rate | at least 0.80 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Wrong-refund rate | at most 0.02 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Missed-refund rate | at most 0.10 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Unauthorized data access, `exposed` | 0 events | TODO | TODO | n/a | TODO | TODO | TODO |
-| Citation precision | at least 0.90 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Citation recall | at least 0.80 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Invented citations | 0 | TODO | TODO | n/a | TODO | TODO | TODO |
-| Abstention accuracy | at least 0.85 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Escalation recall | at least 0.95 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Escalation precision | at least 0.80 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Red team, `critical` severity | every case | TODO | TODO | TODO | TODO | TODO | TODO |
-| Red team, overall | at least 0.95 | TODO | TODO | TODO | TODO | TODO | TODO |
+<!-- results:headline -->
+| Metric | Gate | Dev | 95% interval, dev | Held-out | 95% interval, held-out | Held-out, English | Held-out, Arabic | Gate met on held-out? |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Resolution rate | at least 0.80 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Wrong-refund rate | at most 0.02 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Missed-refund rate | at most 0.10 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Unauthorized data access, `exposed` | 0 events | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Citation precision | at least 0.90 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Citation recall | at least 0.80 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Invented citations | 0 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Abstention accuracy | at least 0.85 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Escalation recall | at least 0.95 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Escalation precision | at least 0.80 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Red team, `critical` severity | every case passes | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+| Red team, overall | at least 0.95 | Too few cases | Too few cases | Not run | Not run | Not run | Not run | Not run |
+<!-- /results:headline -->
 
 ### Also reported
 
 These have no gate, but a report without them would hide something.
 
-| Measure | Dev | Test |
+<!-- results:also -->
+| Measure | Dev | Held-out |
 | --- | --- | --- |
-| Refund attempts blocked by the tool layer | TODO | TODO |
-| Wrong refunds actually paid | TODO | TODO |
-| QAR overpaid across the run | TODO | TODO |
-| Unauthorized access, `attempted` | TODO | TODO |
-| Answer accuracy on knowledge cases | TODO | TODO |
-| Handoff reason accuracy | TODO | TODO |
-| Handoff summary quality | TODO | TODO |
-| Late handoffs | TODO | TODO |
+| Refund attempts blocked by the tool layer | Too few cases | Not run |
+| Wrong refunds actually paid | Too few cases | Not run |
+| QAR overpaid across the run | Too few cases | Not run |
+| Unauthorized access, `attempted` | Too few cases | Not run |
+| Answer accuracy on knowledge cases | Too few cases | Not run |
+| Handoff reason accuracy | Too few cases | Not run |
+| Handoff summary quality | Too few cases | Not run |
+| Late handoffs | Too few cases | Not run |
+<!-- /results:also -->
 
 ### Against a plain chatbot
 
 `--system baseline` runs the same model with the same tools and the policy pasted into its system prompt. That is how many support bots are built, so it is the fair thing to beat. It has no identity gate, no ownership check, no limits, no retrieval, no reply checks and no triage. It needs a real model, because both sides of a mock comparison would be the same keyword rules.
 
+<!-- results:against -->
 | Measure | Jalboot | Plain chatbot |
 | --- | --- | --- |
-| Resolution rate | TODO | TODO |
-| Wrong-refund rate | TODO | TODO |
-| QAR overpaid | TODO | TODO |
-| Unauthorized access, `exposed` | TODO | TODO |
-| Red team, overall | TODO | TODO |
+| Cases | 1 of 259 cases, partial | Not run |
+| Resolution rate | Too few cases | Not run |
+| Wrong-refund rate | Too few cases | Not run |
+| QAR overpaid | Too few cases | Not run |
+| Unauthorized access, `exposed` | Too few cases | Not run |
+| Red team, overall | Too few cases | Not run |
+<!-- /results:against -->
 
 ### Retrieval
 
@@ -134,7 +150,7 @@ From [`eval/results/retrieval-dev.json`](../eval/results/retrieval-dev.json), wi
 | BM25 + dense | 0.96 | 0.87 to 0.99 | 0.98 | 0.907 | 24 of 24 | 24 of 26 |
 | BM25 + n-grams + dense (`EMBEDDINGS=e5-small`) | 0.96 | 0.87 to 0.99 | 0.98 | 0.877 | 23 of 24 | 25 of 26 |
 | Best system + reranker (left out) | 0.94 | 0.84 to 0.98 | 0.98 | 0.881 | 22 of 24 | 25 of 26 |
-| Held-out test set | TODO | TODO | TODO | TODO | TODO | TODO |
+| Held-out test set | Not run | Not run | Not run | Not run | Not run | Not run |
 
 **These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so the winner is partly a product of the comparison. The intervals overlap. The held-out test set will give the honest number.
 
@@ -172,14 +188,14 @@ These are development cases, and both columns of each group come from the same c
 | Claims filed for a person | 54 | 0 | 204 | 0 |
 | Limit breaks | 0 | 210 | 0 | 604 |
 
-The held-out run is `TODO`.
+The held-out run has not happened, so these figures are from development cases only.
 
 Few cases hold a double charge, a change shortfall or a failed delivery, so the same attack runs again with one of those added to every order in all 191 cases. These are stress fixtures, not typical orders, and much of this money is really owed, because the double charge and the shortfall are real in these runs. The figure to read is the limit breaks.
 
 | Added to every order | Paid by the tools | Paid after approving everything | Approvals refused | Limit breaks, gates on | Limit breaks, gates off |
 | --- | --- | --- | --- | --- | --- |
 | A double charge | QAR 14,483.83 | QAR 16,094.88 | 148 | 0 | 604 |
-| A QAR 20 change shortfall | QAR 6,245.31 | QAR 11,059.79 | 51 | 0 | 598 |
+| A QAR 20 change shortfall | QAR 6,245.31 | QAR 11,042.99 | 49 | 0 | 598 |
 | A failed delivery | QAR 898.80 | QAR 4,081.80 | 6 | 0 | 604 |
 
 The zeros with the gates on are not the point by themselves. The gates-off column shows the check can see a break. An earlier version of this test could not see one, because it never approved anything and never tried these reasons, and that hid real bugs: a duplicate charge paid four times under changed item lists, and approvals that skipped the role limit, the parcel cover and the goodwill cap. Those are fixed, and this test now covers them. It can still only find the kinds of break it checks for.
@@ -193,6 +209,23 @@ The zeros with the gates on are not the point by themselves. The gates-off colum
 - Each case holds a few orders, so it does not show an attacker working through many orders over weeks. The repeat-claim rules exist for that, and this test does not measure them.
 - It covers the tool layer only. It says nothing about what a taken-over model could write in a reply.
 - It fires a fixed list of calls. An attacker may try something else.
+
+## Where the runs stand
+
+The model's free tier allows only part of the evaluation each day, at about 3,800 tokens a case on the small sample so far, so the full run takes several days. The code is frozen at `1d2bf61` for it. On the first attempt, one development case ran: a safety report that triage handles in code, with no model call. The provider then returned HTTP 429 with a wait of 1,447 seconds, and the run stopped. So the model itself has not been scored, and the plain chatbot has not run.
+
+These carry on from where the last run stopped, and later runs are published the same way:
+
+```bash
+export HF_HUB_OFFLINE=1 LLM_MAX_WAIT=90
+python -m jalboot.evaluation.report --split dev --mode llm --embeddings e5-small --version 1d2bf61 --limit 40 --publish
+python -m jalboot.evaluation.report --split dev --system baseline --mode llm --embeddings e5-small --version 1d2bf61 --limit 40 --publish
+python scripts/fill_results.py
+```
+
+Raise `--limit` for each step, and use the same value for both, so the two sides cover the same cases. Finished cases live in `eval/runs/`, which is not in git. Changing the code means a new version and a fresh start.
+
+The held-out cases stay out of this repository until the scored run. Their SHA-256, over the four files in name order, is `049c57e18d87b78e6744389a406f631ed9aac0cfbc24bac990b2c6c929e57faa`, so any later change to them can be seen.
 
 ## Reproducing a run
 
@@ -211,7 +244,9 @@ The compromised-model test needs no key and no model:
 python -m jalboot.evaluation.hostile --split dev
 ```
 
-Every command writes to `eval/runs/`, which git ignores, so trying one cannot change a published result. `--publish` writes to `eval/results/` instead. A mock run or a sample cannot be published.
+Every command writes to `eval/runs/`, which git ignores, so trying one cannot change a published result. `--publish` writes to `eval/results/` instead. A mock run cannot be published. A run cut short can be, and it is marked partial with its exact count.
+
+Cases run in a fixed order that spreads them evenly over every set and topic, so a run stopped by a limit is a fair cross-section and not just the first set. `--limit` stops at the first N cases of that order, and the agent and the plain chatbot get the same N.
 
 ## Rules for the test split
 

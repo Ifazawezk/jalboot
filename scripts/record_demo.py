@@ -5,8 +5,11 @@ saves the events that came back. Nothing is written by hand. A recording states 
 model produced it, so a mock recording cannot be mistaken for a real one, and it holds
 no phone number and no code.
 
-    python scripts/record_demo.py --mode llm --out web/public/recordings
-    python scripts/record_demo.py --mode mock --scene en-refund
+    python scripts/record_demo.py --mode llm
+    python scripts/record_demo.py --mode mock --scene en-refund --out var/recordings
+
+The web build picks up demo/recordings, so a mock recording must never be saved there.
+The stream arrives in one piece here, so the pauses are set for reading, not measured.
 
 It stops at any provider limit and keeps the scenes already saved. Run it again later
 and it skips them.
@@ -18,7 +21,6 @@ import argparse
 import json
 import sys
 import tempfile
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,11 @@ from jalboot.llm.client import LLMError, RateLimited, client_from_env  # noqa: E
 from jalboot.llm.mock import MockPlanner  # noqa: E402
 
 V1 = "/api/v1"
+READING_PACE_MS = {
+    "customer.message": 500, "message.start": 600, "tool.start": 300, "tool.end": 700, "text.delta": 40,
+    "identity.code_sent": 1400, "identity.verified": 1500, "refund.update": 900, "handoff.update": 1100,
+}
+DEMO_FOLDER = ROOT / "demo" / "recordings"
 LAYLA, NOURA = "+97401001001", "+97401001002"
 STAFF = "sara@jalboot.example"
 PASSWORD = "jalboot-local-demo"
@@ -53,7 +60,7 @@ SCENES: list[dict[str, Any]] = [
     {
         "id": "en-approval", "locale": "en", "phone": LAYLA, "title": "Refund needs a person",
         "summary": "A large claim waits for a person. The desk approves it live.",
-        "messages": ["The grilled hammour on JB-700103 was the wrong dish."],
+        "messages": ["The grilled hammour on JB-700103 was the wrong dish.", "Yes, please refund it."],
         "desk": "approve",
     },
     {
@@ -82,14 +89,9 @@ SCENES: list[dict[str, Any]] = [
 class Recorder:
     def __init__(self) -> None:
         self.steps: list[dict[str, Any]] = []
-        self.last = time.monotonic()
 
     def add(self, event: dict[str, Any]) -> None:
-        now = time.monotonic()
-        # Real gaps are kept but capped, so a slow model does not make the page crawl.
-        wait = min(int((now - self.last) * 1000), 1500)
-        self.last = now
-        self.steps.append({"waitMs": wait, "event": event})
+        self.steps.append({"waitMs": READING_PACE_MS.get(event["type"], 200), "event": event})
 
 
 def read_stream(response, recorder: Recorder) -> str:
@@ -129,7 +131,9 @@ def verify(client, cid, auth, phone, recorder) -> None:
 def desk_decide(client, recorder, action: str) -> None:
     signed = client.post(f"{V1}/desk/session", json={"email": STAFF, "password": PASSWORD}).json()
     refunds = client.get(f"{V1}/desk/refunds").json()["refunds"]
-    pending = next(row for row in refunds if row["status"] == "pending")
+    pending = next((row for row in refunds if row["status"] == "pending"), None)
+    if pending is None:
+        raise RuntimeError("the model filed no claim, so the desk has nothing to decide")
     decided = client.post(
         f"{V1}/desk/refunds/{pending['id']}/decision", headers={"X-CSRF-Token": signed["csrfToken"]},
         json={"action": action, "note": "", "version": pending["version"]},
@@ -177,10 +181,23 @@ def check_clean(recording: dict[str, Any]) -> None:
         raise SystemExit(f"{recording['id']} holds a phone number or code, so it was not saved")
 
 
+def count_tokens(llm) -> dict[str, int]:
+    spent = {"tokens": 0}
+    chat = llm.chat
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        reply = chat(*args, **kwargs)
+        spent["tokens"] += int((reply.usage or {}).get("total_tokens") or 0)
+        return reply
+
+    llm.chat = counted
+    return spent
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("mock", "llm"), default="mock")
-    parser.add_argument("--out", default=str(ROOT / "demo" / "recordings"))
+    parser.add_argument("--out", default=str(DEMO_FOLDER))
     parser.add_argument("--scene", default="", help="record only this scene")
     args = parser.parse_args()
 
@@ -189,6 +206,7 @@ def main() -> int:
     if llm is None:
         print("no key found")
         return 1
+    spent = count_tokens(llm)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     # A TestClient raises the server's errors into this script. That is what a stopped
@@ -196,17 +214,21 @@ def main() -> int:
     for scene in SCENES:
         if args.scene and scene["id"] != args.scene:
             continue
+        if args.mode == "mock" and out.resolve() == DEMO_FOLDER.resolve():
+            print("a mock recording cannot go in demo/recordings: the web build would show it")
+            return 1
         path = out / f"{scene['id']}.json"
         if path.exists() and not args.scene:
             continue
         try:
             recording = play(scene, llm)
         except (RateLimited, LLMError, RuntimeError) as stop:
-            print(f"stopped at {scene['id']}: {stop}. Saved scenes are kept.")
+            print(f"stopped at {scene['id']}: {stop}. Saved scenes are kept. Tokens used: {spent['tokens']}")
             return 2
         check_clean(recording)
         path.write_text(json.dumps(recording, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
         print(f"saved {path.name}, {len(recording['steps'])} steps, source {recording['source']}", flush=True)
+    print(f"tokens used: {spent['tokens']}")
     return 0
 
 

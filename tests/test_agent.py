@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import func, select
 
 from jalboot.agent import checks, consent
+from jalboot.llm.mock import REFUSALS
 from jalboot.tools import specs
 from jalboot.agent.loop import MAX_STEPS, SupportAgent, relevant
 from jalboot.api.views import citation_view
@@ -680,3 +681,19 @@ def test_a_promo_code_is_spent_only_if_the_customer_asked():
     assert consent.customer_asked("apply_promo", "please apply my code", [], False)
     assert consent.customer_asked("apply_promo", "عندي كود خصم", [], False)
     assert not consent.customer_asked("apply_promo", "where is my order?", [], False)
+
+
+def test_a_claim_under_review_cannot_be_called_refunded(db, layla):
+    tea = {"order_id": "JB-700103", "amount_qar": 90.0, "reason": "wrong_item", "items": [{"name": "Grilled hammour"}]}
+    assert layla.execute("issue_refund", tea)["status"] == "pending_approval"
+    again = call("quote_refund", order_id="JB-700103", reason="damaged_item", items=[{"name": "Grilled hammour"}])
+    false = LLMReply("That item has already been refunded.")
+    result = run(Script(again, false, false), layla, "refund the hammour on JB-700103 again")
+    assert result.tool_log[0]["result"]["error"] == "refund_pending_review"
+    assert "already been refunded" not in result.reply
+
+
+def test_the_mock_says_a_person_is_reviewing_it_in_both_languages():
+    english, arabic = REFUSALS["refund_pending_review"]
+    assert "reviewing" in english and "refunded" not in english
+    assert "يراجع موظف" in arabic

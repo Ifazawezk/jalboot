@@ -70,6 +70,10 @@ REFUSALS = {
     "zone_not_served": ("We do not deliver food to that area.", "لا نوصل الطعام إلى هذه المنطقة."),
     "parcel_not_lost_yet": ("It is too early to report this parcel as lost.", "من المبكر اعتبار هذا الطرد مفقودا."),
     "already_refunded": ("That has already been refunded on this order.", "تم رد قيمة هذا من قبل في هذا الطلب."),
+    "refund_pending_review": (
+        "A person is already reviewing that refund, so there is nothing more to file.",
+        "يراجع موظف طلب الاسترداد هذا بالفعل، فلا حاجة إلى تقديمه مرة أخرى.",
+    ),
     "item_already_refunded": ("That item has already been refunded.", "تم رد قيمة هذا الصنف من قبل."),
     "late_credit_already_issued": ("Late credit for this order has already been added.", "تمت إضافة رصيد التأخير لهذا الطلب من قبل."),
 }

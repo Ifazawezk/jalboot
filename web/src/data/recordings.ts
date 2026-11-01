@@ -18,13 +18,15 @@ export interface RecordedStep {
 }
 
 /**
- * A recording is the event stream of a conversation, stored with its timing. This set is
- * scripted by hand, so the page labels each one a scripted example. Events captured from the
- * backend fit this shape unchanged and can replace them. A recording never holds a phone
- * number or a code.
+ * A recording is the event stream of a conversation, stored with its timing. Those in
+ * demo/recordings were captured from a real model by scripts/record_demo.py, and name it in
+ * `source`. The rest are scripted by hand, have no `source`, and are labelled as examples.
+ * A recording never holds a phone number or a code.
  */
 export interface Recording {
   id: string;
+  /** The provider and model that produced it. Missing on a scripted example. */
+  source?: string;
   locale: Locale;
   title: string;
   summary: string;
@@ -171,6 +173,16 @@ function build(source: Source, locale: Locale): Recording {
   };
 }
 
-export function recordingsFor(locale: Locale): Recording[] {
-  return SOURCES.map((source) => build(source, locale));
+const CAPTURED = Object.values(
+  import.meta.glob<Recording>('../../../demo/recordings/*.json', { eager: true, import: 'default' }),
+);
+
+export function recordingsFor(locale: Locale, captured: Recording[] = CAPTURED): Recording[] {
+  const real = captured.filter((recording) => recording.locale === locale);
+  return [...real, ...SOURCES.map((source) => build(source, locale))];
+}
+
+/** The model name of a real recording, without the provider. */
+export function recordedModel(recording: Recording): string {
+  return (recording.source ?? '').split('/').slice(1).join('/');
 }

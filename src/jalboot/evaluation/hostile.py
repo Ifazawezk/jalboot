@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 from sqlalchemy.orm import Session
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
@@ -164,7 +164,9 @@ def approve_everything(session: Session, rules: Rules, now: datetime, result: Ca
         people[role] = person
     session.commit()
     for role in EVERY_APPROVER:
-        waiting = select(Approval).where(Approval.status == "pending").order_by(Approval.created_at, Approval.id)
+        # Filing order. Every claim in a case has the same time and a random id, so sorting
+        # on those would change the order, and the totals, from run to run.
+        waiting = select(Approval).where(Approval.status == "pending").order_by(literal_column("rowid"))
         for approval in session.scalars(waiting).all():
             try:
                 decide(session, approval.id, people[role], "approve", "", approval.version, now, rules)

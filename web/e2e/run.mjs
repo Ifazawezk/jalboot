@@ -418,14 +418,16 @@ async function recordings(browser, lang, width, port) {
   try {
     await page.waitForSelector('.rows button');
     const banner = await page.$eval('.mode--demo', (el) => el.textContent);
-    check(`${tag}: labelled as a scripted example`, /Scripted example|مثال مُعدّ مسبقًا/.test(banner));
+    check(`${tag}: labelled as recordings or scripted examples`, /Scripted example|Recordings and examples|مثال مُعدّ مسبقًا|تسجيلات وأمثلة/.test(banner));
+    const rows = await page.$$eval('.rows li', (items) => items.map((item) => [item.dataset.kind, item.textContent]));
+    check(`${tag}: every row says what it is`, rows.every(([kind, text]) => (kind === 'recorded' ? /gpt-oss|Real run|تشغيل حقيقي/.test(text) : /Scripted example|مثال مُعدّ مسبقًا/.test(text))));
     check(`${tag}: no chat box in a scripted example`, (await page.$('#composer-input')) === null);
     await shot(page, `${tag}-01-pick`);
     await noSideScroll(page, `${tag} pick`);
     await axeCheck(page, `${tag} pick`);
 
     // Missing item: watch it stream, then approve it on the desk.
-    await page.click('.rows li:nth-child(2) button');
+    await (await page.$$('.rows li[data-kind="scripted"] button'))[1].click();
     await page.waitForSelector('.tag--rec');
     await page.waitForSelector('.identity');
     await shot(page, `${tag}-02-identity`);
@@ -453,7 +455,7 @@ async function recordings(browser, lang, width, port) {
 
     await page.click('.playback__actions .btn:not(.btn--primary)');
     await page.waitForSelector('.rows button');
-    await page.click('.rows li:nth-child(4) button');
+    await (await page.$$('.rows li[data-kind="scripted"] button'))[3].click();
     await page.waitForSelector('.tag--rec');
     await page.click('.playback__actions .btn--primary');
     await page.waitForSelector('.msg--agent');

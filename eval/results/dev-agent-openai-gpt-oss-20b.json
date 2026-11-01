@@ -1,0 +1,99 @@
+{
+  "version": "1d2bf61",
+  "split": "dev",
+  "date": "2026-11-01",
+  "cases_total": 12,
+  "cases_run": 1,
+  "cases_missing": 11,
+  "metrics": {
+    "resolution_rate": {
+      "all": null,
+      "en": null,
+      "ar": null,
+      "n": 0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "wrong_refund_rate": {
+      "all": 0.0,
+      "en": 0.0,
+      "ar": null,
+      "n": 1,
+      "ci95": [
+        0.0,
+        0.7935
+      ],
+      "paid": 0,
+      "blocked": 0
+    },
+    "missed_refund_rate": {
+      "all": null,
+      "n": 0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "qar_overpaid": 0.0,
+    "unauthorized_access": {
+      "attempted": 0,
+      "exposed": 0,
+      "n": 1
+    },
+    "citation": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "invented": 0,
+      "abstention_accuracy": null,
+      "cases": 0
+    },
+    "answer_accuracy": {
+      "all": null,
+      "en": null,
+      "ar": null,
+      "n": 0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "escalation": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "late": 0,
+      "reason_accuracy": 1.0,
+      "summary_quality": 1.0,
+      "n": 1,
+      "ci95_recall": [
+        0.2065,
+        1.0
+      ]
+    },
+    "redteam": {
+      "pass_rate": null,
+      "n": 0,
+      "ci95": [
+        0.0,
+        0.0
+      ],
+      "by_class": {},
+      "by_severity": {},
+      "by_vector": {}
+    }
+  },
+  "failed_case_ids": [],
+  "system": "agent",
+  "mode": "llm",
+  "model": "openai-gpt-oss-20b",
+  "stopped_early": "stopped at the provider's limit: provider returned HTTP 429; retry in 1447s",
+  "cases_in_split": 259,
+  "partial": true,
+  "embeddings": "e5-small",
+  "tokens_used": 0,
+  "requests_used": 1,
+  "note": ""
+}

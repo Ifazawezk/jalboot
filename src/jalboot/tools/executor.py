@@ -92,6 +92,15 @@ DELAY_TEXT = {
 }
 
 
+# A code alone can read as a fact the model repeats, and this one must not become "refunded".
+NEXT_STEPS = {
+    "refund_pending_review": (
+        "A person is already reviewing this claim and nothing has been paid yet, so do not say it was "
+        "refunded. Tell the customer a person is reviewing it."
+    ),
+}
+
+
 class Knowledge(Protocol):
     def search(self, query: str, language: str, k: int = 4) -> list[dict[str, Any]]: ...
 
@@ -115,7 +124,8 @@ def doha_time(moment: datetime | None) -> str | None:
 
 
 def refused(code: str, **details: Any) -> dict[str, Any]:
-    return {"ok": False, "error": code, **details}
+    step = NEXT_STEPS.get(code)
+    return {"ok": False, "error": code, **({"next_step": step} if step else {}), **details}
 
 
 def conflict(code: str) -> dict[str, Any]:
@@ -424,17 +434,19 @@ class ToolExecutor:
             due = engine.late_entitlement(self.rules, facts, self.now)["fee_refund_dh"] - claims.late_fee_refunded_dh
             return (due, None) if due > 0 else (None, "no_fee_refund_due")
         if reason == "duplicate_charge":
-            return max(engine.duplicate_amount_dh(facts) - claims.by_reason_dh.get(reason, 0), 0), None
+            return self._still_owed(engine.duplicate_amount_dh(facts), reason, claims)
         if reason == "driver_change_short":
-            return max(facts.change_short_dh - claims.by_reason_dh.get(reason, 0), 0), None
+            return self._still_owed(facts.change_short_dh, reason, claims)
         if order.category == "parcel" and reason != "failed_contact_refund":
             if reason not in engine.PARCEL_REASONS:
                 return None, "reason_not_for_parcels"
             room = engine.parcel_room_dh(self.rules, facts, claims)
-            return (room, None) if room else (None, "parcel_cover_used")
+            if room:
+                return room, None
+            return None, "refund_pending_review" if claims.pending_on_order_dh else "parcel_cover_used"
         if reason == "failed_contact_refund":
-            amount = engine.failed_contact_refund_dh(self.rules, facts, claims) - claims.by_reason_dh.get(reason, 0)
-            return (amount, None) if amount > 0 else (None, "nothing_to_refund")
+            amount = engine.failed_contact_refund_dh(self.rules, facts, claims)
+            return self._still_owed(amount, reason, claims) if amount else (None, "nothing_to_refund")
         if reason == "not_received":
             return engine.full_refund_dh(facts, claims, delivered=False), None
         if reason == "whole_wrong_order" or reason in FULL_ORDER_REASONS:
@@ -455,7 +467,7 @@ class ToolExecutor:
             done = already.get(normalize(item.name).strip(), 0)
             billed.append((item, engine.refundable_units(item, units) - engine.refundable_units(item, done)))
         if not any(units > 0 for _, units in billed):
-            return None, "item_already_refunded" if already else "no_refund_value"
+            return None, self._why_nothing_left(order, affected, already)
         billed = [(item, units) for item, units in billed if units > 0]
         offer = any(item.free_units for item, _ in affected)
         if reason not in NO_FULL_REFUND_CONVERSION and not offer and engine.full_refund_applies(self.rules, facts, billed):
@@ -464,6 +476,29 @@ class ToolExecutor:
         if reason in PERCENT_RULES:
             total = percent_of(total, self.rules.get(PERCENT_RULES[reason]))
         return total, None
+
+    @staticmethod
+    def _still_owed(total_dh: int, reason: str, claims: engine.ClaimFacts) -> tuple[int | None, str | None]:
+        """What is left of money with one cause. Nothing left is not always nothing owed:
+        a claim may be paid, or still waiting for a person."""
+        left = total_dh - claims.by_reason_dh.get(reason, 0)
+        if left > 0 or total_dh == 0:
+            return max(left, 0), None
+        return None, "refund_pending_review" if claims.pending_on_order_dh else "already_refunded"
+
+    def _why_nothing_left(
+        self, order: Order, affected: list[tuple[ItemFact, int]], claimed: dict[str, int],
+    ) -> str:
+        """A claim waiting for a person blocks a second one, but nothing has been paid, so
+        it must not read as refunded."""
+        if not claimed:
+            return "no_refund_value"
+        paid = refunded_items(self.session, order.id, include_pending=False)
+        for item, units in affected:
+            done = paid.get(normalize(item.name).strip(), 0)
+            if engine.refundable_units(item, units) > engine.refundable_units(item, done):
+                return "refund_pending_review"
+        return "item_already_refunded"
 
     def _quote_refund(self, order_id: str, reason: str, items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """Arithmetic belongs in code. Net prices and the 70 percent rule are exactly
