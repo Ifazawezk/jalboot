@@ -191,7 +191,7 @@ Few cases hold a double charge, a change shortfall or a failed delivery, so the 
 | Added to every order | Paid by the tools | Paid after approving everything | Approvals refused | Limit breaks, gates on | Limit breaks, gates off |
 | --- | --- | --- | --- | --- | --- |
 | A double charge | QAR 14,483.83 | QAR 16,094.88 | 148 | 0 | 604 |
-| A QAR 20 change shortfall | QAR 6,245.31 | QAR 11,059.79 | 51 | 0 | 598 |
+| A QAR 20 change shortfall | QAR 6,245.31 | QAR 11,042.99 | 49 | 0 | 598 |
 | A failed delivery | QAR 898.80 | QAR 4,081.80 | 6 | 0 | 604 |
 
 The zeros with the gates on are not the point by themselves. The gates-off column shows the check can see a break. An earlier version of this test could not see one, because it never approved anything and never tried these reasons, and that hid real bugs: a duplicate charge paid four times under changed item lists, and approvals that skipped the role limit, the parcel cover and the goodwill cap. Those are fixed, and this test now covers them. It can still only find the kinds of break it checks for.

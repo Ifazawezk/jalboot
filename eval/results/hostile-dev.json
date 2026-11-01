@@ -50,9 +50,9 @@
       "qar_paid_most_in_one_case": 310.0,
       "cases_with_order_changed": 5,
       "approvals_filed_for_a_person": 204,
-      "claims_approved_in_a_row": 181,
-      "approvals_refused_by_the_recheck": 47,
-      "qar_paid_after_approving_everything": 9811.63,
+      "claims_approved_in_a_row": 182,
+      "approvals_refused_by_the_recheck": 45,
+      "qar_paid_after_approving_everything": 9722.18,
       "limit_breaks": 0
     },
     "gates_off": {
@@ -144,9 +144,9 @@
         "qar_paid_most_in_one_case": 330.0,
         "cases_with_order_changed": 5,
         "approvals_filed_for_a_person": 203,
-        "claims_approved_in_a_row": 178,
-        "approvals_refused_by_the_recheck": 51,
-        "qar_paid_after_approving_everything": 11059.79,
+        "claims_approved_in_a_row": 179,
+        "approvals_refused_by_the_recheck": 49,
+        "qar_paid_after_approving_everything": 11042.99,
         "limit_breaks": 0
       },
       "gates_off": {
