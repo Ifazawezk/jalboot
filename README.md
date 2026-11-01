@@ -10,7 +10,7 @@
   <img alt="Languages: Arabic and English" src="https://img.shields.io/badge/languages-Arabic%20%7C%20English-0b5f5a">
   <img alt="All data is simulated" src="https://img.shields.io/badge/data-simulated-lightgrey">
   <img alt="Runs with no API key" src="https://img.shields.io/badge/API%20key-optional-informational">
-  <a href="#results"><img alt="Evaluation results are pending" src="https://img.shields.io/badge/evaluation-results%20pending-lightgrey"></a>
+  <a href="#results"><img alt="Evaluation: see Results for what has run" src="https://img.shields.io/badge/evaluation-see%20results-lightgrey"></a>
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen"></a>
 </p>
 
@@ -321,25 +321,37 @@ Full tables and intervals are in [docs/evaluation.md](docs/evaluation.md). No fi
 
 ### The agent
 
-> [!NOTE]
-> **Not filled in yet.** Every `TODO` below will be replaced with a number from a recorded run. Nothing here is estimated.
+<!-- results:run -->
+| Run detail | Value |
+| --- | --- |
+| Model | Not run |
+| Dense search | Not run |
+| Code version | Not run |
+| Date | Not run |
+| Development cases | Not run |
+| Plain chatbot, development cases | Not run |
+| Held-out cases | Not run |
+| Why a run stopped | No run was stopped |
+<!-- /results:run -->
 
-Model: `TODO`. Version: `TODO`. Date: `TODO`. A gate must hold in each language, not only overall.
+A gate must hold in each language, not only overall. Every figure below comes from a file in [`eval/results`](eval/results). A figure from a partial run covers only the cases counted in the table above.
 
-| Metric | Gate | Dev | Test | Test, English | Test, Arabic |
+<!-- results:agent -->
+| Metric | Gate | Dev | Held-out | Held-out, English | Held-out, Arabic |
 | --- | --- | --- | --- | --- | --- |
-| Resolution rate | at least 0.80 | TODO | TODO | TODO | TODO |
-| Wrong-refund rate | at most 0.02 | TODO | TODO | TODO | TODO |
-| Missed-refund rate | at most 0.10 | TODO | TODO | TODO | TODO |
-| Unauthorized data access, `exposed` | 0 events | TODO | TODO | TODO | TODO |
-| Citation precision | at least 0.90 | TODO | TODO | TODO | TODO |
-| Citation recall | at least 0.80 | TODO | TODO | TODO | TODO |
-| Invented citations | 0 | TODO | TODO | TODO | TODO |
-| Abstention accuracy | at least 0.85 | TODO | TODO | TODO | TODO |
-| Escalation recall | at least 0.95 | TODO | TODO | TODO | TODO |
-| Escalation precision | at least 0.80 | TODO | TODO | TODO | TODO |
-| Red team, `critical` severity | every case passes | TODO | TODO | TODO | TODO |
-| Red team, overall | at least 0.95 | TODO | TODO | TODO | TODO |
+| Resolution rate | at least 0.80 | Not run | Not run | Not run | Not run |
+| Wrong-refund rate | at most 0.02 | Not run | Not run | Not run | Not run |
+| Missed-refund rate | at most 0.10 | Not run | Not run | Not run | Not run |
+| Unauthorized data access, `exposed` | 0 events | Not run | Not run | Not run | Not run |
+| Citation precision | at least 0.90 | Not run | Not run | Not run | Not run |
+| Citation recall | at least 0.80 | Not run | Not run | Not run | Not run |
+| Invented citations | 0 | Not run | Not run | Not run | Not run |
+| Abstention accuracy | at least 0.85 | Not run | Not run | Not run | Not run |
+| Escalation recall | at least 0.95 | Not run | Not run | Not run | Not run |
+| Escalation precision | at least 0.80 | Not run | Not run | Not run | Not run |
+| Red team, `critical` severity | every case passes | Not run | Not run | Not run | Not run |
+| Red team, overall | at least 0.95 | Not run | Not run | Not run | Not run |
+<!-- /results:agent -->
 
 ### Retrieval
 

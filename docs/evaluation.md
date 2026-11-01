@@ -67,59 +67,71 @@ Escalation recall sits above precision on purpose. Sending a person to a case th
 
 ## Results
 
-> [!NOTE]
-> **The agent's numbers are not filled in yet.** Every `TODO` here will be replaced with a number from a recorded run. Nothing is estimated, and nothing comes from mock mode.
-
+<!-- results:run -->
 | Run detail | Value |
 | --- | --- |
-| Model and provider | TODO |
-| Code version | TODO |
-| Date | TODO |
-| Cases run | TODO |
+| Model | Not run |
+| Dense search | Not run |
+| Code version | Not run |
+| Date | Not run |
+| Development cases | Not run |
+| Plain chatbot, development cases | Not run |
+| Held-out cases | Not run |
+| Why a run stopped | No run was stopped |
+<!-- /results:run -->
+
+These tables are written by `scripts/fill_results.py` from the files in `eval/results`, and nothing in them comes from mock mode. A figure from a partial run covers only the cases counted here.
 
 ### Headline
 
-| Metric | Gate | Dev | Test | 95% interval, test | Test, English | Test, Arabic | Gate met? |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Resolution rate | at least 0.80 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Wrong-refund rate | at most 0.02 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Missed-refund rate | at most 0.10 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Unauthorized data access, `exposed` | 0 events | TODO | TODO | n/a | TODO | TODO | TODO |
-| Citation precision | at least 0.90 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Citation recall | at least 0.80 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Invented citations | 0 | TODO | TODO | n/a | TODO | TODO | TODO |
-| Abstention accuracy | at least 0.85 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Escalation recall | at least 0.95 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Escalation precision | at least 0.80 | TODO | TODO | TODO | TODO | TODO | TODO |
-| Red team, `critical` severity | every case | TODO | TODO | TODO | TODO | TODO | TODO |
-| Red team, overall | at least 0.95 | TODO | TODO | TODO | TODO | TODO | TODO |
+<!-- results:headline -->
+| Metric | Gate | Dev | 95% interval, dev | Held-out | 95% interval, held-out | Held-out, English | Held-out, Arabic | Gate met on held-out? |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Resolution rate | at least 0.80 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Wrong-refund rate | at most 0.02 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Missed-refund rate | at most 0.10 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Unauthorized data access, `exposed` | 0 events | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Citation precision | at least 0.90 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Citation recall | at least 0.80 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Invented citations | 0 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Abstention accuracy | at least 0.85 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Escalation recall | at least 0.95 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Escalation precision | at least 0.80 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Red team, `critical` severity | every case passes | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+| Red team, overall | at least 0.95 | Not run | Not run | Not run | Not run | Not run | Not run | Not run |
+<!-- /results:headline -->
 
 ### Also reported
 
 These have no gate, but a report without them would hide something.
 
-| Measure | Dev | Test |
+<!-- results:also -->
+| Measure | Dev | Held-out |
 | --- | --- | --- |
-| Refund attempts blocked by the tool layer | TODO | TODO |
-| Wrong refunds actually paid | TODO | TODO |
-| QAR overpaid across the run | TODO | TODO |
-| Unauthorized access, `attempted` | TODO | TODO |
-| Answer accuracy on knowledge cases | TODO | TODO |
-| Handoff reason accuracy | TODO | TODO |
-| Handoff summary quality | TODO | TODO |
-| Late handoffs | TODO | TODO |
+| Refund attempts blocked by the tool layer | Not run | Not run |
+| Wrong refunds actually paid | Not run | Not run |
+| QAR overpaid across the run | Not run | Not run |
+| Unauthorized access, `attempted` | Not run | Not run |
+| Answer accuracy on knowledge cases | Not run | Not run |
+| Handoff reason accuracy | Not run | Not run |
+| Handoff summary quality | Not run | Not run |
+| Late handoffs | Not run | Not run |
+<!-- /results:also -->
 
 ### Against a plain chatbot
 
 `--system baseline` runs the same model with the same tools and the policy pasted into its system prompt. That is how many support bots are built, so it is the fair thing to beat. It has no identity gate, no ownership check, no limits, no retrieval, no reply checks and no triage. It needs a real model, because both sides of a mock comparison would be the same keyword rules.
 
+<!-- results:against -->
 | Measure | Jalboot | Plain chatbot |
 | --- | --- | --- |
-| Resolution rate | TODO | TODO |
-| Wrong-refund rate | TODO | TODO |
-| QAR overpaid | TODO | TODO |
-| Unauthorized access, `exposed` | TODO | TODO |
-| Red team, overall | TODO | TODO |
+| Cases | Not run | Not run |
+| Resolution rate | Not run | Not run |
+| Wrong-refund rate | Not run | Not run |
+| QAR overpaid | Not run | Not run |
+| Unauthorized access, `exposed` | Not run | Not run |
+| Red team, overall | Not run | Not run |
+<!-- /results:against -->
 
 ### Retrieval
 
