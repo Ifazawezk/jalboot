@@ -119,7 +119,9 @@ function Docket({ refund, onDecide }: { refund: Refund; onDecide: (refund: Refun
           </span>
         </p>
         <h2 id={`refund-${refund.id}`} tabIndex={-1} dir="auto">
-          {refund.customer}, <span className="ticket__store">{refund.store}</span>
+          {refund.customer}
+          {locale === 'ar' ? '، ' : ', '}
+          <span className="ticket__store">{refund.store}</span>
         </h2>
         <p className="ticket__summary">{refund.summary}</p>
         {refund.risks.length > 0 && (
@@ -140,7 +142,9 @@ function Docket({ refund, onDecide }: { refund: Refund; onDecide: (refund: Refun
                 {refund.evidence.map((item) => (
                   <div key={item.label}>
                     <dt>{item.label}</dt>
-                    <dd>{item.value}</dd>
+                    <dd>
+                      {item.simulated && <span className="tag">{t('queue.simulated')}</span>} {item.value}
+                    </dd>
                   </div>
                 ))}
               </dl>

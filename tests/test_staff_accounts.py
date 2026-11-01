@@ -26,9 +26,9 @@ def no_passwords_from_the_machine(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-def public(tmp_path, environment="demo"):
+def public(tmp_path, environment="demo", url=None):
     return Settings(
-        database_url=database_url(tmp_path), environment=environment, secret_key=SECRET, cookie_secure=True,
+        database_url=url or database_url(tmp_path), environment=environment, secret_key=SECRET, cookie_secure=True,
         show_simulated_otp=environment == "demo", world_scale=0.05, web_dist=tmp_path / "missing",
         index_dir=tmp_path / "index",
     )
@@ -106,12 +106,13 @@ def test_each_account_signs_in_with_its_own_password_only(tmp_path, monkeypatch)
 
 def test_a_database_seeded_for_development_cannot_go_public(tmp_path, monkeypatch):
     """Passwords are only read when seeding, so this would otherwise keep the public one."""
+    url = database_url(tmp_path)
     build_runtime(Settings(
-        database_url=database_url(tmp_path), world_scale=0.05, web_dist=tmp_path / "missing", index_dir=tmp_path / "index",
+        database_url=url, world_scale=0.05, web_dist=tmp_path / "missing", index_dir=tmp_path / "index",
     )).engine.dispose()
     choose(monkeypatch)
     with pytest.raises(ConfigError, match="development password"):
-        build_runtime(public(tmp_path))
+        build_runtime(public(tmp_path, url=url))
 
 
 def test_development_keeps_working_with_no_password_set(tmp_path):

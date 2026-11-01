@@ -8,6 +8,7 @@ is measured from the world's anchor, so a recording stays true on a fresh databa
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Mapping
 
 from sqlalchemy.orm import Session
 
@@ -126,9 +127,10 @@ def add_demo_customers(session: Session, anchor: datetime) -> None:
     session.commit()
 
 
-def add_staff(session: Session, password: str) -> None:
+def add_staff(session: Session, passwords: Mapping[str, str]) -> None:
+    """One password per role, so no account is ever created with a stand-in."""
     for staff_id, email, name, role in STAFF:
         session.add(StaffUser(
-            id=staff_id, email=email, name=name, role=role, password_hash=hash_password(password),
+            id=staff_id, email=email, name=name, role=role, password_hash=hash_password(passwords[role]),
         ))
     session.commit()

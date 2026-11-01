@@ -4,25 +4,24 @@ from __future__ import annotations
 
 import logging
 import os
-import secrets
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from jalboot.agent.loop import SupportAgent
 from jalboot.api.events import Broker
 from jalboot.config import ConfigError, Settings
 from jalboot.db.base import create_schema, make_engine, make_session_factory
-from jalboot.db.models import StaffUser, WorldMeta
+from jalboot.db.models import Message, StaffUser, WorldMeta
 from jalboot.kb.store import KnowledgeBase, load_encoder, load_passages
 from jalboot.llm.client import LLMClient, client_from_env
 from jalboot.llm.mock import MockPlanner
 from jalboot.policy.rules import Rules
-from jalboot.security.passwords import hash_password, verify_password
+from jalboot.security.passwords import verify_password
 from jalboot.world.demo import add_demo_customers, add_staff
 from jalboot.world.generator import generate_world
 
@@ -94,12 +93,7 @@ def seed_if_empty(session: Session, settings: Settings) -> None:
     )
     meta = session.scalar(select(WorldMeta))
     add_demo_customers(session, meta.anchor)
-    # add_staff takes one password, so a public server gives it a throwaway one first.
-    add_staff(session, secrets.token_urlsafe(32) if chosen else _dev_password())
-    if chosen:
-        for staff in session.scalars(select(StaffUser)):
-            staff.password_hash = hash_password(chosen[staff.role])
-        session.commit()
+    add_staff(session, chosen or dict.fromkeys(STAFF_PASSWORD_VARIABLES, _dev_password()))
     log.info("generated a simulated world: %s", meta_counts)
 
 
@@ -147,6 +141,11 @@ def build_runtime(settings: Settings, llm: LLMClient | None = None) -> Runtime:
         if settings.is_public:
             refuse_published_password(session)
         anchor = session.scalar(select(WorldMeta)).anchor
+        # active_turns is memory only, so at startup no turn can still be running. Left
+        # alone, a turn cut off by a crash would answer turn_in_progress forever. The
+        # customer can now send it again, and the action records stop a second payment.
+        session.execute(update(Message).where(Message.turn_state == "running").values(turn_state="error"))
+        session.commit()
     return Runtime(
         settings=settings,
         engine=engine,

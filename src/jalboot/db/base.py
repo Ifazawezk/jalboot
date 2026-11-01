@@ -18,7 +18,7 @@ ADDED_COLUMNS = {
     "drivers": {"name_ar": "VARCHAR(120) NOT NULL DEFAULT ''"},
 }
 # Columns it may still have. A NOT NULL one left behind would refuse every new row.
-DROPPED_COLUMNS = {"conversations": ("topic",)}
+DROPPED_COLUMNS = {"conversations": ("topic", "first_report_at")}
 
 
 class Base(DeclarativeBase):

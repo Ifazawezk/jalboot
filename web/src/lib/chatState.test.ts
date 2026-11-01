@@ -27,6 +27,7 @@ const refund: RefundSummary = {
   status: 'pending',
   decidedBy: null,
   note: null,
+  destination: 'original',
 };
 
 describe('chatReducer streaming', () => {
@@ -220,6 +221,17 @@ describe('helpers', () => {
     expect(lastSpokenText(streaming.items)).toBeNull();
     const done = chatReducer(streaming, { type: 'message.end', finish: 'complete' });
     expect(lastSpokenText(done.items)).toBe('On the way.');
+  });
+});
+
+describe('a closed conversation', () => {
+  it('no longer says a person is chatting', () => {
+    const state = run([
+      { type: 'handoff.update', handoff: { status: 'joined', agentName: 'Sara', etaMinutes: null, position: null } },
+      { type: 'conversation.closed', at: '2026-11-01T00:00:00Z' },
+    ]);
+    expect(state.closed).toBe(true);
+    expect(state.handoff).toBeNull();
   });
 });
 

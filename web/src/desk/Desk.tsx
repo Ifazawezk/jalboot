@@ -184,6 +184,15 @@ function Workspace({
   const [attempt, setAttempt] = useState(0);
   const listeners = useRef(new Set<(event: DeskEvent) => void>());
 
+  // Stable on purpose. A conversation page depends on this, so a new one on every desk
+  // event would rebuild the page, reply box included, under someone typing.
+  const listen = useCallback((listener: (event: DeskEvent) => void) => {
+    listeners.current.add(listener);
+    return () => {
+      listeners.current.delete(listener);
+    };
+  }, []);
+
   const handleAuth = useCallback(
     (error: unknown) => {
       if (error instanceof ApiError && error.status === 401) {
@@ -258,13 +267,10 @@ function Workspace({
       putConversation: (conversation) => setConversations((list) => upsertById(list, conversation)),
       putRefund: (refund) => setRefunds((list) => upsertById(list, refund)),
       reloadRefunds,
-      listen: (listener) => {
-        listeners.current.add(listener);
-        return () => listeners.current.delete(listener);
-      },
+      listen,
       handleAuth,
     }),
-    [agent, summary, conversations, refunds, windowDays, reloadRefunds, handleAuth],
+    [agent, summary, conversations, refunds, windowDays, reloadRefunds, listen, handleAuth],
   );
 
   const pending = summary?.refundsPending ?? 0;

@@ -237,7 +237,7 @@ The first start builds a seeded world in `var/jalboot.sqlite3`: 400 customers, 8
 | Khalid, supervisor | `khalid@jalboot.example` | Decides up to the supervisor limit |
 | Amal, finance lead | `amal@jalboot.example` | Decides any amount |
 
-The staff password is `jalboot-local-demo`, for local use only. In production the server refuses to seed without `DEMO_STAFF_PASSWORD`. The `0` after `+974` is deliberate: no real Qatari number has one.
+The staff password is `jalboot-local-demo`, for local use only. `DEMO_STAFF_PASSWORD` changes it in development and test. A server in `demo` or `production` mode refuses that published password, and needs its own password for each role. The `0` after `+974` is deliberate: no real Qatari number has one.
 
 ### Things to try
 
@@ -274,11 +274,12 @@ cp .env.example .env             # then set LLM_MODE=llm and LLM_API_KEY
 | `LLM_BASE_URL`, `LLM_MODEL` | Server and model. Both are required for `compatible` |
 | `LLM_TIMEOUT`, `LLM_MAX_TOKENS`, `LLM_MAX_WAIT` | Defaults: 60 seconds, 1000 tokens, 30 seconds |
 | `DATABASE_URL` | SQLite under `var/` when empty |
-| `ENVIRONMENT` | `production` turns on the startup checks below |
-| `SECRET_KEY` | Required in production, at least 32 characters |
-| `COOKIE_SECURE`, `COOKIE_SAMESITE` | Cookie flags. Production needs `COOKIE_SECURE=true` |
-| `SHOW_SIMULATED_OTP` | Shows the code on the page. Production must set `false` |
-| `DEMO_STAFF_PASSWORD` | Password for the first staff accounts. Required to seed in production |
+| `ENVIRONMENT` | `development` (default), `test`, `demo` or `production`. Anything else refuses to start. `demo` and `production` are for servers other people can reach, and turn on the startup checks below |
+| `SECRET_KEY` | Required in `demo` and `production`, at least 32 characters |
+| `COOKIE_SECURE`, `COOKIE_SAMESITE` | Cookie flags. `demo` and `production` need `COOKIE_SECURE=true` |
+| `SHOW_SIMULATED_OTP` | Shows the code on the page. `production` must set `false`. `demo` keeps it on, because there is no SMS provider |
+| `DEMO_STAFF_PASSWORD` | Password for all the local staff accounts, in development and test only |
+| `STAFF_PASSWORD_AGENT`, `STAFF_PASSWORD_SUPERVISOR`, `STAFF_PASSWORD_FINANCE_LEAD` | One password per role, each at least 12 characters and all different. Required in `demo` and `production` to create the accounts |
 | `ALLOWED_ORIGINS` | Other origins that may call the API, comma separated. `*` is refused |
 | `WORLD_SEED`, `WORLD_SCALE` | The simulated world |
 | `EMBEDDINGS` | `e5-small` adds dense search. Needs the `embeddings` extra |
@@ -296,13 +297,15 @@ Then set `EMBEDDINGS=e5-small`. It downloads a model, and search works without i
 ### With Docker
 
 > [!WARNING]
-> **Docker has never been run on this project.** The image has not been built and the stack has not been started, so expect to fix things.
+> **Docker has never been run on this project.** It is not installed on the machine this was built on, so the image has not been built and the stack has not been started. Expect to fix things.
 
 A `Dockerfile` and a `docker-compose.yml` are in the repository root. The compose file starts the app with PostgreSQL, in mock mode, on `127.0.0.1:8000`:
 
 ```bash
 POSTGRES_PASSWORD=choose-one docker compose up --build
 ```
+
+The image defaults to `ENVIRONMENT=production`, so running it by itself asks for the production settings. Compose runs as development unless `ENVIRONMENT` is set.
 
 ### Tests
 
@@ -423,10 +426,13 @@ No. They come from simulated tickets, and they are not the evaluation results. T
 
 - **There is no SMS provider.** With `SHOW_SIMULATED_OTP=true`, anyone who knows a demo phone number can pass the identity check, because the page shows the code. With it off, nobody receives a code, so no one can verify.
 - **There are no rate limits on chat.** Sign-in, code sending and code guessing are throttled. `POST /conversations` and sending messages are not, and in `llm` mode each message spends model tokens.
-- **It runs as one server process.** The event broker is in memory, so several processes would need a shared one, and recent events are lost on restart.
-- **Conversation tokens do not expire.** Staff sessions last 8 hours, but a customer's token works for as long as the conversation row exists, and nothing closes a conversation yet.
-- **Staff sign in with a password only**, with no second factor. The development password is public, so never expose a server running development settings.
-- **Docker has never been run**, and PostgreSQL gets less testing than SQLite. The default test run uses SQLite. The API and race tests also run on PostgreSQL when `TEST_DATABASE_URL` names a server. A reverse proxy has not been tested.
+- **It runs as one server process.** The event broker is in memory, so several processes would need a shared one, and recent events are lost on restart. A turn cut off by a crash is marked failed at startup, so the customer can send it again. A second process starting would fail the first one's live turns.
+- **Conversation tokens do not expire while a chat is open.** Staff sessions last 8 hours. Staff can close a chat, and from then on its token is refused on every route, and a closed chat cannot be put back in the queue.
+- **Staff sign in with a password only**, with no second factor. The development password is public, so never expose a server running development settings. `demo` and `production` refuse it, and refuse a database that still has it.
+- **The stream, login and code limits key on the socket address.** A proxy must pass the real address, or all customers share one set of limits, which means 20 open chats in total. None of this has been tested behind a proxy. The public demo is a static page, so it has no such limits to share.
+- **The Windows server has a connection cap.** Connections past 480 are dropped, because the Windows event loop fails for good at about 510 open sockets. One client holding 480 idle connections keeps others out until they close. It recovers once they do.
+- **The desk's clocks are not exact.** The simulated clock restarts at the world's anchor when the server restarts, so the resolved-today count can carry over between runs. The wait clock compares a simulated handoff time with the browser's clock, so it shows 0:00 now and will be wrong after the anchor date.
+- **Docker has never been run**, because it is not installed on the machine this was built on, and PostgreSQL gets less testing than SQLite. The default test run uses SQLite. The API and race tests also run on PostgreSQL when `TEST_DATABASE_URL` names a server. A reverse proxy has not been tested.
 - **False claims that fit the rules get paid.** See [If the model is taken over](#if-the-model-is-taken-over). The gates limit this. They cannot end it.
 - **Triage misses what nobody listed**, and it can fire on a word used innocently. It is a floor under the model, not a classifier.
 - **The reply checks are narrow.** A citation check proves the passage was retrieved, not that it supports the sentence. A figure check matches values, so a real number from the wrong rule passes. The claim check is a phrase list in two languages.

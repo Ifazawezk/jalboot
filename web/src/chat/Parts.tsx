@@ -7,7 +7,8 @@ import { formatMinutes } from '../i18n/translate';
 import type { BotItem, ChatItem, NoticeItem, ToolActivity } from '../lib/chatState';
 import { parseCitedText, splitParagraphs } from '../lib/citations';
 import { formatDay, formatQar, formatTime } from '../lib/format';
-import { ORDER_STEPS, orderStep } from '../lib/orders';
+import { ORDER_STEPS, orderPlace, orderStep } from '../lib/orders';
+import { refundBodyKey } from '../lib/refunds';
 import { Icon } from '../ui/Icon';
 import { useChat } from './ChatProvider';
 
@@ -168,8 +169,7 @@ export function OrderCard({ order }: { order: Order }) {
             {order.store}
           </p>
           <p className="muted" dir="auto">
-            {order.area}
-            {order.rider && `, ${t('order.rider')} ${order.rider}`}
+            {orderPlace([order.area, order.rider && `${t('order.rider')} ${order.rider}`], locale)}
           </p>
         </div>
         {(arrived ?? order.etaAt) && (
@@ -223,14 +223,11 @@ export function OrderCard({ order }: { order: Order }) {
 }
 
 function refundBody(refund: RefundSummary, policy: Policy | null, t: ReturnType<typeof useI18n>['t']) {
-  if (refund.status === 'pending') return t('refund.body.pending');
-  if (refund.status === 'rejected') return t('refund.body.rejected');
   const days = policy?.refund.cardBusinessDays;
   const minutes = policy?.refund.creditMinutes;
   // Timings are only stated when the backend supplied them.
-  return days != null && minutes != null
-    ? t('refund.body.doneTimed', { days, minutes })
-    : t('refund.body.done');
+  const timed = days != null && minutes != null;
+  return t(refundBodyKey(refund, timed), timed ? { days, minutes } : undefined);
 }
 
 const REFUND_ICON = { pending: 'clock', approved: 'check', auto_approved: 'check', rejected: 'x' } as const;

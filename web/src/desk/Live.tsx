@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { useApi } from '../App';
 import type { ConversationDetail, LiveConversation, TranscriptEntry } from '../api/types';
 import { useI18n } from '../i18n/context';
-import { stripMarkers } from '../lib/citations';
+import { stripMarkers, uniqueSources } from '../lib/citations';
 import { formatClock, formatTime } from '../lib/format';
 import { sortLive } from '../lib/live';
 import { Icon } from '../ui/Icon';
@@ -57,6 +57,7 @@ function Row({ conversation, selected }: { conversation: LiveConversation; selec
 
 function Entry({ entry, locale }: { entry: TranscriptEntry; locale: string }) {
   const { t, locale: deskLocale } = useI18n();
+  const sources = uniqueSources(entry.sources);
   return (
     <li className={`line line--${entry.author}`}>
       <p className="line__who">
@@ -71,9 +72,9 @@ function Entry({ entry, locale }: { entry: TranscriptEntry; locale: string }) {
           <span>{t('live.tools')}</span> {entry.tools.join(', ')}
         </p>
       )}
-      {entry.sources.length > 0 && (
+      {sources.length > 0 && (
         <p className="line__extra">
-          <span>{t('live.sources')}</span> {entry.sources.join(', ')}
+          <span>{t('live.sources')}</span> {sources.join(deskLocale === 'ar' ? '، ' : ', ')}
         </p>
       )}
     </li>

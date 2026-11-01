@@ -66,11 +66,12 @@ are optional and only used by the identity endpoints.
 | 409 | `duplicate_message` | Same `clientMessageId` as a turn that already completed. |
 | 409 | `refund_already_decided` | Stale `version`, or the refund is no longer pending. |
 | 409 | `amount_exceeds_paid` | Approving would pay more than is left on the order. It is checked again at decision time. |
-| 409 | `conversation_closed` | A message was sent to a closed conversation. |
+| 409 | `conversation_closed` | The conversation is closed. Every customer route on it answers this, so its token can do nothing more. |
 | 410 | `code_expired` | Identity code expired. |
 | 422 | `invalid_phone` | The phone number is not valid. |
 | 422 | `validation_error` | Any other malformed body. |
-| 429 | `too_many_attempts` | Identity locked or rate limited. Include `retryAfterSeconds` and a `Retry-After` header. |
+| 429 | `too_many_attempts` | Identity locked or rate limited. Include `retryAfterSeconds` and a `Retry-After` header. Codes are limited per number and per client, and desk logins per email and address. |
+| 429 | `too_many_streams` | Too many open event streams for this conversation or client. Retryable: the client keeps trying with backoff. |
 | 500 | `internal_error` | Set `retryable: true`. |
 
 ### Server-Sent Events
@@ -356,7 +357,7 @@ Request `{ "text": "..." }`, 2000 characters at most. Response 204. Sends the cu
 ### `POST /desk/conversations/{id}/close`
 
 No body. Response 200 is the `LiveConversation` with `state: "closed"`. Sends the customer `conversation.closed`.
-A later customer message gets 409 `conversation_closed`.
+Every later customer request on it gets 409 `conversation_closed`, and open event streams end at their next check.
 
 ### `GET /desk/refunds`
 
@@ -452,6 +453,7 @@ The card shows four steps: placed, getting ready, on the way, delivered.
   status: 'auto_approved' | 'pending' | 'approved' | 'rejected';
   decidedBy: string | null;
   note: string | null;
+  destination: 'original' | 'credit'; // Back to how the customer paid, or to wallet credit.
 }
 ```
 
@@ -524,12 +526,12 @@ The card shows four steps: placed, getting ready, on the way, delivered.
   conversationId: string;
   customer: string;
   store: string;
-  reason: 'missing_item' | 'wrong_item' | 'late' | 'quality';
+  reason: 'missing_item' | 'wrong_item' | 'late' | 'quality' | 'address';
   summary: string;
   requestedAt: string;
   decidedAt: string | null;
   recommendation: 'approve' | 'review' | 'reject';
-  evidence: { label: string; value: string }[];
+  evidence: { label: string; value: string; simulated?: boolean }[];
   policy: { title: string; section: string };
   risks: string[];
   version: number;

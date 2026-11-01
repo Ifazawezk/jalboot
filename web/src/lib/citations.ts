@@ -32,6 +32,11 @@ export function stripMarkers(text: string): string {
   return text.replace(/\s*\[\d{1,2}\]/g, '');
 }
 
+/** Two passages from one page have one title, and it is only worth reading once. */
+export function uniqueSources(titles: string[]): string[] {
+  return [...new Set(titles.filter(Boolean))];
+}
+
 /** Splits text on blank lines. Reply text is plain text, never HTML or Markdown. */
 export function splitParagraphs(text: string): string[] {
   return text.split(/\n{2,}/).filter((p) => p.length > 0);

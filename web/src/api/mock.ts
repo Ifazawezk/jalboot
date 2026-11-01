@@ -214,6 +214,7 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
       status: r.status,
       decidedBy: r.decidedBy ? pick(r.decidedBy, locale) : null,
       note: r.note ? pick(r.note, locale) : null,
+      destination: 'original',
       conversationId: r.conversationId,
       customer: pick(r.customer, locale),
       store: pick(r.store, locale),
@@ -222,7 +223,11 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
       requestedAt: iso(r.requestedAt),
       decidedAt: r.decidedAt === null ? null : iso(r.decidedAt),
       recommendation: r.recommendation,
-      evidence: r.evidence.map((e) => ({ label: pick(e.label, locale), value: pick(e.value, locale) })),
+      evidence: r.evidence.map((e) => ({
+        label: pick(e.label, locale),
+        value: pick(e.value, locale),
+        ...(e.simulated ? { simulated: true } : {}),
+      })),
       policy: { title: pick(r.policy.title, locale), section: pick(r.policy.section, locale) },
       risks: r.risks.map((risk) => pick(risk, locale)),
       version: r.version,
@@ -360,7 +365,7 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
       reason: 'missing_item',
       summary: {
         en: 'Khalas dates missing. The store scanned one of two bags, which fits the report.',
-        ar: 'تمر الخلاص ناقص. مسح المتجر كيسًا واحدًا من كيسين، وهذا يتفق مع البلاغ.',
+        ar: 'تمر الخلاص ناقص. سجّل المتجر كيسًا واحدًا من كيسين، وهذا يتفق مع البلاغ.',
       },
       requestedAt: now(),
       decidedAt: null,
@@ -377,14 +382,14 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
         },
         {
           label: { en: 'Store record', ar: 'سجل المتجر' },
-          value: { en: 'One of two bags scanned', ar: 'مسح كيس واحد من كيسين' },
+          value: { en: 'One of two bags scanned', ar: 'سجّل كيسًا واحدًا من كيسين' },
         },
       ],
       policy: {
         title: { en: 'Refunds and credits', ar: 'الاسترداد والرصيد' },
         section: {
           en: 'REF-05, Approval limits and repeat claims',
-          ar: 'REF-05، حدود الموافقة والمطالبات المتكررة',
+          ar: 'REF-05، حدود الموافقة وتكرار المطالبات',
         },
       },
       risks: [],
@@ -399,7 +404,7 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
       target: stored.id,
       detail: {
         en: `QAR ${stored.amountQar.toFixed(2)} for order ${stored.orderId}`,
-        ar: `${stored.amountQar.toFixed(2)} ريالًا للطلب ${stored.orderId}`,
+        ar: `${stored.amountQar.toFixed(2)} ر.ق للطلب ${stored.orderId}`,
       },
     });
     emitSummary();
@@ -815,7 +820,7 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
         target: id,
         detail: {
           en: `QAR ${amount}. ${decided.note ?? 'No note.'}`,
-          ar: `${amount} ريالًا. ${decided.note ?? 'بدون ملاحظة.'}`,
+          ar: `${amount} ر.ق. ${decided.note ?? 'بدون ملاحظة.'}`,
         },
       });
       const view = viewRefund(stored);
@@ -832,6 +837,7 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
           decidedBy: pick(AGENT_NOOR, c?.locale ?? locale),
           // An approval note is for the audit log only. A rejection reason reaches the customer.
           note: decision.action === 'reject' ? view.note : null,
+          destination: view.destination,
         },
       });
       return view;

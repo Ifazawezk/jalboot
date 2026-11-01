@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { LiveConversation, Refund } from '../api/types';
 import { areaPath, deltaTone, linePath, nearestIndex, niceTicks, scalePoints } from './charts';
-import { parseCitedText, splitParagraphs, stripMarkers } from './citations';
+import { parseCitedText, splitParagraphs, stripMarkers, uniqueSources } from './citations';
 import { forceLtr, formatClock, formatDay, formatNumber, formatQar, formatTime, isolate } from './format';
 import { normalizeCode, normalizePhone, toAsciiDigits } from './identity';
 import { classifyIntent, normalizeText } from './intent';
 import { sortLive, upsertById } from './live';
 import { bannerFor } from './mode';
-import { orderStep } from './orders';
-import { applyDecision, checkDecision, decidedOnly, nextFocusAfter, sortQueue } from './refunds';
+import { orderPlace, orderStep } from './orders';
+import { applyDecision, checkDecision, decidedOnly, nextFocusAfter, refundBodyKey, sortQueue } from './refunds';
 import { parseRoute } from './route';
 
 describe('bannerFor', () => {
@@ -171,6 +171,7 @@ const refund = (over: Partial<Refund>): Refund => ({
   status: 'pending',
   decidedBy: null,
   note: null,
+  destination: 'original',
   conversationId: 'cv',
   customer: 'A',
   store: 'S',
@@ -186,6 +187,44 @@ const refund = (over: Partial<Refund>): Refund => ({
   canDecide: true,
   requiredRole: 'agent',
   ...over,
+});
+
+describe('refund card text', () => {
+  it('says credit when the money went to credit, not to the card', () => {
+    const credit = refund({ status: 'auto_approved', destination: 'credit' });
+    expect(refundBodyKey(credit, true)).toBe('refund.body.credit');
+    expect(refundBodyKey({ ...credit, status: 'approved' }, false)).toBe('refund.body.credit');
+  });
+
+  it('talks about the original payment method otherwise', () => {
+    const paid = refund({ status: 'auto_approved' });
+    expect(refundBodyKey(paid, true)).toBe('refund.body.doneTimed');
+    expect(refundBodyKey(paid, false)).toBe('refund.body.done');
+  });
+
+  it('does not promise anything before a decision or after a refusal', () => {
+    expect(refundBodyKey(refund({ status: 'pending', destination: 'credit' }), true)).toBe('refund.body.pending');
+    expect(refundBodyKey(refund({ status: 'rejected', destination: 'credit' }), true)).toBe('refund.body.rejected');
+  });
+});
+
+describe('orderPlace', () => {
+  it('joins the area and the rider in the language of the card', () => {
+    expect(orderPlace(['West Bay', 'Rider Omar'], 'en')).toBe('West Bay, Rider Omar');
+    expect(orderPlace(['الخليج الغربي', 'المندوب عمر'], 'ar')).toBe('الخليج الغربي، المندوب عمر');
+  });
+
+  it('leaves no stray comma when a part has no Arabic name', () => {
+    expect(orderPlace(['', 'المندوب عمر'], 'ar')).toBe('المندوب عمر');
+    expect(orderPlace(['الخليج الغربي', null], 'ar')).toBe('الخليج الغربي');
+    expect(orderPlace(['', null], 'ar')).toBe('');
+  });
+});
+
+describe('uniqueSources', () => {
+  it('lists each source once, in order, with no blanks', () => {
+    expect(uniqueSources(['Refunds', '', 'Fees', 'Refunds'])).toEqual(['Refunds', 'Fees']);
+  });
 });
 
 describe('refund queue', () => {

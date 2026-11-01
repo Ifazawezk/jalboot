@@ -73,7 +73,7 @@ const T = {
 const GENERAL: L = { en: 'General definitions', ar: 'التعريفات العامة' };
 const REFUNDS: L = { en: 'Refunds and credits', ar: 'الاسترداد والرصيد' };
 const LATE: L = { en: 'Late or missing orders', ar: 'الطلبات المتأخرة أو المفقودة' };
-const PAYMENTS: L = { en: 'Payments and failed charges', ar: 'المدفوعات والخصومات الفاشلة' };
+const PAYMENTS: L = { en: 'Payments and failed charges', ar: 'المدفوعات وعمليات الخصم الفاشلة' };
 const PROMOS: L = { en: 'Promo codes and loyalty', ar: 'الرموز الترويجية والولاء' };
 
 export const CONVERSATIONS: RawConversation[] = [
@@ -99,7 +99,7 @@ export const CONVERSATIONS: RawConversation[] = [
         'm2',
         5,
         'bot',
-        'أنا آسف جدًا لذلك. إذا كان يجد صعوبة في التنفس فاتصلي بالرقم 999 الآن. نقلتك إلى مقدمة قائمة الانتظار لموظف.',
+        'نأسف جدًا لذلك. إذا كان يجد صعوبة في التنفس فيُرجى الاتصال بالرقم 999 الآن. نقلتك إلى مقدمة قائمة الانتظار لموظف.',
         { tools: [T.order, T.help, T.person], sources: [GENERAL] },
       ),
       entry('m3', 2, 'customer', 'هو بخير الآن، لكن أريد أن أعرف ماذا كان في الوجبة.'),
@@ -176,7 +176,7 @@ export const CONVERSATIONS: RawConversation[] = [
         'a2',
         7,
         'bot',
-        'تمر الخلاص موجود في الطلب JB-47902، وقد مسح المتجر كيسًا واحدًا فقط من الكيسين. أرسلت استرداد 62.50 ريالًا إلى الفريق للموافقة.',
+        'تمر الخلاص موجود في الطلب JB-47902، وقد سجّل المتجر كيسًا واحدًا فقط من الكيسين. أرسلت استرداد 62.50 ر.ق إلى الفريق للموافقة.',
         { tools: [T.details, T.help, T.refund], sources: [REFUNDS] },
       ),
     ],
@@ -212,7 +212,7 @@ export const CONVERSATIONS: RawConversation[] = [
     state: 'bot',
     priority: 'normal',
     verified: false,
-    summary: { en: 'Promo code rejected at checkout', ar: 'رُفض الرمز الترويجي عند الدفع' },
+    summary: { en: 'Promo code rejected at checkout', ar: 'رُفض رمز الخصم عند الدفع' },
     orderId: null,
     agentName: null,
     startedMinutesAgo: 2,
@@ -246,7 +246,7 @@ export interface RawRefund {
   decidedBy: L | null;
   note: L | null;
   recommendation: 'approve' | 'review' | 'reject';
-  evidence: { label: L; value: L }[];
+  evidence: { label: L; value: L; simulated?: boolean }[];
   policy: { title: L; section: L };
   risks: L[];
 }
@@ -264,10 +264,15 @@ const PRIOR_CLAIMS: L = {
 };
 const ACCOUNT_AGE: L = { en: 'Account age', ar: 'عمر الحساب' };
 const PHOTO: L = { en: 'Customer photo', ar: 'صورة العميل' };
+// Customers cannot upload photos, so a photo row can only ever be demo data.
+const SIMULATED_PHOTO: L = {
+  en: 'Simulated flag on a demo order. Customers cannot upload photos, so no real photo exists.',
+  ar: 'علامة محاكاة في طلب تجريبي. لا يمكن للعملاء رفع الصور، فلا توجد صورة حقيقية.',
+};
 
 const APPROVAL_POLICY = {
   title: REFUNDS,
-  section: { en: 'REF-05, Approval limits and repeat claims', ar: 'REF-05، حدود الموافقة والمطالبات المتكررة' },
+  section: { en: 'REF-05, Approval limits and repeat claims', ar: 'REF-05، حدود الموافقة وتكرار المطالبات' },
 };
 const WRONG_ITEM_POLICY = {
   title: { en: 'Wrong items', ar: 'الأصناف الخاطئة' },
@@ -325,7 +330,7 @@ export const REFUND_SEEDS: RawRefund[] = [
     recommendation: 'review',
     evidence: [
       { label: ORDER_VALUE, value: money(66) },
-      { label: PHOTO, value: { en: 'One photo received', ar: 'وصلت صورة واحدة' } },
+      { label: PHOTO, value: SIMULATED_PHOTO, simulated: true },
       { label: PRIOR_CLAIMS, value: { en: String(R.repeatClaimsFrom), ar: String(R.repeatClaimsFrom) } },
     ],
     policy: QUALITY_POLICY,
@@ -347,7 +352,7 @@ export const REFUND_SEEDS: RawRefund[] = [
     reason: 'missing_item',
     summary: {
       en: 'Khalas dates missing. The store scanned one of two bags, which fits the report.',
-      ar: 'تمر الخلاص ناقص. مسح المتجر كيسًا واحدًا من كيسين، وهذا يتفق مع البلاغ.',
+      ar: 'تمر الخلاص ناقص. سجّل المتجر كيسًا واحدًا من كيسين، وهذا يتفق مع البلاغ.',
     },
     requestedMinutesAgo: 7,
     decidedMinutesAgo: null,
@@ -356,7 +361,7 @@ export const REFUND_SEEDS: RawRefund[] = [
     recommendation: 'approve',
     evidence: [
       { label: ORDER_VALUE, value: money(110.79) },
-      { label: STORE_RECORD, value: { en: 'One of two bags scanned', ar: 'مسح كيس واحد من كيسين' } },
+      { label: STORE_RECORD, value: { en: 'One of two bags scanned', ar: 'سجّل كيسًا واحدًا من كيسين' } },
       { label: PRIOR_CLAIMS, value: { en: 'None', ar: 'لا يوجد' } },
     ],
     policy: APPROVAL_POLICY,
@@ -383,7 +388,7 @@ export const REFUND_SEEDS: RawRefund[] = [
     evidence: [
       { label: ORDER_VALUE, value: money(132.75) },
       { label: STORE_RECORD, value: { en: 'Store confirmed the mistake', ar: 'أكد المتجر الخطأ' } },
-      { label: PHOTO, value: { en: 'One photo received', ar: 'وصلت صورة واحدة' } },
+      { label: PHOTO, value: SIMULATED_PHOTO, simulated: true },
       { label: PRIOR_CLAIMS, value: { en: '1', ar: '1' } },
     ],
     policy: WRONG_ITEM_POLICY,
@@ -489,7 +494,7 @@ const audit = (
 const proposed = (id: string, minutesAgo: number, amount: number, order: string, refund: string): RawAudit =>
   audit(id, minutesAgo, 'bot', BOT, 'refund.proposed', refund, {
     en: `QAR ${amount.toFixed(2)} for order ${order}`,
-    ar: `${amount.toFixed(2)} ريالًا للطلب ${order}`,
+    ar: `${amount.toFixed(2)} ر.ق للطلب ${order}`,
   });
 
 export const AUDIT_SEEDS: RawAudit[] = [
@@ -524,7 +529,7 @@ export const AUDIT_SEEDS: RawAudit[] = [
   }),
   audit('au-41', 12, 'bot', BOT, 'refund.auto_approved', 'RF-2090', {
     en: 'QAR 12.00 for order JB-47988',
-    ar: '12.00 ريالًا للطلب JB-47988',
+    ar: '12.00 ر.ق للطلب JB-47988',
   }),
   proposed('au-40', 14, 62.25, 'JB-48090', 'RF-2094'),
   audit('au-39', 17, 'bot', BOT, 'tool.called', 'JB-48102', {
@@ -540,12 +545,12 @@ export const AUDIT_SEEDS: RawAudit[] = [
   }),
   audit('au-35', 80, 'agent', AGENT_KHALID, 'refund.approved', 'RF-2088', {
     en: 'QAR 68.00. Store confirmed by phone.',
-    ar: '68.00 ريالًا. أكد المتجر ذلك هاتفيًا.',
+    ar: '68.00 ر.ق. أكد المتجر ذلك هاتفيًا.',
   }),
   proposed('au-34', 95, 68, 'JB-47790', 'RF-2088'),
   audit('au-33', 120, 'agent', AGENT_KHALID, 'refund.rejected', 'RF-2085', {
     en: 'QAR 74.00. No photo was sent.',
-    ar: '74.00 ريالًا. لم تُرسل صورة.',
+    ar: '74.00 ر.ق. لم تُرسل صورة.',
   }),
   proposed('au-32', 140, 74, 'JB-47711', 'RF-2085'),
 ];
@@ -556,7 +561,7 @@ const ISSUES: { id: string; label: L; perWeek: number; change: number }[] = [
   { id: 'refund_status', label: { en: 'Refund status', ar: 'حالة الاسترداد' }, perWeek: 197, change: 11 },
   { id: 'late_credit', label: { en: 'Late delivery credit', ar: 'رصيد التأخير' }, perWeek: 144, change: -9 },
   { id: 'promo_codes', label: { en: 'Promo code problems', ar: 'مشكلات الرموز الترويجية' }, perWeek: 96, change: 23 },
-  { id: 'double_charge', label: { en: 'Charged twice', ar: 'خصم مزدوج' }, perWeek: 58, change: 2 },
+  { id: 'double_charge', label: { en: 'Charged twice', ar: 'خصم مكرر' }, perWeek: 58, change: 2 },
   { id: 'address_change', label: { en: 'Changing the address', ar: 'تغيير العنوان' }, perWeek: 41, change: -12 },
 ];
 

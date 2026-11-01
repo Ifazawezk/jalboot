@@ -39,7 +39,7 @@ const SOURCES = {
     section: { en: 'CAN-03, Grace period and scheduled orders', ar: 'CAN-03، فترة السماح والطلبات المجدولة' },
     excerpt: {
       en: `For the first ${R.cancelGraceMinutes} minutes after placing it, a food, grocery or pharmacy order can be cancelled free at any status before pickup.`,
-      ar: `خلال أول ${R.cancelGraceMinutes} دقيقة من تقديم الطلب، يمكن إلغاء طلب الطعام أو البقالة أو الصيدلية مجانًا في أي مرحلة قبل استلام المندوب له.`,
+      ar: `خلال أول دقيقتين (${R.cancelGraceMinutes}) من تقديم الطلب، يمكن إلغاء طلب الطعام أو البقالة أو الصيدلية مجانًا في أي مرحلة قبل استلام المندوب له.`,
     },
   },
   cancelFood: {
@@ -164,7 +164,7 @@ const SCENARIOS: Partial<Record<Intent, Scenario>> = {
         do: 'say',
         text: {
           en: `I am sorry about that. The Khalas dates are on order JB-47902, and the store scanned only one of the two bags, so your report matches what I can see.\n\nThis refund is QAR 62.50 [1]. A person needs to review it, so I have sent it to the team. The answer will appear here.`,
-          ar: `نأسف لذلك. تمر الخلاص موجود في الطلب JB-47902، وقد مسح المتجر كيسًا واحدًا فقط من الكيسين، لذا يتطابق بلاغك مع ما أراه.\n\nقيمة هذا الاسترداد 62.50 ر.ق [1]، ويحتاج إلى مراجعة موظف، وقد أرسلته إلى الفريق. سيظهر الرد هنا.`,
+          ar: `نأسف لذلك. تمر الخلاص موجود في الطلب JB-47902، وقد سجّل المتجر كيسًا واحدًا فقط من الكيسين، لذا يتطابق بلاغك مع ما أراه.\n\nقيمة هذا الاسترداد 62.50 ر.ق [1]، ويحتاج إلى مراجعة موظف، وقد أرسلته إلى الفريق. سيظهر الرد هنا.`,
         },
       },
     ],
@@ -178,7 +178,7 @@ const SCENARIOS: Partial<Record<Intent, Scenario>> = {
         do: 'say',
         text: {
           en: `It depends on how far the order has gone. For the first ${R.cancelGraceMinutes} minutes it is free [1]. After that, a food order costs ${R.cancelFoodPreparingPct}% of the net items while it is accepted or preparing, and ${R.cancelFoodReadyPct}% plus all fees once it is ready [2].`,
-          ar: `يعتمد ذلك على مرحلة الطلب. خلال أول ${R.cancelGraceMinutes} دقيقة يكون الإلغاء مجانيًا [1]. وبعد ذلك تكون رسوم طلب الطعام ${R.cancelFoodPreparingPct}% من صافي الأصناف عندما يكون مقبولًا أو قيد التحضير، و${R.cancelFoodReadyPct}% مع كل الرسوم بعد أن يصبح جاهزًا [2].`,
+          ar: `يعتمد ذلك على مرحلة الطلب. خلال أول دقيقتين (${R.cancelGraceMinutes}) يكون الإلغاء مجانيًا [1]. وبعد ذلك تكون رسوم طلب الطعام ${R.cancelFoodPreparingPct}% من صافي الأصناف عندما يكون مقبولًا أو قيد التحضير، و${R.cancelFoodReadyPct}% مع كل الرسوم بعد أن يصبح جاهزًا [2].`,
         },
       },
     ],
@@ -194,7 +194,7 @@ const SCENARIOS: Partial<Record<Intent, Scenario>> = {
         do: 'say',
         text: {
           en: 'I am so sorry. If anyone is struggling to breathe or feels worse, please call 999 now.\n\nThis needs a person, not me, so I have moved you to the front of the line [1]. They will see everything you have told me.',
-          ar: 'أنا آسف جدًا لذلك. إذا كان أي شخص يجد صعوبة في التنفس أو تسوء حالته، فاتصل بالرقم 999 الآن.\n\nهذه الحالة تحتاج إلى موظف، لذا نقلتك إلى مقدمة قائمة الانتظار [1]. سيرى الموظف كل ما أخبرتني به.',
+          ar: 'نأسف جدًا لذلك. إذا كان أي شخص يجد صعوبة في التنفس أو تسوء حالته، فاتصل بالرقم 999 الآن.\n\nهذه الحالة تحتاج إلى موظف، لذا نقلتك إلى مقدمة قائمة الانتظار [1]. سيرى الموظف كل ما أخبرتني به.',
         },
       },
     ],
@@ -258,7 +258,7 @@ const SCENARIOS: Partial<Record<Intent, Scenario>> = {
         do: 'say',
         text: {
           en: 'I could not find that in the help pages, and I would rather not guess. I can check an order, look into a missing item or a refund, or bring in a person.',
-          ar: 'لم أجد ذلك في صفحات المساعدة، ولا أريد أن أخمن. يمكنني التحقق من طلب، أو متابعة صنف ناقص أو استرداد، أو إشراك موظف.',
+          ar: 'لم أجد ذلك في صفحات المساعدة، ولا أريد إعطاءك معلومة غير مؤكدة. يمكنني التحقق من طلب، أو متابعة صنف ناقص أو استرداد، أو إشراك موظف.',
         },
       },
     ],
@@ -361,6 +361,7 @@ export function expandScenario(scenario: Scenario, ctx: ExpandContext): TimedEve
           status: 'pending',
           decidedBy: null,
           note: null,
+          destination: 'original',
         };
         out.push({ waitMs: 120, event: { type: 'refund.update', refund } });
         break;

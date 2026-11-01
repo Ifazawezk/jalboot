@@ -3,7 +3,7 @@ not that many ever. Otherwise a customer who verifies once a month gets blocked.
 
 from datetime import timedelta
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.schema import CreateTable
 
 from jalboot.db.base import create_schema, make_engine, make_session_factory
@@ -103,11 +103,15 @@ def test_a_database_with_the_removed_topic_column_can_still_add_conversations(tm
     """The old column was NOT NULL, so leaving it behind would break every new chat."""
     engine = make_engine(f"sqlite:///{(tmp_path / 'old.sqlite3').as_posix()}")
     current = str(CreateTable(Conversation.__table__).compile(engine))
-    old = current.replace("PRIMARY KEY (id)", "topic VARCHAR(32) NOT NULL, PRIMARY KEY (id)")
-    assert "topic" in old
+    old = current.replace(
+        "PRIMARY KEY (id)", "topic VARCHAR(32) NOT NULL, first_report_at TIMESTAMP, PRIMARY KEY (id)",
+    )
+    assert "topic" in old and "first_report_at" in old
     with engine.begin() as connection:
         connection.execute(text(old))
     create_schema(engine)
+    columns = {column["name"] for column in inspect(engine).get_columns("conversations")}
+    assert not columns & {"topic", "first_report_at"}
     with make_session_factory(engine)() as session:
         session.add(Conversation(id="cv-new", created_at=ANCHOR, updated_at=ANCHOR))
         session.commit()

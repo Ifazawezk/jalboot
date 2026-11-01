@@ -1,4 +1,5 @@
-import type { Refund, RefundDecision, RefundStatus } from '../api/types';
+import type { Refund, RefundDecision, RefundStatus, RefundSummary } from '../api/types';
+import type { MessageKey } from '../i18n/en';
 
 // Limits are not defined here. They come from GET /policy, and each Refund says who may
 // decide it. This is only the shortest reason that still tells a customer something.
@@ -23,6 +24,14 @@ export function decidedOnly(refunds: Refund[]): Refund[] {
   return refunds
     .filter((r) => !isOpen(r.status))
     .sort((a, b) => Date.parse(b.decidedAt ?? '') - Date.parse(a.decidedAt ?? ''));
+}
+
+/** What the customer's refund card says. Timed means the server gave the timings. */
+export function refundBodyKey(refund: RefundSummary, timed: boolean): MessageKey {
+  if (refund.status === 'pending') return 'refund.body.pending';
+  if (refund.status === 'rejected') return 'refund.body.rejected';
+  if (refund.destination === 'credit') return 'refund.body.credit';
+  return timed ? 'refund.body.doneTimed' : 'refund.body.done';
 }
 
 export type DecisionProblem = 'note_required' | null;

@@ -342,6 +342,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         closed: true,
+        // Nobody is on the other end now, so nothing may still say so.
+        handoff: null,
         items: [
           ...state.items,
           {

@@ -69,6 +69,7 @@ export const en = {
   'refund.body.done': 'The money returns to your original payment method.',
   'refund.body.doneTimed':
     'The money returns to your original payment method within {days} business days. Refund credit arrives within {minutes} minutes.',
+  'refund.body.credit': 'This was added to your {brand} credit.',
   'refund.body.rejected': 'Our team declined this request.',
 
   'identity.heading': 'Confirm it is you',
@@ -218,6 +219,8 @@ export const en = {
   'queue.reason.wrong_item': 'Wrong item',
   'queue.reason.late': 'Late delivery',
   'queue.reason.quality': 'Food quality',
+  'queue.reason.address': 'Address change',
+  'queue.simulated': 'Simulated',
   'queue.requested': 'Requested {time}',
   'queue.approve': 'Approve {amount}',
   'queue.reject': 'Decline',

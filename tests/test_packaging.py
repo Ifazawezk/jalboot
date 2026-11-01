@@ -27,3 +27,4 @@ def test_unused_dependencies_stay_out_and_fastapi_stays_pinned():
     assert "playwright" not in declared
     assert "fastapi>=0.162,<0.163" in declared
     assert "pyyaml>=6.0.1" in declared
+    assert "uvicorn>=0.54" in declared  # serve passes it a loop factory by name
