@@ -24,6 +24,7 @@ MESSAGES: dict[str, tuple[str, str]] = {
     "duplicate_message": ("This message was already answered.", "تم الرد على هذه الرسالة من قبل."),
     "refund_already_decided": ("This refund has already been decided.", "تم البت في هذا الاسترداد من قبل."),
     "amount_exceeds_paid": ("This amount is more than can be refunded now.", "هذا المبلغ أكبر مما يمكن رده الآن."),
+    "wallet_at_limit": ("This credit would pass the wallet limit, so it needs a different route.", "هذا الرصيد يتجاوز حد المحفظة، لذا يحتاج إلى طريقة أخرى."),
     "validation_error": ("That request is not valid.", "هذا الطلب غير صحيح."),
     "conversation_closed": ("This conversation is closed.", "تم إغلاق هذه المحادثة."),
     "internal_error": ("Something went wrong. Please try again.", "حدث خطأ. يرجى المحاولة مرة أخرى."),

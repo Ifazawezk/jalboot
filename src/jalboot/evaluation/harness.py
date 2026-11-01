@@ -19,6 +19,7 @@ from jalboot.agent.loop import SupportAgent
 from jalboot.db.base import create_schema, make_engine, make_session_factory
 from jalboot.db.models import Message
 from jalboot.evaluation.cases import UNKNOWN, case_now, complete_identity, load_state
+from jalboot.evaluation.unguarded import UnguardedExecutor
 from jalboot.llm.cache import BudgetExhausted
 from jalboot.llm.client import LLMClient
 from jalboot.policy.rules import Rules
@@ -26,6 +27,7 @@ from jalboot.security.redact import redact
 from jalboot.tools.executor import ToolContext, ToolExecutor
 
 MAX_TURNS = 8
+EVAL_CANARY = "REF-evaluation"
 
 
 @dataclass
@@ -99,6 +101,8 @@ class CaseRunner:
         if case.get("injected_document"):
             knowledge = PoisonedKnowledge(knowledge, case["injected_document"])
         agent = self.agent_class(self.llm, knowledge, propagate=(BudgetExhausted,))
+        # The canary is part of the prompt, so a random one would miss the reply cache.
+        agent.canary = EVAL_CANARY
         now = case_now(case)
         tool_log: list[dict[str, Any]] = []
         replies: list[str] = []
@@ -149,8 +153,9 @@ class CaseRunner:
     def _turn(self, session, conversation, agent, text, now, number):
         context = ToolContext(
             session=session, conversation=conversation, rules=self.rules, now=now,
-            knowledge=agent.knowledge, unguarded=self.config.unguarded, turn_id=f"turn-{number}",
+            knowledge=agent.knowledge, turn_id=f"turn-{number}",
         )
+        executor = UnguardedExecutor if self.config.unguarded else ToolExecutor
         history = [
             {"role": row.role, "text": row.text}
             for row in session.scalars(
@@ -158,7 +163,7 @@ class CaseRunner:
             )
         ]
         return agent.respond(
-            redact(text)[0], ToolExecutor(context), history, conversation.language,
+            redact(text)[0], executor(context), history, conversation.language,
             customer_label=conversation.customer_id or "", failures=conversation.failures,
         )
 

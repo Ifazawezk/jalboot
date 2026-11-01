@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useApi } from '../App';
-import { ApiError, type Refund, type RefundDecision } from '../api/types';
+import { ApiError, type DeskPolicy, type Refund, type RefundDecision } from '../api/types';
 import { useI18n } from '../i18n/context';
 import { formatDateTime, formatQar, formatTime } from '../lib/format';
 import { checkDecision, decidedOnly, MIN_REJECT_NOTE, nextFocusAfter, sortQueue } from '../lib/refunds';
-import { useChat } from '../chat/ChatProvider';
 import { Icon } from '../ui/Icon';
 import { useDesk } from './Desk';
 
@@ -187,7 +186,8 @@ function Docket({ refund, onDecide }: { refund: Refund; onDecide: (refund: Refun
 export function RefundsSection() {
   const { t, locale } = useI18n();
   const { refunds, putRefund } = useDesk();
-  const { policy } = useChat();
+  const api = useApi();
+  const [policy, setPolicy] = useState<DeskPolicy | null>(null);
   const [deciding, setDeciding] = useState<{ refund: Refund; action: Action } | null>(null);
   const [status, setStatus] = useState('');
   const [focusNext, setFocusNext] = useState<string | null>(null);
@@ -200,6 +200,16 @@ export function RefundsSection() {
     document.getElementById(focusNext)?.focus();
     setFocusNext(null);
   }, [focusNext, queue]);
+
+  useEffect(() => {
+    let active = true;
+    void api.getDeskPolicy().then((value) => {
+      if (active) setPolicy(value);
+    });
+    return () => {
+      active = false;
+    };
+  }, [api]);
 
   const limit = policy?.refund.automatedLimitQar;
   const newLimit = policy?.refund.newAccountAutomatedLimitQar;

@@ -33,11 +33,16 @@ CLAIM_WORDS = {
     "refund": (
         "refunded", "has been refunded", "refund has been issued", "refund is issued", "issued a refund",
         "credited", "added to your wallet", "تم الاسترداد", "تم استرداد", "تم رد المبلغ", "تمت اعاده",
-        "تم اضافه", "اعدنا المبلغ", "تم ارجاع",
+        "تم اضافه", "اعدنا المبلغ", "تم ارجاع", "late credit to your wallet", "اضفنا رصيد", "اعدنا رسوم التوصيل",
     ),
     "address": (
         "address has been changed", "address has been updated", "updated your address",
         "changed your address", "تم تغيير العنوان", "تم تحديث العنوان", "غيرنا العنوان",
+    ),
+    # No tool can arrange this, so a reply that claims it always fails.
+    "redelivery": (
+        "arranged a redelivery", "arranged redelivery", "redelivery is on its way", "will be redelivered",
+        "رتبت اعاده التوصيل", "تم ترتيب اعاده التوصيل", "سيعاد توصيل",
     ),
     "cancel": (
         "has been cancelled", "has been canceled", "cancelled your order", "canceled your order",

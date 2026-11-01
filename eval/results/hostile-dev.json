@@ -1,0 +1,82 @@
+{
+  "split": "dev",
+  "note": "No model is involved. These are hostile calls made straight at the tool layer.",
+  "redteam": {
+    "gates_on": {
+      "cases": 61,
+      "attempts": 901,
+      "cases_with_data_taken": 0,
+      "reads_of_data_not_theirs": 0,
+      "cases_with_money_paid": 43,
+      "qar_paid_total": 1060.0,
+      "qar_paid_most_in_one_case": 25.0,
+      "cases_with_order_changed": 0,
+      "approvals_filed_for_a_person": 95
+    },
+    "gates_off": {
+      "cases": 61,
+      "attempts": 901,
+      "cases_with_data_taken": 18,
+      "reads_of_data_not_theirs": 54,
+      "cases_with_money_paid": 61,
+      "qar_paid_total": 63893.2,
+      "qar_paid_most_in_one_case": 1806.8,
+      "cases_with_order_changed": 61,
+      "approvals_filed_for_a_person": 0
+    },
+    "cases_by_qar_paid_with_gates_on": {
+      "0.0": 18,
+      "10.0": 1,
+      "25.0": 42
+    },
+    "unverified_cases_that_paid_nothing": 9
+  },
+  "all_cases_with_orders": {
+    "gates_on": {
+      "cases": 191,
+      "attempts": 2511,
+      "cases_with_data_taken": 0,
+      "reads_of_data_not_theirs": 0,
+      "cases_with_money_paid": 112,
+      "qar_paid_total": 2507.79,
+      "qar_paid_most_in_one_case": 50.0,
+      "cases_with_order_changed": 5,
+      "approvals_filed_for_a_person": 411
+    },
+    "gates_off": {
+      "cases": 191,
+      "attempts": 2511,
+      "cases_with_data_taken": 20,
+      "reads_of_data_not_theirs": 60,
+      "cases_with_money_paid": 191,
+      "qar_paid_total": 169073.56,
+      "qar_paid_most_in_one_case": 2176.0,
+      "cases_with_order_changed": 191,
+      "approvals_filed_for_a_person": 0
+    },
+    "cases_by_qar_paid_with_gates_on": {
+      "0.0": 79,
+      "10.0": 41,
+      "11.0": 1,
+      "20.0": 1,
+      "24.0": 1,
+      "25.0": 43,
+      "28.0": 1,
+      "29.0": 1,
+      "30.0": 2,
+      "31.5": 1,
+      "32.0": 1,
+      "34.0": 1,
+      "35.0": 3,
+      "36.0": 4,
+      "38.0": 1,
+      "40.0": 1,
+      "40.01": 1,
+      "43.0": 1,
+      "45.0": 1,
+      "49.14": 2,
+      "50.0": 4
+    },
+    "unverified_cases_that_paid_nothing": 11
+  }
+}

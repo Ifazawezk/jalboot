@@ -7,7 +7,7 @@ import {
   STREAM_EVENT_TYPES,
 } from '../api/types';
 import { REFUND_SEEDS } from '../data/desk';
-import { MOCK_POLICY, MOCK_RULES as M } from '../data/mockRules';
+import { MOCK_DESK_POLICY, MOCK_POLICY, MOCK_RULES as M } from '../data/mockRules';
 import { buildOrder, serviceFee } from '../data/orders';
 
 // Sits next to web/ for now. Point RULES_JSON at it if the folders move.
@@ -16,7 +16,7 @@ const RULES_PATH = process.env.RULES_JSON ?? '../knowledge/rules.json';
 interface Rules {
   meta: { policy_version: string };
   refunds: {
-    approval_limits_qar: { automated: number; agent: number };
+    approval_limits_qar: { automated: number; agent: number; supervisor: number };
     new_account: { age_days: number; automated_limit_qar: number };
     repeat_claims: { window_days: number; agent_review_from_prior_claims: number };
     timing: { card_business_days: number; credit_minutes: number };
@@ -41,6 +41,7 @@ describe.runIf(existsSync(RULES_PATH))('mock values match knowledge/rules.json',
     ['refundNewAccountLimitQar', M.refundNewAccountLimitQar, rules.refunds.new_account.automated_limit_qar],
     ['refundNewAccountAgeDays', M.refundNewAccountAgeDays, rules.refunds.new_account.age_days],
     ['refundAgentLimitQar', M.refundAgentLimitQar, rules.refunds.approval_limits_qar.agent],
+    ['refundSupervisorLimitQar', M.refundSupervisorLimitQar, rules.refunds.approval_limits_qar.supervisor],
     ['refundCardBusinessDays', M.refundCardBusinessDays, rules.refunds.timing.card_business_days],
     ['refundCreditMinutes', M.refundCreditMinutes, rules.refunds.timing.credit_minutes],
     ['repeatClaimsFrom', M.repeatClaimsFrom, rules.refunds.repeat_claims.agent_review_from_prior_claims],
@@ -64,9 +65,17 @@ describe.runIf(existsSync(RULES_PATH))('mock values match knowledge/rules.json',
 });
 
 describe('sample data follows the policy', () => {
-  it('serves the policy from the same values', () => {
-    expect(MOCK_POLICY.refund.automatedLimitQar).toBe(M.refundAutomatedLimitQar);
-    expect(MOCK_POLICY.refund.agentLimitQar).toBe(M.refundAgentLimitQar);
+  it('serves the desk policy from the same values', () => {
+    expect(MOCK_DESK_POLICY.refund.automatedLimitQar).toBe(M.refundAutomatedLimitQar);
+    expect(MOCK_DESK_POLICY.refund.agentLimitQar).toBe(M.refundAgentLimitQar);
+    expect(MOCK_DESK_POLICY.refund.supervisorLimitQar).toBe(M.refundSupervisorLimitQar);
+  });
+
+  it('keeps internal limits out of everything a customer can read', () => {
+    expect(JSON.stringify(MOCK_POLICY)).not.toContain('Limit');
+    const scripts = readFileSync('src/data/scenarios.ts', 'utf-8');
+    expect(scripts).not.toContain('refundAutomatedLimitQar');
+    expect(scripts).not.toContain('REF-05');
   });
 
   it('only queues a refund at or under the automated limit when a rule sends it to a person', () => {
@@ -168,6 +177,8 @@ describe('API.md', () => {
     'GET /desk/conversations',
     'POST /desk/conversations/{id}/claim',
     'POST /desk/conversations/{id}/reply',
+    'POST /desk/conversations/{id}/close',
+    'GET /desk/policy',
     'GET /desk/refunds',
     'POST /desk/refunds/{id}/decision',
     'GET /desk/audit',

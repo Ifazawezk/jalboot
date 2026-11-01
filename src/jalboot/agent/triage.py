@@ -25,9 +25,14 @@ def _terms(*words: str) -> tuple[str, ...]:
     return tuple(normalize(word) for word in words)
 
 
+# Arabic attaches the article and prepositions to the word itself, so a search that
+# starts at the word boundary misses الحساسية, بالحساسية and للتحرش.
+ARABIC_PREFIX = r"(?:[وفبكل]|ال|لل|بال|وال|فال|كال)?"
+
+
 def _pattern(*words: str) -> re.Pattern[str]:
-    alternatives = "|".join(re.escape(term) for term in _terms(*words))
-    return re.compile(rf"(?<![\w])(?:{alternatives})")
+    alternatives = "|".join(re.escape(term) for term in sorted(_terms(*words), key=len, reverse=True))
+    return re.compile(rf"(?<![\w]){ARABIC_PREFIX}(?:{alternatives})")
 
 
 HUMAN_REQUEST = _pattern(
@@ -61,10 +66,16 @@ SAFETY_TERMS = _pattern(
     "accident", "crashed", "harass", "assault", "threatened me", "unsafe", "wrong medicine",
     "wrong medication", "wrong dose", "wrong strength", "overdose", "heart is racing", "had a reaction",
     "bad stomach", "stomach pain", "at the clinic", "i'm scared", "i am scared", "make me pay for",
-    "glass in", "bleeding", "choking",
+    "glass in", "bleeding", "choking", "trouble breathing", "difficulty breathing", "hard to breathe",
+    "a rash", "hives", "throat is closing", "threw up",
     "حساسيه", "تسمم", "طوارئ", "الطوارئ", "اختناق", "تورم", "اصابه", "مصاب", "حادث", "تحرش", "هددني", "تهديد",
     "دواء خطا", "جرعه", "خايفه", "خايف", "انجرح", "ينزل دم", "قزاز", "زجاج في", "رسايل مزعجه", "يطق الباب",
-    "يرفض يمشي",
+    "يرفض يمشي", "صعوبه في التنفس", "ضيق تنفس", "ضيق في التنفس", "ما اقدر اتنفس", "طفح", "استفراغ", "يهدد",
+)
+# Asking about the allergy rules is a question. Reporting a reaction is not.
+ABOUT_THE_POLICY = _pattern(
+    "allergy policy", "allergen policy", "allergy information", "allergen information", "allergy rules",
+    "سياسه الحساسيه", "معلومات الحساسيه", "معلومات مسببات الحساسيه",
 )
 # A hospital is only a safety signal when someone went there because of the order.
 HOSPITAL = _pattern("hospital", "مستشفي", "المستشفي")
@@ -159,8 +170,9 @@ def triage_message(text: str, default_language: str = "en", upset_threshold: int
         result.signals.append("injection_pattern")
 
     # In order of harm, so a safety report inside an angry message keeps its reason.
+    reported = ABOUT_THE_POLICY.sub(" ", folded)
     checks = (
-        (SAFETY_TERMS.search(folded) or (HOSPITAL.search(folded) and not WORKS_THERE.search(folded)), SAFETY, "safety_term"),
+        (SAFETY_TERMS.search(reported) or (HOSPITAL.search(folded) and not WORKS_THERE.search(folded)), SAFETY, "safety_term"),
         (ACCOUNT_TAKEOVER.search(folded), SECURITY, "account_takeover"),
         (LEGAL_TERMS.search(folded), LEGAL, "legal_term"),
         (AGENT_COMPLAINT_TERMS.search(folded), AGENT_COMPLAINT, "agent_complaint"),

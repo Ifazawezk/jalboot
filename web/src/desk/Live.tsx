@@ -131,6 +131,17 @@ function Detail({ id }: { id: string }) {
     }
   };
 
+  const close = async () => {
+    setBusy(true);
+    try {
+      putConversation(await api.closeConversation(id));
+    } catch (error) {
+      handleAuth(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const send = async (event: FormEvent) => {
     event.preventDefault();
     const text = reply.trim();
@@ -168,11 +179,18 @@ function Detail({ id }: { id: string }) {
             )}
           </p>
         </div>
-        {live.state !== 'agent' && (
-          <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void takeOver()}>
-            <Icon name="person" size={18} />
-            {t('live.takeOver')}
-          </button>
+        {live.state !== 'closed' && (
+          <div className="convo__actions">
+            {live.state !== 'agent' && (
+              <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void takeOver()}>
+                <Icon name="person" size={18} />
+                {t('live.takeOver')}
+              </button>
+            )}
+            <button type="button" className="btn" disabled={busy} onClick={() => void close()}>
+              {t('live.close')}
+            </button>
+          </div>
         )}
       </header>
       <ol className="transcript">

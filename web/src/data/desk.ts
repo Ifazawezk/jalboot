@@ -136,25 +136,25 @@ export const CONVERSATIONS: RawConversation[] = [
     state: 'agent',
     priority: 'normal',
     verified: true,
-    summary: { en: 'Order left at the wrong tower', ar: 'سُلّم الطلب في برج خاطئ' },
+    summary: { en: 'Received the wrong dish', ar: 'وصل طبق خاطئ' },
     orderId: 'JB-48090',
     agentName: AGENT_NOOR,
     startedMinutesAgo: 19,
     updatedMinutesAgo: 1,
     waitingMinutes: null,
     transcript: [
-      entry('o1', 19, 'customer', 'The app says delivered but my food is not here. I live in Tower 9.'),
+      entry('o1', 19, 'customer', 'I ordered the prawn platter and got grilled hammour instead.'),
       entry(
         'o2',
         18,
         'bot',
-        'The delivery photo shows a lobby in Tower 6. I have asked a person to join so they can reach the rider.',
+        'The store confirms the swap. I have filed the refund and asked a person to review it.',
         { tools: [T.order, T.person] },
       ),
-      entry('o3', 9, 'agent', 'Hi Omar, this is Noor. I have reached the rider and he is going back for it now.', {
+      entry('o3', 9, 'agent', 'Hi Omar, this is Noor. I am looking at your refund now.', {
         name: AGENT_NOOR,
       }),
-      entry('o4', 1, 'customer', 'Thank you. Can I still get the delivery fee back?'),
+      entry('o4', 1, 'customer', 'Thank you. Will it go back to my card?'),
     ],
   },
   {
@@ -315,8 +315,8 @@ export const REFUND_SEEDS: RawRefund[] = [
     status: 'pending',
     reason: 'quality',
     summary: {
-      en: `Says the rice arrived undercooked. The customer already has ${R.repeatClaimsFrom} approved claims this month, so a person decides.`,
-      ar: `تقول إن الأرز وصل غير ناضج. لدى العميلة ${R.repeatClaimsFrom} مطالبات موافق عليها هذا الشهر، لذا يقرر موظف.`,
+      en: `Says the rice, priced at QAR 58, arrived undercooked. The customer already has ${R.repeatClaimsFrom} approved claims in the last ${R.repeatClaimsWindowDays} days, so a person decides.`,
+      ar: `تقول إن الأرز، وسعره 58 ر.ق، وصل غير ناضج. لدى العميلة ${R.repeatClaimsFrom} مطالبات موافق عليها خلال آخر ${R.repeatClaimsWindowDays} يومًا، لذا يقرر موظف.`,
     },
     requestedMinutesAgo: 22,
     decidedMinutesAgo: null,
@@ -324,7 +324,7 @@ export const REFUND_SEEDS: RawRefund[] = [
     note: null,
     recommendation: 'review',
     evidence: [
-      { label: ORDER_VALUE, value: money(58) },
+      { label: ORDER_VALUE, value: money(66) },
       { label: PHOTO, value: { en: 'One photo received', ar: 'وصلت صورة واحدة' } },
       { label: PRIOR_CLAIMS, value: { en: String(R.repeatClaimsFrom), ar: String(R.repeatClaimsFrom) } },
     ],
@@ -373,7 +373,7 @@ export const REFUND_SEEDS: RawRefund[] = [
     reason: 'wrong_item',
     summary: {
       en: 'Received grilled hammour instead of the prawn platter. Store confirmed the swap.',
-      ar: 'استلم هامور مشوي بدل طبق الروبيان. أكد المتجر حدوث الخطأ.',
+      ar: 'استلم هامورًا مشويًا بدل طبق الروبيان. أكد المتجر حدوث الخطأ.',
     },
     requestedMinutesAgo: 14,
     decidedMinutesAgo: null,
@@ -381,8 +381,9 @@ export const REFUND_SEEDS: RawRefund[] = [
     note: null,
     recommendation: 'approve',
     evidence: [
-      { label: ORDER_VALUE, value: money(88.25) },
+      { label: ORDER_VALUE, value: money(132.75) },
       { label: STORE_RECORD, value: { en: 'Store confirmed the mistake', ar: 'أكد المتجر الخطأ' } },
+      { label: PHOTO, value: { en: 'One photo received', ar: 'وصلت صورة واحدة' } },
       { label: PRIOR_CLAIMS, value: { en: '1', ar: '1' } },
     ],
     policy: WRONG_ITEM_POLICY,

@@ -128,7 +128,7 @@ export const ar: Record<MessageKey, string> = {
   'case.orders': 'الطلبات',
   'case.sources': 'المصادر المستخدمة',
   'case.none': 'لا شيء بعد',
-  'case.rule': 'طلبات الاسترداد فوق {limit} يقررها موظف دائمًا.',
+  'case.rule': 'تخضع بعض عمليات الاسترداد لمراجعة موظف قبل صرفها.',
 
   'rec.heading': 'أمثلة مُعدّة مسبقًا.',
   'rec.pick': 'اختر واحدًا.',
@@ -182,6 +182,7 @@ export const ar: Record<MessageKey, string> = {
   'live.pick': 'اختر محادثة لقراءتها هنا.',
   'live.back': 'كل المحادثات',
   'live.takeOver': 'تولَّ المحادثة',
+  'live.close': 'إنهاء المحادثة',
   'live.waitingFor': 'ينتظر منذ {clock}',
   'live.orderRef': 'طلب {id}',
   'live.langEn': 'الإنجليزية',
@@ -269,6 +270,7 @@ export const ar: Record<MessageKey, string> = {
   'audit.act.guardrail.blocked': 'حظر إجراء',
   'audit.act.identity.verified': 'أكد هوية العميل',
   'audit.act.identity.failed': 'فشل تحقق من الهوية',
+  'audit.act.conversation.closed': 'أنهى المحادثة',
 
   'range.label': 'الفترة',
   'issues.caption': 'تواصل العملاء حسب المشكلة، الأكبر أولًا',

@@ -1,4 +1,4 @@
-import type { Policy } from '../api/types';
+import type { DeskPolicy, Policy } from '../api/types';
 
 // Values the mock states or enforces. Each one must equal the matching key in
 // knowledge/rules.json, and src/lib/rules.test.ts fails if they drift apart.
@@ -8,6 +8,7 @@ export const MOCK_RULES = {
   refundNewAccountLimitQar: 25,
   refundNewAccountAgeDays: 7,
   refundAgentLimitQar: 300,
+  refundSupervisorLimitQar: 1500,
   refundCardBusinessDays: 7,
   refundCreditMinutes: 15,
   repeatClaimsFrom: 3,
@@ -31,10 +32,16 @@ export const MOCK_POLICY: Policy = {
   policyVersion: MOCK_RULES.policyVersion,
   currency: 'QAR',
   refund: {
+    cardBusinessDays: MOCK_RULES.refundCardBusinessDays,
+    creditMinutes: MOCK_RULES.refundCreditMinutes,
+  },
+};
+
+export const MOCK_DESK_POLICY: DeskPolicy = {
+  refund: {
     automatedLimitQar: MOCK_RULES.refundAutomatedLimitQar,
     newAccountAutomatedLimitQar: MOCK_RULES.refundNewAccountLimitQar,
     agentLimitQar: MOCK_RULES.refundAgentLimitQar,
-    cardBusinessDays: MOCK_RULES.refundCardBusinessDays,
-    creditMinutes: MOCK_RULES.refundCreditMinutes,
+    supervisorLimitQar: MOCK_RULES.refundSupervisorLimitQar,
   },
 };

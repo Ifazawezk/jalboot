@@ -117,7 +117,7 @@ Unless the table says otherwise, the window starts at `delivered_at`.
 |---|---|
 | Restaurant food: missing, wrong or damaged | 24 hours |
 | Restaurant food: quality other than temperature | 24 hours |
-| Restaurant food: arrived cold or too warm | 2 hours |
+| Restaurant food: arrived at the wrong temperature | 2 hours |
 | Grocery: shelf-stable items | 48 hours |
 | Grocery: chilled or frozen items | 6 hours |
 | Expired product, grocery or pharmacy | 7 days (168 hours) |
@@ -145,7 +145,7 @@ When two rows fit, use the more specific row. An expired yogurt is an expired pr
 |---|---|
 | طعام المطاعم: صنف ناقص أو خاطئ أو تالف | 24 ساعة |
 | طعام المطاعم: الجودة في غير ما يتعلق بالحرارة | 24 ساعة |
-| طعام المطاعم: وصل باردًا أو غير ساخن بما يكفي | ساعتان (2) |
+| طعام المطاعم: وصل بدرجة حرارة غير مناسبة | ساعتان (2) |
 | البقالة: الأصناف التي تُحفظ على الرف | 48 ساعة |
 | البقالة: الأصناف المبردة أو المجمدة | 6 ساعات |
 | منتج منتهي الصلاحية، من البقالة أو الصيدلية | 7 أيام (168 ساعة) |
@@ -172,18 +172,18 @@ When two rows fit, use the more specific row. An expired yogurt is an expired pr
 3. **Delivery fee:** refunded only when nothing was delivered, on a full-order refund, or in the top late tier (LAT-01).
 4. **Service, small order, peak and weather fees:** refunded only on a full-order refund or when nothing was delivered.
 5. **Tip:** refunded only when nothing was delivered. If the wrong order arrived, the driver still completed a delivery, so the tip stays with the driver.
-6. **Cap:** refunds on one order can never exceed the amount paid.
+6. **Cap:** refunds on one order can never exceed the amount paid. Parcel cover payouts (PCL-03) are compensation, not refunds, so this cap does not limit them.
 
 <div lang="ar" dir="rtl">
 
 ### كيف يُحسب مبلغ الاسترداد
 
 1. **استرداد الصنف:** صافي سعر الصنف (GEN-03) مضروبًا في الكمية المتأثرة.
-2. **قاعدة 70%:** إذا بلغت الأسعار المعروضة لجميع الأصناف المتأثرة 70% أو أكثر من إجمالي الأصناف، تُعامل المطالبة معاملة الاسترداد الكامل للطلب. فالنسبة 70% تمامًا تحوّل المطالبة، أما 69.99% فلا تحوّلها. ولا تدخل في هذه النسبة شكاوى الجودة (WRG-05) ولا الخيارات التي لم تُنفذ (WRG-02) ولا البدائل المرفوضة في البقالة (GRC-04).
+2. **قاعدة 70%:** إذا بلغت الأسعار المعروضة لجميع الأصناف المتأثرة 70% أو أكثر من إجمالي الأصناف، تُعامل المطالبة معاملة الاسترداد الكامل للطلب. فبلوغ 70% تمامًا يكفي للتحويل، أما 69.99% فلا يكفي. ولا تدخل في هذه النسبة شكاوى الجودة (WRG-05) ولا الخيارات التي لم تُنفذ (WRG-02) ولا البدائل المرفوضة في البقالة (GRC-04).
 3. **رسوم التوصيل:** تُرد فقط إذا لم يُسلَّم شيء، أو عند الاسترداد الكامل، أو في أعلى شريحة من شرائح التأخير (LAT-01).
 4. **رسوم الخدمة والطلب الصغير والذروة والطقس:** تُرد فقط عند الاسترداد الكامل أو إذا لم يُسلَّم شيء.
 5. **الإكرامية:** تُرد فقط إذا لم يُسلَّم شيء. فإذا وصل طلب خاطئ، يكون المندوب قد أتم التوصيل، فتبقى الإكرامية له.
-6. **الحد الأقصى:** لا يجوز أن يتجاوز مجموع المبالغ المردودة في الطلب الواحد المبلغ المدفوع.
+6. **الحد الأقصى:** لا يجوز أن يتجاوز مجموع المبالغ المردودة في الطلب الواحد المبلغ المدفوع. أما تعويض تغطية الطرود (PCL-03) فهو تعويض لا استرداد، فلا يخضع لهذا الحد.
 
 </div>
 
@@ -200,11 +200,11 @@ When two rows fit, use the more specific row. An expired yogurt is an expired pr
 
 ### إلى أين يعود المبلغ وكم يستغرق
 
-- **البطاقة أو محفظة الهاتف:** يعود المبلغ إلى الوسيلة نفسها خلال مدة أقصاها 7 أيام عمل. ويمكن للعميل أن يختار بدلًا من ذلك رصيد الاسترداد الذي يصل خلال 15 دقيقة.
+- **البطاقة أو المحفظة الإلكترونية:** يعود المبلغ إلى الوسيلة نفسها خلال مدة أقصاها 7 أيام عمل. ويمكن للعميل أن يختار بدلًا من ذلك رصيد الاسترداد الذي يصل خلال 15 دقيقة.
 - **الدفع نقدًا عند الاستلام:** يكون الرد في صورة رصيد استرداد فقط خلال 15 دقيقة، ولا تعيد جالبوت النقد مطلقًا.
-- **الدفع المختلط:** يُرد المبلغ بالترتيب الآتي: جزء البطاقة أو محفظة الهاتف أو النقد أولًا، ثم رصيد الاسترداد، ثم رصيد الترضية، ثم النقاط.
+- **الدفع المختلط:** يُرد المبلغ بالترتيب الآتي: جزء البطاقة أو المحفظة الإلكترونية أو النقد أولًا، ثم رصيد الاسترداد، ثم رصيد الترضية، ثم النقاط.
 - **رصيد الترضية والنقاط المعادة:** تكون صلاحيتها الجديدة هي الأبعد من بين الصلاحية الأصلية و30 يومًا من تاريخ الإعادة.
-- **حد المحفظة:** إذا كان رصيد الاسترداد سيرفع الرصيد فوق 2,000 ر.ق، يعود الفائض إلى البطاقة أو محفظة الهاتف الأصلية. أما في الطلب النقدي فيتولى موظف الدعم معالجة الفائض.
+- **حد المحفظة:** إذا كان رصيد الاسترداد سيرفع الرصيد فوق 2,000 ر.ق، يعود الفائض إلى البطاقة أو المحفظة الإلكترونية الأصلية. أما في الطلب النقدي فيتولى موظف الدعم معالجة الفائض.
 - لا يُرد المبلغ إلى بطاقة أخرى في أي حال.
 
 </div>
@@ -251,7 +251,7 @@ An amount exactly at a limit stays at that level. For an account younger than 7 
 
 **ما يتولاه موظف دائمًا مهما كان المبلغ:** عمليات استرداد الصيدلية، وحالات السلامة، ومطالبات الطرود، وحالات عدم الاستلام التي يوجد فيها إثبات تسليم.
 
-**تكرار المطالبات:** تُحال المطالبة إلى موظف الدعم إذا كان لدى العميل 3 مطالبات معتمدة أو أكثر خلال الثلاثين يومًا المتحركة، أو إذا كانت هذه المطالبة سترفع مجموع المبالغ المعتمدة في الفترة نفسها فوق 300 ر.ق.
+**تكرار المطالبات:** تُحال المطالبة إلى موظف الدعم إذا كان لدى العميل 3 مطالبات معتمدة أو أكثر خلال 30 يومًا متحركة، أو إذا كانت هذه المطالبة سترفع مجموع المبالغ المعتمدة في الفترة نفسها فوق 300 ر.ق.
 
 **مراجعة فريق الثقة:** عند وجود 8 مطالبات معتمدة أو أكثر خلال 90 يومًا متحركة، يُوقف الاسترداد على الحساب وتُفتح مراجعة يتولاها فريق الثقة، وتستغرق مدة أقصاها 5 أيام عمل.
 
@@ -268,6 +268,8 @@ An amount exactly at a limit stays at that level. For an account younger than 7 
 | Foreign object, expired product, broken seal, parcel damage | Always required |
 | Missing item, order not delivered, duplicate charge, late delivery | Not required |
 
+Claim value is the total net amount the customer asks for in that report, not the listed price.
+
 The report must be made inside the window. The photo can follow up to 24 hours after the report, even if the window has ended by then. With no photo after 24 hours, the claim closes. A photo already used on another claim sends the case to a Trust review.
 
 <div lang="ar" dir="rtl">
@@ -281,6 +283,8 @@ The report must be made inside the window. The photo can follow up to 24 hours a
 | جسم غريب، أو منتج منتهي الصلاحية، أو ختم مكسور، أو طرد تالف | مطلوبة دائمًا |
 | صنف ناقص، أو طلب لم يُسلَّم، أو خصم مكرر، أو تأخر في التوصيل | غير مطلوبة |
 
+وقيمة المطالبة هي إجمالي المبلغ الصافي الذي يطلبه العميل في ذلك البلاغ، لا السعر المعروض.
+
 يجب تقديم البلاغ داخل المهلة، ويجوز إرسال الصورة خلال 24 ساعة من البلاغ حتى لو انتهت المهلة في هذه الأثناء. فإذا مرت 24 ساعة دون صورة، تُغلق المطالبة. وإذا كانت الصورة قد استُخدمت في مطالبة أخرى، تُحال الحالة إلى مراجعة فريق الثقة.
 
 </div>
@@ -291,7 +295,7 @@ Goodwill credit is a gesture, not a right.
 
 - Automated support can give up to QAR 10 on an order. A support agent can give more, within the caps below.
 - All compensation credit on one order, of every type, cannot exceed QAR 30. Example: if a QAR 20 late credit is issued, at most QAR 10 of goodwill credit can follow.
-- A customer can receive at most QAR 60 of goodwill credit in the rolling 30 days. Late credit does not count toward this QAR 60.
+- A customer can receive at most QAR 60 of goodwill credit under this section in the rolling 30 days. Late credit, expired item credit, cancellation credit and referral rewards do not count toward this QAR 60.
 - Goodwill credit is never added to a full-order refund.
 - Automated support cannot give goodwill credit on a claim outside its window. A support agent can.
 - No goodwill credit during a Trust review.
@@ -305,7 +309,7 @@ Goodwill credit is a gesture, not a right.
 
 - يمكن للدعم الآلي منح ما يصل إلى 10 ر.ق في الطلب الواحد، ويمكن لموظف الدعم منح أكثر من ذلك في حدود السقوف أدناه.
 - لا يجوز أن يتجاوز مجموع الرصيد التعويضي في الطلب الواحد، بجميع أنواعه، 30 ر.ق. فإذا صدر رصيد تأخير بقيمة 20 ر.ق مثلًا، لا يتبقى لرصيد الترضية سوى 10 ر.ق على الأكثر.
-- الحد الأقصى لما يحصل عليه العميل من رصيد الترضية 60 ر.ق خلال الثلاثين يومًا المتحركة، ولا يدخل رصيد التأخير في هذا الحد.
+- الحد الأقصى لما يحصل عليه العميل من رصيد الترضية بموجب هذا القسم 60 ر.ق خلال 30 يومًا متحركة، ولا يدخل في هذا الحد رصيد التأخير ورصيد الصنف منتهي الصلاحية ورصيد الإلغاء ومكافآت الإحالة.
 - لا يضاف رصيد الترضية إلى الاسترداد الكامل للطلب في أي حال.
 - لا يمنح الدعم الآلي رصيد ترضية عن مطالبة خارج مهلتها، ويجوز ذلك لموظف الدعم.
 - لا يُمنح رصيد ترضية أثناء مراجعة فريق الثقة.
@@ -339,8 +343,8 @@ Checkout uses goodwill credit first, soonest expiry first, then refund credit. T
 
 Base order for examples 1 and 2: burger QAR 40, fries QAR 20, juice QAR 40, so the item subtotal is QAR 100. Code takes 20% (QAR 20). Delivery fee QAR 8, service fee QAR 3, tip QAR 5. Amount paid: QAR 96.
 
-1. **Fries missing.** Net price is 20 x (1 - 20/100) = QAR 16.00. Refund QAR 16.00. Fees and tip stay. Automated support can approve it, and no photo is needed.
-2. **Burger and juice wrong.** Affected listed prices are QAR 80 of QAR 100, which is 80%, so the 70% rule applies. Full-order refund: 96 - 5 tip = QAR 91.00. This is above QAR 50, so a support agent approves it.
+1. **Fries missing.** Net price is 20 x (1 - 20/100) = QAR 16.00. Refund QAR 16.00. Fees and tip stay. No photo is needed.
+2. **Burger and juice wrong.** Affected listed prices are QAR 80 of QAR 100, which is 80%, so the 70% rule applies. Full-order refund: 96 - 5 tip = QAR 91.00.
 3. **Small order, very late.** Item subtotal QAR 20, delivery fee QAR 5, delivered 65 minutes late. Tier credit is QAR 20, capped at 30% of QAR 20 = QAR 6.00. Delivery fee QAR 5 is refunded as well. Total value QAR 11.00.
 4. **Mixed payment.** Paid QAR 50 by card and QAR 30 with refund credit. A QAR 60 refund returns QAR 50 to the card and QAR 10 as refund credit.
 5. **Credit already issued.** On the base order, a QAR 10 late credit was issued. The whole order then turns out to be someone else's. Full-order refund: 96 - 5 - 10 = QAR 81.00.
@@ -351,8 +355,8 @@ Base order for examples 1 and 2: burger QAR 40, fries QAR 20, juice QAR 40, so t
 
 الطلب الأساسي للمثالين 1 و2: برجر 40 ر.ق، وبطاطس 20 ر.ق، وعصير 40 ر.ق، فيكون إجمالي الأصناف 100 ر.ق. ويخصم الرمز 20% (20 ر.ق). رسوم التوصيل 8 ر.ق، ورسوم الخدمة 3 ر.ق، والإكرامية 5 ر.ق. المبلغ المدفوع 96 ر.ق.
 
-1. **البطاطس ناقصة.** صافي السعر 20 x (1 - 20/100) = 16.00 ر.ق، فيُرد 16.00 ر.ق وتبقى الرسوم والإكرامية. ويمكن للدعم الآلي الموافقة دون صورة.
-2. **البرجر والعصير خاطئان.** الأسعار المتأثرة 80 ر.ق من 100 ر.ق، أي 80%، فتنطبق قاعدة 70%. الاسترداد الكامل: 96 - 5 إكرامية = 91.00 ر.ق. ولأن المبلغ يتجاوز 50 ر.ق، يوافق عليه موظف الدعم.
+1. **البطاطس ناقصة.** صافي السعر 20 x (1 - 20/100) = 16.00 ر.ق، فيُرد 16.00 ر.ق وتبقى الرسوم والإكرامية. ولا يلزم إرفاق صورة.
+2. **البرجر والعصير خاطئان.** الأسعار المتأثرة 80 ر.ق من 100 ر.ق، أي 80%، فتنطبق قاعدة 70%. الاسترداد الكامل: 96 - 5 إكرامية = 91.00 ر.ق.
 3. **طلب صغير تأخر كثيرًا.** إجمالي الأصناف 20 ر.ق، ورسوم التوصيل 5 ر.ق، وتأخر التسليم 65 دقيقة. رصيد الشريحة 20 ر.ق، لكنه لا يتجاوز 30% من 20 ر.ق، أي 6.00 ر.ق. وتُرد رسوم التوصيل البالغة 5 ر.ق كذلك، فتكون القيمة الإجمالية 11.00 ر.ق.
 4. **دفع مختلط.** دُفع 50 ر.ق بالبطاقة و30 ر.ق من رصيد الاسترداد. عند رد 60 ر.ق، يعود 50 ر.ق إلى البطاقة و10 ر.ق في صورة رصيد استرداد.
 5. **رصيد صدر سابقًا.** صدر عن الطلب الأساسي رصيد تأخير بقيمة 10 ر.ق، ثم تبيّن أن الطلب كله يخص عميلًا آخر. الاسترداد الكامل: 96 - 5 - 10 = 81.00 ر.ق.

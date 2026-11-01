@@ -65,7 +65,7 @@ All prices are in QAR. If a card is in another currency, Jalboot does not cover 
 
 ### وسائل الدفع المقبولة
 
-- البطاقات المصرفية، الخصم المباشر والائتمانية.
+- بطاقات الخصم المباشر والبطاقات الائتمانية.
 - محافظ الهاتف.
 - رصيد جالبوت (REF-08).
 - النقاط، لسداد قيمة الأصناف فقط (PRM-04).
@@ -95,7 +95,7 @@ A hold is not a charge, and there is nothing to refund. The bank releases it wit
 
 والحجز ليس خصمًا، فلا يوجد ما يُرد. ويفك البنك الحجز خلال 7 أيام عمل من الإلغاء أو تغيّر المبلغ. وإذا بقي مبلغ معلق بعد 7 أيام عمل، يفحصه موظف الدعم بوصفه خصمًا محتملًا.
 
-**فشل الدفع:** إذا فشل الدفع لا يُقدم الطلب ولا يُبلَّغ التاجر. وبعد 3 محاولات فاشلة خلال 15 دقيقة، يُقفل الدفع بالبطاقة ومحفظة الهاتف مدة 30 دقيقة، ولا يستطيع الدعم رفع هذا القفل.
+**فشل الدفع:** إذا فشل الدفع لا يُقدم الطلب ولا يُبلَّغ التاجر. وبعد 3 محاولات فاشلة خلال 15 دقيقة، يُقفل الدفع بالبطاقة والمحفظة الإلكترونية مدة 30 دقيقة، ولا يستطيع الدعم رفع هذا القفل.
 
 **فشل الخصم بعد التسليم:** يتحول كامل المبلغ إلى مديونية يجب سدادها قبل الطلب التالي. أما سقف 30 ر.ق الوارد في CAN-05 فيخص رسوم إلغاء الطلبات النقدية فقط، ولا ينطبق هنا.
 
@@ -133,7 +133,7 @@ A duplicate charge means two final charges of the same amount on the same order,
 
 ## PAY-04: Cash on delivery
 
-- Maximum cash order: QAR 300.
+- Maximum cash order: QAR 300. The limit applies to the part due in cash, after credit and points.
 - New customers: QAR 150. A customer is new if the account is younger than 30 days or has fewer than 3 delivered orders.
 - A driver carries up to QAR 100 in change. If the driver cannot give full change, the difference is added as refund credit within 15 minutes.
 - Refusing a cash order at the door without a valid reason counts as a refusal. After 2 refusals in the rolling 30 days, cash on delivery is switched off for 90 days.
@@ -143,7 +143,7 @@ A duplicate charge means two final charges of the same amount on the same order,
 
 ### الدفع نقدًا عند الاستلام
 
-- الحد الأقصى للطلب النقدي: 300 ر.ق.
+- الحد الأقصى للطلب النقدي: 300 ر.ق، ويسري على الجزء المستحق نقدًا بعد الرصيد والنقاط.
 - العملاء الجدد: 150 ر.ق. ويُعد العميل جديدًا إذا كان عمر حسابه أقل من 30 يومًا أو كان لديه أقل من 3 طلبات مُسلَّمة.
 - يحمل المندوب ما يصل إلى 100 ر.ق لرد الباقي. وإذا تعذر عليه رد الباقي كاملًا، يضاف الفرق في صورة رصيد استرداد خلال 15 دقيقة.
 - يُعد رفض الطلب النقدي عند الباب دون سبب مقبول رفضًا مسجلًا. وبعد رفضين (2) خلال 30 يومًا متحركة، يُوقف الدفع نقدًا مدة 90 يومًا.

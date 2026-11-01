@@ -5,8 +5,8 @@ The model proposes; this module decides. For each call, in this order:
     1. the tool exists and its arguments match the definition exactly
     2. the conversation has passed the identity check, if the tool needs one
     3. the order belongs to the verified customer
-    4. the policy engine allows the action, sends it for approval, or refuses it
-    5. a repeat of the same action returns the first result and changes nothing
+    4. a repeat of the same action returns the first result and changes nothing
+    5. the policy engine allows the action, sends it for approval, or refuses it
     6. the action and an audit row commit together, or neither does
 
 An order that does not exist and an order that belongs to someone else give the same
@@ -20,8 +20,7 @@ import hashlib
 import json
 import math
 import re
-import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Protocol
 
@@ -30,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from jalboot import audit
 from jalboot.db.models import (
-    ActionRecord, Address, Approval, Conversation, Customer, Order, PromoRedemption, Refund, Ticket,
+    ActionRecord, Address, Approval, Conversation, Customer, Order, PromoRedemption, Ticket,
 )
 from jalboot.policy import engine
 from jalboot.policy.engine import APPROVAL, DENY, ESCALATE, EXECUTE, HANDOFF_CODES, ItemFact
@@ -38,7 +37,9 @@ from jalboot.policy.rules import Rules, percent_of, to_dh, to_qar
 from jalboot.security.redact import redact
 from jalboot.text.normalize import normalize
 from jalboot.tools import specs
+from jalboot.tools.approvals import LOCKED_AFTER_PICKUP
 from jalboot.tools.facts import COMPENSATION, claim_facts, order_count, order_facts, refunded_items
+from jalboot.tools.settle import WalletFull, new_id, settle_credit, settle_refund
 
 Publish = Callable[[dict[str, Any]], None]
 # REF-03 and WRG-05: quality complaints pay half and never count toward the 70 percent rule.
@@ -48,6 +49,11 @@ PERCENT_RULES = {
     "modifier_missed": "wrong_items.modifier_miss_refund_pct",
 }
 NO_FULL_REFUND_CONVERSION = set(PERCENT_RULES) | {"substitute_rejected"}
+# SAF-03 and SAF-04: these are full-order refunds, even if only one item was affected.
+FULL_ORDER_REASONS = {"allergen", "broken_seal", "illness"}
+# ACC-03 resets promised_at to the new time shown. The simulation has no routing, so
+# this stands in for the time the app would show.
+NEW_ADDRESS_ETA_MINUTES = 30
 NUMBER = re.compile(r"\d+")
 ORDER_NUMBER = re.compile(r"\b[A-Z]{1,3}-\d{3,}\b", re.I)
 LABEL_WORDS = {
@@ -68,14 +74,13 @@ ITEM_FACTS = (
     "offer", "charged_units", "substitute_for", "customer_approved", "contains", "prescription", "cold_chain",
     "chilled", "modifier", "missed_modifier", "shelf_life_days_at_delivery",
 )
-PREPICKUP_LOCKED = {"picked_up", "on_the_way", "delivered", "cancelled", "failed_customer"}
 DELAY_TEXT = {
     "merchant_backlog": {"en": "the merchant had a backlog of orders", "ar": "كان لدى المتجر طلبات كثيرة قيد التحضير"},
     "driver_traffic": {"en": "heavy traffic on the route", "ar": "ازدحام مروري على الطريق"},
     "weather_dust": {"en": "dust and low visibility", "ar": "غبار وضعف في الرؤية"},
-    "high_demand": {"en": "very high demand in the area", "ar": "طلب مرتفع جدا في المنطقة"},
-    "address_problem": {"en": "the driver had trouble finding the address", "ar": "واجه السائق صعوبة في الوصول إلى العنوان"},
-    "driver_reassigned": {"en": "the order was moved to another driver", "ar": "تم تحويل الطلب إلى سائق آخر"},
+    "high_demand": {"en": "very high demand in the area", "ar": "ضغط كبير على الطلبات في المنطقة"},
+    "address_problem": {"en": "the driver had trouble finding the address", "ar": "واجه المندوب صعوبة في الوصول إلى العنوان"},
+    "driver_reassigned": {"en": "the order was moved to another driver", "ar": "تم تحويل الطلب إلى مندوب آخر"},
 }
 
 
@@ -94,9 +99,6 @@ class ToolContext:
     actor: str = "support-bot"
     # Identifies this turn, so a charge can only be confirmed in a later one.
     turn_id: str = ""
-    # True in the baseline comparison only. See evaluation/baseline.py.
-    unguarded: bool = False
-    extras: dict[str, Any] = field(default_factory=dict)
 
 
 def doha_time(moment: datetime | None) -> str | None:
@@ -116,10 +118,6 @@ def conflict(code: str) -> dict[str, Any]:
 def action_key(*parts: Any) -> str:
     text = json.dumps(parts, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def new_id(prefix: str) -> str:
-    return f"{prefix}-{secrets.token_hex(4).upper()}"
 
 
 def distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -160,7 +158,7 @@ class ToolExecutor:
         problem = specs.validate(spec, arguments)
         if problem:
             return self._block(name, arguments, refused(problem))
-        if spec.needs_identity and self.customer is None and not self.ctx.unguarded:
+        if self._identity_missing(spec):
             return self._block(name, arguments, refused("identity_required"))
         handler = getattr(self, f"_{name}")
         with audit.serial_write(self.session):
@@ -173,6 +171,9 @@ class ToolExecutor:
             self.ctx.publish(event)
         self._outbox.clear()
         return result
+
+    def _identity_missing(self, spec: specs.ToolSpec) -> bool:
+        return spec.needs_identity and self.customer is None
 
     def _block(self, name: str, arguments: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         with audit.serial_write(self.session):
@@ -218,15 +219,20 @@ class ToolExecutor:
         order = self.session.get(Order, order_id.strip().upper())
         if order is None:
             return None
-        if self.ctx.unguarded:
-            return order
         if customer is None or order.customer_id != customer.id:
             return None
         return order
 
     def _replay(self, key: str) -> dict[str, Any] | None:
         record = self.session.get(ActionRecord, key)
-        return None if record is None else {**record.result, "replayed": True}
+        if record is None:
+            return None
+        result = {**record.result, "replayed": True}
+        # A person may have decided since. The first answer is no longer the true one.
+        approval = self.session.get(Approval, result["approval_id"]) if result.get("approval_id") else None
+        if approval is not None and approval.status != "pending":
+            result["status"] = "done" if approval.status == "approved" else "rejected"
+        return result
 
     def _remember(self, key: str, tool: str, result: dict[str, Any]) -> dict[str, Any]:
         self.session.add(ActionRecord(
@@ -250,7 +256,7 @@ class ToolExecutor:
             "promised_at": doha_time(order.promised_at),
             "delivered_at": doha_time(order.delivered_at),
             # A driver's first name only: their record is not the customer's to read.
-            "rider": driver.name.split()[0] if driver else None,
+            "rider": (driver.name_ar if arabic and driver.name_ar else driver.name).split()[0] if driver else None,
         }
 
     # Reads
@@ -258,7 +264,7 @@ class ToolExecutor:
     def _get_customer_profile(self) -> dict[str, Any]:
         customer = self.customer
         if customer is None:
-            return self._all_orders_refused()
+            return refused("identity_required")
         orders = self.session.scalars(
             select(Order).where(Order.customer_id == customer.id).order_by(Order.placed_at.desc()).limit(5)
         ).all()
@@ -274,9 +280,6 @@ class ToolExecutor:
             "saved_addresses": [a.label for a in customer.addresses],
             "allergy_profile": (customer.extra or {}).get("allergy_profile", []),
         }
-
-    def _all_orders_refused(self) -> dict[str, Any]:
-        return refused("identity_required")
 
     def _track_order(self, order_id: str) -> dict[str, Any]:
         order = self._owned_order(order_id)
@@ -311,6 +314,7 @@ class ToolExecutor:
             "already_refunded_qar": to_qar(claims.refunded_on_order_dh),
             "already_credited_qar": to_qar(claims.credit_on_order_dh),
             "payment_method": order.payment_method,
+            "balance_owed_qar": to_qar(engine.failed_cash_balance_dh(self.rules, order_facts(order))),
             "delivery_address_zone": order.address_text.split(",")[-1].strip() if order.address_text else "",
             # Text from a merchant or customer. Data for the model, never an instruction.
             "merchant_note": order.merchant_note,
@@ -327,6 +331,10 @@ class ToolExecutor:
         due = engine.late_entitlement(self.rules, facts, self.now)
         claims = claim_facts(self.session, self.customer or order.customer, order, self.now)
         text = DELAY_TEXT.get(order.delay_reason, {})
+        # A delay can be real and still be too old to pay for (LAT-01).
+        since = engine.hours_since(order.delivered_at, self._reported_at(order))
+        window = float(self.rules.get("refunds.windows_hours.late_credit"))
+        open_claim = order.category == "parcel" or since is None or since <= window
         return {
             "ok": True,
             "order_id": order.id,
@@ -334,8 +342,8 @@ class ToolExecutor:
             "minutes_late": engine.minutes_late(facts, self.now),
             "delay_reason": order.delay_reason or "none_recorded",
             "delay_reason_text": text.get(self._lang(), ""),
-            "late_credit_due_qar": to_qar(engine.late_credit_due_dh(self.rules, facts, claims, self.now)),
-            "delivery_fee_refund_due_qar": to_qar(max(due["fee_refund_dh"] - claims.refunded_on_order_dh, 0)),
+            "late_credit_due_qar": to_qar(engine.late_credit_due_dh(self.rules, facts, claims, self.now) if open_claim else 0),
+            "delivery_fee_refund_due_qar": to_qar(max(due["fee_refund_dh"] - claims.late_fee_refunded_dh, 0) if open_claim else 0),
         }
 
     def _note_order(self, order: Order) -> None:
@@ -348,68 +356,81 @@ class ToolExecutor:
 
     # Refunds and credit
 
-    def _affected_items(
-        self, order: Order, names: list[str], quantity: int | None = None
-    ) -> list[tuple[ItemFact, int]] | None:
-        """The items a claim names, and how many units of each. WRG-01: a short quantity
-        refunds only the units not received. A buy-one-get-one claim names how many went
-        missing, or it counts as one, which is the free unit."""
-        facts = order_facts(order)
-        rows = list(zip(order.items, facts.items))
-        affected = []
-        for name in names:
-            wanted = normalize(name).strip()
-            match = None
-            for row, fact in rows:
-                labels = [normalize(label).strip() for label in (row.name, row.name_ar) if label]
-                if any(wanted == label or (len(wanted) >= 3 and (wanted in label or label in wanted)) for label in labels):
-                    match = fact
-                    break
-            if match is None:
-                return None
-            default = 1 if match.free_units else match.quantity
-            affected.append((match, min(quantity or default, match.quantity)))
-        return affected
+    def _claim_lines(
+        self, order: Order, items: list[dict[str, Any]],
+    ) -> tuple[list[tuple[ItemFact, int]], str | None]:
+        """Turns the items a claim names into order lines and units. Each order line is
+        counted once however often it is named, so listing a QAR 4 tea eleven times is
+        one QAR 4 tea. A name that could be two lines is refused rather than guessed."""
+        rows = list(zip(order.items, order_facts(order).items))
+        labels = [
+            [normalize(text).strip() for text in (row.name, row.name_ar) if text] for row, _ in rows
+        ]
+        lines: dict[int, tuple[ItemFact, int]] = {}
+        for entry in items:
+            wanted = normalize(entry["name"]).strip()
+            matches = [index for index, names in enumerate(labels) if wanted in names]
+            if not matches and len(wanted) >= 3:
+                matches = [
+                    index for index, names in enumerate(labels)
+                    if any(wanted in name or name in wanted for name in names)
+                ]
+            if not matches:
+                return [], "item_not_in_order"
+            if len(matches) > 1:
+                return [], "ambiguous_item"
+            index = matches[0]
+            fact = rows[index][1]
+            quantity = entry.get("quantity")
+            if quantity is None:
+                # WRG-01: a short quantity refunds only the units not received. A
+                # buy-one-get-one claim counts as one, which is the free unit.
+                if fact.quantity > 1 and not fact.free_units:
+                    return [], "quantity_required"
+                quantity = 1 if fact.free_units else fact.quantity
+            units = min(quantity, fact.quantity)
+            lines[index] = (fact, max(units, lines[index][1] if index in lines else 0))
+        return list(lines.values()), None
 
     def _entitlement_dh(
-        self, order: Order, reason: str, names: list[str], quantity: int | None = None
+        self, order: Order, reason: str, items: list[dict[str, Any]],
     ) -> tuple[int | None, str | None]:
         """The most this claim can be worth, from the order's own prices. It stops a
         model paying the automated limit for a missing cup of tea."""
         facts = order_facts(order)
         claims = claim_facts(self.session, self.customer, order, self.now)
+        if reason == "late_delivery_fee":
+            due = engine.late_entitlement(self.rules, facts, self.now)["fee_refund_dh"] - claims.late_fee_refunded_dh
+            return (due, None) if due > 0 else (None, "no_fee_refund_due")
+        if order.category == "parcel" and reason != "failed_contact_refund":
+            return engine.parcel_cover_dh(self.rules, facts), None
         if reason == "failed_contact_refund" or (reason == "not_received" and order.status == "failed_customer"):
-            return engine.failed_contact_refund_dh(self.rules, facts, claims), None
+            amount = engine.failed_contact_refund_dh(self.rules, facts, claims)
+            return (amount, None) if amount else (None, "nothing_to_refund")
         if reason == "not_received":
             return engine.full_refund_dh(facts, claims, delivered=False), None
         if reason == "driver_change_short":
             return facts.change_short_dh, None
-        if reason == "whole_wrong_order":
+        if reason == "whole_wrong_order" or reason in FULL_ORDER_REASONS:
             return engine.full_refund_dh(facts, claims), None
         if reason == "duplicate_charge":
             return engine.duplicate_amount_dh(facts), None
-        if reason == "late_delivery_fee":
-            due = engine.late_entitlement(self.rules, facts, self.now)["fee_refund_dh"]
-            return (due, None) if due else (None, "no_fee_refund_due")
-        if not names:
+        if not items:
             return None, "items_required"
-        affected = self._affected_items(order, names, quantity)
-        if affected is None:
-            return None, "item_not_in_order"
+        affected, problem = self._claim_lines(order, items)
+        if problem:
+            return None, problem
         if reason == "substitute_rejected" and any(item.approved_substitute for item, _ in affected):
             # GRC-04: an approved substitute is only rejected if it is damaged, spoiled or expired.
             return None, "approved_substitute"
-        billed = [(item, engine.refundable_units(item, units)) for item, units in affected]
-        if not any(units for _, units in billed):
-            return None, "no_refund_value"
         already = refunded_items(self.session, order.id)
-        if any(normalize(item.name).strip() in already for item, _ in affected):
-            return None, "item_already_refunded"
-        # An older refund can have no item names. One of exactly this value is taken to
-        # be this same item, so it is not paid twice on a guess.
-        unnamed = int((order.extra or {}).get("prior_refunded_dh", 0))
-        if unnamed and sum(engine.net_item_refund_dh(facts, item, q) for item, q in billed) == unnamed:
-            return None, "already_refunded"
+        billed = []
+        for item, units in affected:
+            done = already.get(normalize(item.name).strip(), 0)
+            billed.append((item, engine.refundable_units(item, units) - engine.refundable_units(item, done)))
+        if not any(units > 0 for _, units in billed):
+            return None, "item_already_refunded" if already else "no_refund_value"
+        billed = [(item, units) for item, units in billed if units > 0]
         offer = any(item.free_units for item, _ in affected)
         if reason not in NO_FULL_REFUND_CONVERSION and not offer and engine.full_refund_applies(self.rules, facts, billed):
             return engine.full_refund_dh(facts, claims), None
@@ -418,104 +439,112 @@ class ToolExecutor:
             total = percent_of(total, self.rules.get(PERCENT_RULES[reason]))
         return total, None
 
-    def _quote_refund(
-        self, order_id: str, reason: str, items: list[str] | None = None, quantity: int | None = None
-    ) -> dict[str, Any]:
+    def _quote_refund(self, order_id: str, reason: str, items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """Arithmetic belongs in code. Net prices and the 70 percent rule are exactly
         what a model gets wrong, so it asks here. This holds no approval limits, which
         are internal (ESC-03)."""
         order = self._owned_order(order_id)
         if order is None:
             return refused("order_not_found")
-        entitled, problem = self._entitlement_dh(order, reason, list(items or []), quantity)
+        self._note_report(order)
+        entitled, problem = self._entitlement_dh(order, reason, list(items or []))
         if problem:
             return refused(problem)
         return {"ok": True, "order_id": order.id, "reason": reason, "amount_qar": to_qar(entitled or 0)}
 
     def _issue_refund(
-        self, order_id: str, amount_qar: float, reason: str, items: list[str] | None = None,
-        method: str | None = None, quantity: int | None = None,
+        self, order_id: str, amount_qar: float, reason: str, items: list[dict[str, Any]] | None = None,
+        method: str | None = None,
     ) -> dict[str, Any]:
         order = self._owned_order(order_id)
         if order is None:
             return refused("order_not_found")
         amount = to_dh(amount_qar)
-        # Keyed on the order's own item names, so "fries" and "Fries, large" are one
-        # item and a different spelling cannot refund it twice.
-        affected = self._affected_items(order, items) if items else None
-        names = sorted({normalize(item.name).strip() for item, _ in affected or ()})
-        key = action_key("refund", order.id, reason, names)
+        self._note_report(order)
+        # Keyed on the order's own lines, not on the words used. The same unit is one
+        # claim whatever it is called and whatever reason is given. The units are in the
+        # key, so "now two are missing" is a new claim that pays only for the second.
+        affected = self._claim_lines(order, items)[0] if items else []
+        names = sorted(
+            ({"name": normalize(item.name).strip(), "units": units} for item, units in affected),
+            key=lambda entry: entry["name"],
+        )
+        key = action_key("refund", order.id, names) if names else action_key("refund", order.id, reason)
         previous = self._replay(key)
         if previous is not None:
             return previous
-        if self.ctx.unguarded:
-            return self._pay_refund(key, order, amount, reason, names, "unguarded", method=method)
 
+        chilled = reason == "substitute_rejected" and any(item.chilled for item, _ in affected)
         decision = engine.decide_refund(
             self.rules, order_facts(order), claim_facts(self.session, self.customer, order, self.now),
-            amount, reason, self._reported_at(), photo_provided=bool((order.extra or {}).get("photo_evidence")),
+            amount, reason, self._reported_at(order), photo_provided=bool((order.extra or {}).get("photo_evidence")),
+            window_reason="chilled_item" if chilled else None,
         )
         if decision.outcome == DENY:
             return refused(decision.code, **self._limit(decision))
         if decision.outcome == ESCALATE:
             return conflict(decision.code)
-        entitled, problem = self._entitlement_dh(order, reason, list(items or []), quantity)
+        entitled, problem = self._entitlement_dh(order, reason, list(items or []))
         if problem:
             return refused(problem)
         if entitled is not None and amount > entitled:
             return refused("above_item_value", max_qar=to_qar(entitled))
         if decision.outcome == EXECUTE:
-            return self._pay_refund(key, order, amount, reason, names, "policy", method=method)
-        result = self._ask_person(key, "refund", order, amount, reason, names, decision, "issue_refund")
+            return self._pay_refund(key, order, amount, reason, names, "policy", method)
+        result = self._ask_person(key, "refund", order, amount, reason, names, decision, "issue_refund", method)
         if decision.code in HANDOFF_CODES:
             return {**result, "handoff_required": "policy_requires_person"}
         return result
 
-    def _reported_at(self) -> datetime:
-        """GEN-02: a request counts from when the customer first reported the issue."""
-        return self.conversation.first_report_at or self.now
+    def _note_report(self, order: Order) -> None:
+        """GEN-02: a request counts from when the customer first reported the issue. The
+        time belongs to the order, and starts when a claim first names it."""
+        extra = dict(order.extra or {})
+        if "first_report_at" not in extra:
+            extra["first_report_at"] = self.now.isoformat()
+            order.extra = extra
+
+    def _reported_at(self, order: Order) -> datetime:
+        """A report from before an order was delivered cannot be about its delivery."""
+        recorded = (order.extra or {}).get("first_report_at")
+        first = datetime.fromisoformat(recorded) if recorded else None
+        floor = order.delivered_at or order.placed_at
+        return first if first is not None and first >= floor else self.now
 
     def _limit(self, decision: engine.Decision) -> dict[str, Any]:
         # Internal limits are never handed to the model, so they cannot be quoted (ESC-03).
         return {"max_qar": to_qar(decision.limit_dh)} if decision.code in {
-            "amount_exceeds_paid", "above_late_credit_due", "credit_cap_per_order",
+            "amount_exceeds_paid", "above_credit_due", "credit_cap_per_order",
         } else {}
 
     def _pay_refund(
-        self, key: str, order: Order, amount: int, reason: str, names: list[str], approved_by: str,
-        approval_id: str | None = None, method: str | None = None,
+        self, key: str, order: Order, amount: int, reason: str, names: list[dict[str, Any]], approved_by: str,
+        method: str | None,
     ) -> dict[str, Any]:
-        # REF-04: a cash order is only ever refunded as credit.
-        method = "refund_credit" if order.payment_method == "cash" else (method or "original")
-        # REF-04: on a mixed payment the card part goes back first, then the credit part.
-        credit_part = amount if method == "refund_credit" else 0
-        paid_by_credit = int((order.extra or {}).get("credit_paid_dh") or 0)
-        if method == "original" and paid_by_credit:
-            credit_part = max(amount - (order_facts(order).paid_dh - paid_by_credit), 0)
-        refund = Refund(
-            id=new_id("R"), order_id=order.id, customer_id=order.customer_id, amount_dh=amount,
-            method=method, reason=reason, items=names, approved_by=approved_by, approval_id=approval_id,
-            created_at=self.now, idempotency_key=key,
-        )
-        self.session.add(refund)
-        order.customer.wallet_dh += credit_part
+        try:
+            settled = settle_refund(
+                self.session, self.rules, order, amount, reason=reason, key=key, approved_by=approved_by,
+                now=self.now, items=names, method=method,
+            )
+        except WalletFull:
+            return conflict("wallet_at_limit")
         result = {
-            "ok": True, "status": "done", "refund_id": refund.id, "order_id": order.id,
-            "amount_qar": to_qar(amount), "method": method, "reason": reason,
-            "to_original_payment_qar": to_qar(amount - credit_part), "to_credit_qar": to_qar(credit_part),
+            "ok": True, "status": "done", "refund_id": settled.refund.id, "order_id": order.id,
+            "amount_qar": to_qar(amount), "method": settled.refund.method, "reason": reason,
+            "to_original_payment_qar": to_qar(settled.original_dh), "to_credit_qar": to_qar(settled.credit_dh),
         }
-        self._publish_refund(refund.id, order.id, amount, "auto_approved")
+        self._publish_refund(settled.refund.id, order.id, amount, "auto_approved", settled.refund.method)
         return self._remember(key, "issue_refund", result)
 
     def _ask_person(
-        self, key: str, kind: str, order: Order, amount: int, reason: str, names: list[str],
-        decision: engine.Decision, tool: str,
+        self, key: str, kind: str, order: Order, amount: int, reason: str, names: list[dict[str, Any]],
+        decision: engine.Decision, tool: str, method: str | None = None,
     ) -> dict[str, Any]:
         """Nothing is paid here. A person must decide, through the desk."""
         approval = Approval(
             id=new_id("AP"), kind=kind, conversation_id=self.conversation.id, customer_id=order.customer_id,
             order_id=order.id, amount_dh=amount, reason=reason,
-            payload={"reason": reason, "items": names, "tool": tool, "rule": decision.code},
+            payload={"reason": reason, "items": names, "tool": tool, "rule": decision.code, "method": method},
             required_role=decision.required_role or "agent", created_at=self.now, idempotency_key=key,
         )
         self.session.add(approval)
@@ -524,16 +553,19 @@ class ToolExecutor:
             "ok": True, "status": "pending_approval", "approval_id": approval.id, "order_id": order.id,
             "amount_qar": to_qar(amount), "reason": reason,
         }
-        self._publish_refund(approval.id, order.id, amount, "pending")
+        if kind != "address_change":
+            self._publish_refund(approval.id, order.id, amount, "pending", "original")
         self._outbox.append({"type": "approval.created", "approvalId": approval.id})
         return self._remember(key, tool, result)
 
-    def _publish_refund(self, refund_id: str, order_id: str, amount: int, status: str) -> None:
+    def _publish_refund(self, refund_id: str, order_id: str, amount: int, status: str, method: str) -> None:
+        """destination tells the card what to say: money and credit come back differently."""
+        destination = "credit" if method in {"refund_credit", COMPENSATION} else "original"
         self._outbox.append({
             "type": "refund.update",
             "refund": {
                 "id": refund_id, "orderId": order_id, "amountQar": to_qar(amount), "status": status,
-                "decidedBy": None, "note": None,
+                "decidedBy": None, "note": None, "destination": destination,
             },
         })
 
@@ -542,15 +574,14 @@ class ToolExecutor:
         if order is None:
             return refused("order_not_found")
         amount = to_dh(amount_qar)
+        self._note_report(order)
         key = action_key("credit", order.id, reason)
         previous = self._replay(key)
         if previous is not None:
             return previous
-        if self.ctx.unguarded:
-            return self._pay_credit(key, order, amount, reason, "unguarded")
         decision = engine.decide_credit(
             self.rules, order_facts(order), claim_facts(self.session, self.customer, order, self.now),
-            amount, reason, self._reported_at(),
+            amount, reason, self._reported_at(order), photo_provided=bool((order.extra or {}).get("photo_evidence")),
         )
         if decision.outcome == DENY:
             return refused(decision.code, **self._limit(decision))
@@ -561,18 +592,12 @@ class ToolExecutor:
         return self._pay_credit(key, order, amount, reason, "policy")
 
     def _pay_credit(self, key: str, order: Order, amount: int, reason: str, approved_by: str) -> dict[str, Any]:
-        refund = Refund(
-            id=new_id("R"), order_id=order.id, customer_id=order.customer_id, amount_dh=amount,
-            method=COMPENSATION, reason=reason, approved_by=approved_by, created_at=self.now,
-            idempotency_key=key,
-        )
-        self.session.add(refund)
-        order.customer.wallet_dh += amount
+        refund = settle_credit(self.session, order, amount, reason=reason, key=key, approved_by=approved_by, now=self.now)
         result = {
             "ok": True, "status": "done", "refund_id": refund.id, "order_id": order.id,
             "amount_qar": to_qar(amount), "method": COMPENSATION, "reason": reason,
         }
-        self._publish_refund(refund.id, order.id, amount, "auto_approved")
+        self._publish_refund(refund.id, order.id, amount, "auto_approved", COMPENSATION)
         return self._remember(key, "issue_credit", result)
 
     # Orders
@@ -595,7 +620,7 @@ class ToolExecutor:
             eligible = sum(
                 item.unit_dh * item.quantity for item in order_facts(basket).items if item.promo_eligible
             ) if basket.items else basket.subtotal_dh
-        month = self.now.strftime("%Y-%m")
+        month = self.now.astimezone(DOHA).strftime("%Y-%m")
         used = self.session.scalars(
             select(PromoRedemption).where(PromoRedemption.customer_id == customer.id, PromoRedemption.code == code)
         ).all()
@@ -610,6 +635,11 @@ class ToolExecutor:
             used_this_month=any(row.period == month for row in used),
             used_ever=bool(used),
             has_delivered_order=order_count(self.session, customer.id, "delivered") > 0,
+            zone=self._fee_zone(basket.address_text) if basket else None,
+            base_fee_dh=basket.delivery_fee_dh if basket else 0,
+            codes_on_order=len(self.session.scalars(
+                select(PromoRedemption.id).where(PromoRedemption.order_id == basket.id)
+            ).all()) if basket else 0,
         )
         if decision.outcome == DENY:
             promo = self.rules.get("promos.codes").get(code) or {}
@@ -621,18 +651,35 @@ class ToolExecutor:
         previous = self._replay(key)
         if previous is not None:
             return previous
+        promo = self.rules.get("promos.codes")[code]
+        if promo["type"] == "free_delivery" and basket.delivery_fee_dh == 0:
+            return refused("delivery_already_free")
         discount = engine.promo_discount_dh(self.rules, code, eligible, basket.delivery_fee_dh)
         period = "once" if self.rules.get("promos.codes")[code]["limit"] == "once_per_account" else month
         self.session.add(PromoRedemption(
             code=code, period=period, customer_id=customer.id, order_id=basket.id, amount_dh=discount,
             created_at=self.now,
         ))
-        basket.discount_dh += discount
+        # A free delivery code changes the fee and creates no promo discount (GEN-03).
+        if promo["type"] == "free_delivery":
+            basket.delivery_fee_dh = 0
+        else:
+            basket.discount_dh += discount
         basket.total_dh -= discount
         return self._remember(key, "apply_promo", {
             "ok": True, "status": "done", "code": code, "order_id": basket.id,
             "discount_qar": to_qar(discount),
         })
+
+    def _fee_zone(self, address_text: str) -> str | None:
+        area = address_text.rsplit(",", 1)[-1].strip()
+        return engine.fee_zone(self.rules, area)
+
+    def _zone_fee_dh(self, category: str, zone: str | None) -> int | None:
+        if zone is None:
+            return 0
+        fee = self.rules.get("fees.delivery_fee_qar")[zone].get(category)
+        return None if fee is None else to_dh(fee)
 
     def _match_saved_address(self, text: str) -> Address | None:
         """Finds the saved address a customer means, by its street and building numbers
@@ -658,27 +705,28 @@ class ToolExecutor:
         if order is None:
             return refused("order_not_found")
         clean = redact(new_address)[0]
-        key = action_key("address", order.id, normalize(clean))
+        # The move count is in the key: Work, Home, Work is three moves, not a repeat.
+        moves = int((order.extra or {}).get("address_changes", 0))
+        key = action_key("address", order.id, normalize(clean), moves)
         previous = self._replay(key)
         if previous is not None:
             return previous
-        if self.ctx.unguarded:
-            order.address_text = clean
-            return {"ok": True, "status": "done", "order_id": order.id, "new_address": clean}
         if order.category == "parcel":
             return self._reroute_parcel(key, order, clean)
-        if order.status in PREPICKUP_LOCKED:
+        if order.status in LOCKED_AFTER_PICKUP:
             return refused("address_locked_after_pickup")
         # ACC-03 does not say whether a change is allowed once promised_at has passed.
         if order.promised_at is not None and self.now > order.promised_at:
             return conflict("address_change_after_promised_at")
         extra = dict(order.extra or {})
+        target = self._match_saved_address(clean)
+        if target is not None and order.address_id == target.id:
+            return self._already_there(order, target)
         if int(extra.get("address_changes", 0)) >= int(self.rules.get("account.address_change.max_per_order")):
             return refused("address_change_limit_reached")
         if any((item.extra or {}).get("prescription") or (item.extra or {}).get("cold_chain") for item in order.items):
             return refused("address_change_not_allowed_for_this_order")
 
-        target = self._match_saved_address(clean)
         if target is None:
             return self._ask_about_new_address(key, order, clean)
 
@@ -689,12 +737,22 @@ class ToolExecutor:
             # Rounded so that exactly 2 km stays allowed despite floating point.
             if round(distance_km(pin, (target.lat, target.lng)), 3) > limit:
                 return refused("new_address_too_far")
+        new_fee = self._zone_fee_dh(order.category, self._fee_zone(target.line))
+        if new_fee is None:
+            return refused("zone_not_served")
+        old_fee = self._zone_fee_dh(order.category, self._fee_zone(order.address_text)) or 0
+        difference = max(new_fee - old_fee, 0) if new_fee and old_fee else 0
         extra["address_changes"] = int(extra.get("address_changes", 0)) + 1
+        extra["address_fee_dh"] = int(extra.get("address_fee_dh", 0)) + difference
+        if order.promised_at is not None:
+            extra["original_promised_at"] = order.promised_at.isoformat()
+            order.promised_at = self.now + timedelta(minutes=NEW_ADDRESS_ETA_MINUTES)
         order.extra = extra
         order.address_id = target.id
         order.address_text = target.line
         return self._remember(key, "change_address", {
             "ok": True, "status": "done", "order_id": order.id, "label": target.label,
+            "fee_qar": to_qar(difference),
         })
 
     def _ask_about_new_address(self, key: str, order: Order, clean: str) -> dict[str, Any]:
@@ -706,6 +764,15 @@ class ToolExecutor:
         approval.payload = {**approval.payload, "new_address": clean}
         return pending
 
+    @staticmethod
+    def _already_there(order: Order, target: Address) -> dict[str, Any]:
+        """Asking for the address the order is already going to changes nothing and costs
+        nothing, so a retry cannot be charged twice."""
+        return {
+            "ok": True, "status": "done", "order_id": order.id, "label": target.label, "fee_qar": 0.0,
+            "replayed": True,
+        }
+
     def _reroute_parcel(self, key: str, order: Order, clean: str) -> dict[str, Any]:
         """ACC-03: free before pickup, and QAR 10 after it. The 2 km limit is for meals
         and groceries, not parcels."""
@@ -714,9 +781,12 @@ class ToolExecutor:
         target = self._match_saved_address(clean)
         if target is None:
             return self._ask_about_new_address(key, order, clean)
+        if order.address_id == target.id:
+            return self._already_there(order, target)
         moved = order.status in {"picked_up", "on_the_way"}
         fee = self.rules.dh("parcels.reroute_fee_qar") if moved else 0
         extra = dict(order.extra or {})
+        extra["address_changes"] = int(extra.get("address_changes", 0)) + 1
         extra["reroute_fee_dh"] = int(extra.get("reroute_fee_dh", 0)) + fee
         order.extra = extra
         order.address_id = target.id
@@ -737,13 +807,12 @@ class ToolExecutor:
             return previous
         # CAN-01: the charge is set by the status when the customer first asked, so
         # confirming a moment later cannot cost more.
+        self._note_report(order)
         if order.status not in self.rules.get("general.terminal_statuses"):
             extra = dict(order.extra or {})
             extra.setdefault("status_at_first_request", order.status)
             order.extra = extra
-        terms = engine.cancellation_terms(self.rules, order_facts(order), self.now)
-        if self.ctx.unguarded:
-            terms = {"allowed": True, "code": "unguarded", "charge_dh": 0, "refund_dh": order_facts(order).paid_dh}
+        terms = engine.cancellation_terms(self.rules, order_facts(order), self._reported_at(order))
         if terms.get("escalate"):
             return conflict(terms["code"])
         if not terms["allowed"]:
@@ -753,8 +822,21 @@ class ToolExecutor:
                 "ok": True, "status": "needs_confirmation", "order_id": order.id,
                 "charge_qar": to_qar(terms["charge_dh"]), "refund_qar": to_qar(terms["refund_dh"]),
             }
+        auto = terms["code"] == "jalboot_auto_cancel"
+        credit_back = 0
+        if terms["refund_dh"] > 0:
+            try:
+                credit_back = settle_refund(
+                    self.session, self.rules, order, terms["refund_dh"], reason="customer_cancelled", key=key,
+                    approved_by="policy", now=self.now,
+                ).credit_dh
+            except WalletFull:
+                return conflict("wallet_at_limit")
         order.status = "cancelled"
-        order.extra = {**(order.extra or {}), "cancelled_by": "customer"}
+        order.extra = {
+            **(order.extra or {}), "cancelled_by": "jalboot" if auto else "customer",
+            "cancelled_at": self.now.isoformat(),
+        }
         if order.payment_method == "cash" and terms["charge_dh"] > 0:
             # CAN-05: nothing was collected, so a charge becomes a balance on the account.
             owner = order.customer
@@ -762,16 +844,18 @@ class ToolExecutor:
                 **(owner.extra or {}),
                 "outstanding_balance_dh": int((owner.extra or {}).get("outstanding_balance_dh", 0)) + terms["charge_dh"],
             }
-        if terms["refund_dh"] > 0:
-            method = "refund_credit" if order.payment_method == "cash" else "original"
-            self.session.add(Refund(
-                id=new_id("R"), order_id=order.id, customer_id=order.customer_id, amount_dh=terms["refund_dh"],
-                method=method, reason="customer_cancelled", approved_by="policy", created_at=self.now,
-                idempotency_key=key,
-            ))
+        bonus = 0
+        if auto:
+            # LAT-03: at 120 minutes Jalboot cancels and adds the cancellation credit.
+            bonus = self.rules.dh("cancellations.merchant_cancel_credit_qar")
+            settle_credit(
+                self.session, order, bonus, reason="cancellation_credit",
+                key=action_key("cancel-credit", order.id), approved_by="policy", now=self.now,
+            )
         return self._remember(key, "cancel_order", {
             "ok": True, "status": "done", "order_id": order.id, "charge_qar": to_qar(terms["charge_dh"]),
-            "refund_qar": to_qar(terms["refund_dh"]), "rule": terms["code"],
+            "refund_qar": to_qar(terms["refund_dh"]), "rule": terms["code"], "credit_qar": to_qar(bonus),
+            "to_credit_qar": to_qar(credit_back),
         })
 
     def _charge_confirmed(self, order: Order, terms: dict[str, Any], confirm_charge: bool) -> bool:

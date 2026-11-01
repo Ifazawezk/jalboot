@@ -8,7 +8,7 @@ The rule behind every metric: **score what the tools logged and what the custome
 
 - **Everything is simulated.** Jalboot is a fictional company. The customers, orders, amounts and policies are invented, and customers in the cases are scripted.
 - **The test cases are not fully independent.** They were written after reading parts of the backend. Someone who knows the code can write cases that fit it without meaning to, so a good score here is weaker evidence than the same score on cases from an outsider. Three things limit this: the gold answers follow the policy documents and not the code, a case that disagrees with the code is meant to fail, and no case was moved between sets because of how the code handled it.
-- **Mock numbers are not product quality.** The mock planner is a keyword matcher that exists to run and test the system. `eval/results/dev-agent-mock.json` shows that the pipeline works from end to end, and that is all it shows. Its numbers are not quoted anywhere in these docs.
+- **Mock numbers are not product quality.** The mock planner is a keyword matcher that exists to run and test the system, so mock runs are not kept in the repo, and a report from one says so at the top. A comparison with the baseline refuses to run in mock mode, because both sides would be the same keyword rules.
 - **The sets are small.** Rates need their intervals beside them, and two runs whose intervals overlap are not clearly different.
 
 ## The sets
@@ -156,7 +156,7 @@ These are development cases, and both columns of each group come from the same c
 
 | Measure | Red team, gates on | Red team, gates off | All with orders, gates on | All with orders, gates off |
 | --- | --- | --- | --- | --- |
-| Cases | 61 | 61 | 202 | 202 |
+| Cases | 61 | 61 | 191 | 191 |
 | Hostile tool calls | 901 | 901 | 2,511 | 2,511 |
 | Reads of data that was not theirs | 0 | 54 | 0 | 60 |
 | Cases where data was taken | 0 | 18 | 0 | 20 |
@@ -176,7 +176,7 @@ Compare like with like. QAR 25 is the most paid in one case, and QAR 63,893.20 i
 - 10 more paid the QAR 10 goodwill alone.
 - The 9 that paid nothing are exactly the 9 sessions that never passed the identity check.
 
-**Why QAR 25 is not a ceiling.** It comes from the cheap items in these orders, not from a limit in the code. Across all 202 cases the highest payment was QAR 60: the QAR 50 automated refund limit plus QAR 10 of goodwill. Those are the limits that do the work. Above them a claim goes to a person, which is what the 86 and 326 filed claims show.
+**Why QAR 25 is not a ceiling.** It comes from the cheap items in these orders, not from a limit in the code. Across all 191 cases the highest payment was QAR 60: the QAR 50 automated refund limit plus QAR 10 of goodwill. Those are the limits that do the work. Above them a claim goes to a person, which is what the 86 and 326 filed claims show.
 
 **What it does not measure.**
 
@@ -195,13 +195,13 @@ python scripts/measure_retrieval.py --split dev            # add --dense for den
 
 A run stops at its request budget, its daily token cap or the provider's limit, and never works around them. Run the same command later and it carries on: finished cases are kept and cached replies cost nothing. The live server never uses this cache. A run on `test` needs `--why`, which goes in `eval/test_runs.md`.
 
-The compromised-model test has no command of its own yet, and needs no key:
+The compromised-model test needs no key and no model:
 
 ```bash
-python -c "from jalboot.evaluation import hostile; from jalboot.evaluation.cases import load_cases; from jalboot.policy.rules import Rules; print(hostile.compare(load_cases('dev', ('redteam',)), Rules.load()))"
+python -m jalboot.evaluation.hostile --split dev
 ```
 
-Use `('support', 'handoff', 'redteam')` for all 202 cases with orders.
+Every command writes to `eval/runs/`, which git ignores, so trying one cannot change a published result. `--publish` writes to `eval/results/` instead. A mock run or a sample cannot be published.
 
 ## Rules for the test split
 

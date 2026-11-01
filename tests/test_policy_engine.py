@@ -264,6 +264,12 @@ def test_gen03_late_credit_cap_uses_the_final_subtotal():
     assert engine.late_entitlement(RULES, order, NOW)["credit_dh"] == 600
 
 
+def test_goodwill_does_not_use_up_late_credit():
+    start = NOW - timedelta(hours=3)
+    order = base_order(promised_at=start, delivered_at=start + timedelta(minutes=25))
+    assert engine.late_credit_due_dh(RULES, order, ClaimFacts(credit_on_order_dh=500), NOW) == 500
+
+
 def test_lat05_failed_contact_amounts():
     food = base_order(status="failed_customer")
     assert engine.failed_contact_refund_dh(RULES, food) == 500
@@ -306,7 +312,7 @@ def test_late_credit_cannot_be_more_than_is_due():
     start = NOW - timedelta(hours=3)
     order = base_order(promised_at=start, delivered_at=start + timedelta(minutes=25))
     assert engine.decide_credit(RULES, order, ClaimFacts(), 500, "late_delivery", NOW).outcome == EXECUTE
-    assert engine.decide_credit(RULES, order, ClaimFacts(), 600, "late_delivery", NOW).code == "above_late_credit_due"
+    assert engine.decide_credit(RULES, order, ClaimFacts(), 600, "late_delivery", NOW).code == "above_credit_due"
 
 
 def test_wallet_at_its_limit_is_not_paid():
@@ -454,11 +460,14 @@ def test_can04_cancellation_credit_needs_a_merchant_cancellation_after_thirty_mi
 
 
 def test_grc05_expired_item_credit_is_limited_and_in_window():
-    order = base_order(delivered_at=NOW - timedelta(days=3))
-    assert engine.decide_credit(RULES, order, ClaimFacts(), 1000, "expired_item_credit", NOW).outcome == EXECUTE
-    assert engine.decide_credit(RULES, order, ClaimFacts(), 1100, "expired_item_credit", NOW).outcome == DENY
-    old = base_order(delivered_at=NOW - timedelta(days=8))
-    assert engine.decide_credit(RULES, old, ClaimFacts(), 1000, "expired_item_credit", NOW).code == "no_expired_item_credit_due"
+    def credit(order, amount):
+        return engine.decide_credit(RULES, order, ClaimFacts(), amount, "expired_item_credit", NOW, photo_provided=True)
+
+    order = base_order(category="grocery", delivered_at=NOW - timedelta(days=3))
+    assert credit(order, 1000).outcome == EXECUTE
+    assert credit(order, 1100).outcome == DENY
+    old = base_order(category="grocery", delivered_at=NOW - timedelta(days=8))
+    assert credit(old, 1000).code == "no_expired_item_credit_due"
 
 
 def failed(**overrides):
@@ -493,7 +502,7 @@ def test_pay04_a_change_shortfall_is_paid_up_to_what_is_on_record():
 def test_late_credit_paid_before_is_not_paid_again():
     start = NOW - timedelta(hours=3)
     order = base_order(promised_at=start, delivered_at=start + timedelta(minutes=25))
-    claims = ClaimFacts(credit_on_order_dh=500)
+    claims = ClaimFacts(credit_on_order_dh=500, late_credit_on_order_dh=500)
     assert engine.decide_credit(RULES, order, claims, 500, "late_delivery", NOW).code == "late_credit_already_issued"
 
 
@@ -503,3 +512,168 @@ def test_other_credit_on_the_order_leaves_only_the_room_under_the_cap():
     claims = ClaimFacts(credit_on_order_dh=2500)
     assert engine.late_credit_due_dh(RULES, order, claims, NOW) == 500
     assert engine.decide_credit(RULES, order, claims, 500, "late_delivery", NOW).outcome == EXECUTE
+
+
+def parcel(**overrides):
+    values = dict(category="parcel", subtotal_dh=0, discount_dh=0, delivery_fee_dh=3000, other_fees_dh=0, tip_dh=0,
+                  items=())
+    values.update(overrides)
+    return base_order(**values)
+
+
+def test_can02_a_parcel_on_its_way_cannot_be_cancelled_however_late():
+    order = parcel(status="on_the_way", delivered_at=None, placed_at=NOW - timedelta(hours=5),
+                   promised_at=NOW - timedelta(minutes=60))
+    assert engine.cancellation_terms(RULES, order, NOW)["code"] == "cannot_cancel_now"
+
+
+def test_can04_an_estimate_slip_does_not_free_a_parcel():
+    order = parcel(status="driver_assigned", delivered_at=None, placed_at=NOW - timedelta(hours=1),
+                   promised_at=NOW + timedelta(hours=1), estimate_at=NOW + timedelta(minutes=95))
+    assert engine.cancellation_terms(RULES, order, NOW)["charge_dh"] == 500
+
+
+def test_pcl04_damage_window_is_72_hours_and_goes_to_a_person():
+    order = parcel(delivered_at=NOW - timedelta(hours=1))
+    decision = engine.decide_refund(RULES, order, ClaimFacts(), 15000, "damaged_item", NOW)
+    assert decision.code == "parcel_needs_person"
+    late = parcel(delivered_at=NOW - timedelta(hours=80))
+    assert engine.decide_refund(RULES, late, ClaimFacts(), 100, "damaged_item", NOW).code == "outside_reporting_window"
+
+
+def test_pcl03_a_payout_is_not_held_to_the_amount_paid():
+    order = parcel(delivered_at=NOW - timedelta(hours=1), declared_value_dh=30000)
+    assert engine.decide_refund(RULES, order, ClaimFacts(), 20000, "damaged_item", NOW).outcome == APPROVAL
+    assert engine.parcel_cover_dh(RULES, order) == 20000
+
+
+@pytest.mark.parametrize("hours,refund", [(24, 0), (25, 1500), (48, 1500), (49, 3000)])
+def test_pcl04_delay_refund_rows(hours, refund):
+    order = parcel(promised_at=NOW - timedelta(hours=hours), delivered_at=NOW)
+    assert engine.parcel_delay_refund_dh(RULES, order, NOW) == refund
+
+
+def test_pcl04_a_parcel_is_not_lost_until_72_hours_past_promised():
+    order = parcel(status="on_the_way", delivered_at=None, promised_at=NOW - timedelta(hours=71))
+    assert engine.decide_refund(RULES, order, ClaimFacts(), 100, "not_received", NOW).code == "parcel_not_lost_yet"
+    lost = parcel(status="on_the_way", delivered_at=None, promised_at=NOW - timedelta(hours=73))
+    assert engine.decide_refund(RULES, lost, ClaimFacts(), 100, "not_received", NOW).code == "parcel_needs_person"
+
+
+def test_phr05_a_pharmacy_seal_has_48_hours():
+    order = base_order(category="pharmacy", delivered_at=NOW - timedelta(hours=30))
+    assert refund(5, "broken_seal", order=order, photo_provided=True).outcome == APPROVAL
+
+
+def test_lat02_and_ref07_no_credit_after_a_full_refund():
+    claims = ClaimFacts(refunded_on_order_dh=9100)
+    assert engine.decide_credit(RULES, base_order(), claims, 500, "goodwill", NOW).code == "full_refund_already_given"
+    start = NOW - timedelta(hours=3)
+    late = base_order(promised_at=start, delivered_at=start + timedelta(minutes=70))
+    assert engine.decide_credit(RULES, late, claims, 500, "late_delivery", NOW).code == "full_refund_already_given"
+
+
+def test_can04_cancellation_credit_is_the_one_exception_to_that():
+    placed = NOW - timedelta(hours=2)
+    order = base_order(status="cancelled", delivered_at=None, placed_at=placed, cancelled_by="merchant",
+                       cancelled_at=placed + timedelta(minutes=40))
+    claims = ClaimFacts(refunded_on_order_dh=9600)
+    assert engine.decide_credit(RULES, order, claims, 1000, "cancellation_credit", NOW).outcome == EXECUTE
+
+
+def test_ref07_automated_goodwill_stops_at_the_claim_window():
+    old = base_order(delivered_at=NOW - timedelta(days=9))
+    assert engine.decide_credit(RULES, old, ClaimFacts(), 500, "goodwill", NOW).code == "goodwill_outside_window"
+
+
+def test_ref05_late_credit_counts_toward_the_total_on_the_order():
+    start = NOW - timedelta(hours=3)
+    order = base_order(promised_at=start, delivered_at=start + timedelta(minutes=70))
+    decision = engine.decide_credit(RULES, order, ClaimFacts(refunded_on_order_dh=4000), 2000, "late_delivery", NOW)
+    assert decision.outcome == APPROVAL
+
+
+def test_grc05_expired_credit_is_grocery_only_and_needs_a_photo():
+    grocery = base_order(category="grocery", delivered_at=NOW - timedelta(days=3))
+    pharmacy = base_order(category="pharmacy", delivered_at=NOW - timedelta(days=3))
+    decide = lambda order, **kw: engine.decide_credit(RULES, order, ClaimFacts(), 1000, "expired_item_credit", NOW, **kw)  # noqa: E731
+    assert decide(pharmacy, photo_provided=True).code == "no_expired_item_credit_due"
+    assert decide(grocery).code == "photo_needed"
+    assert decide(grocery, photo_provided=True).outcome == EXECUTE
+
+
+def test_lat03_at_120_minutes_jalboot_cancels():
+    order = base_order(status="on_the_way", delivered_at=None, placed_at=NOW - timedelta(hours=4),
+                       promised_at=NOW - timedelta(minutes=120))
+    terms = engine.cancellation_terms(RULES, order, NOW)
+    assert terms["code"] == "jalboot_auto_cancel"
+    assert terms["refund_dh"] == 9600
+
+
+@pytest.mark.parametrize("reason", ["cold_food", "chilled_item", "whole_wrong_order"])
+def test_ref06_these_claims_need_a_photo_above_the_line(reason):
+    order = base_order(delivered_at=NOW - timedelta(minutes=30))
+    assert engine.photo_needed(RULES, reason, 3001)
+    assert not engine.photo_needed(RULES, reason, 3000)
+    assert refund(31, reason, order=order).code == "photo_needed"
+
+
+def test_ref06_a_report_cannot_be_split_to_stay_under_the_line():
+    assert refund(25, "wrong_item", claims=ClaimFacts(refunded_on_order_dh=2500)).code == "photo_needed"
+
+
+def test_ref09_example_4_card_part_first_then_credit():
+    order = base_order(subtotal_dh=8000, discount_dh=0, delivery_fee_dh=0, other_fees_dh=0, tip_dh=0, credit_paid_dh=3000)
+    assert engine.refund_split(RULES, order, 6000, 0) == (5000, 1000, 0)
+
+
+def test_ref04_the_wallet_stops_at_its_limit_and_the_card_takes_the_rest():
+    order = base_order(credit_paid_dh=9600)
+    assert engine.refund_split(RULES, order, 4000, 198000) == (2000, 2000, 0)
+
+
+def test_ref04_cash_above_the_wallet_limit_needs_a_person():
+    order = base_order(payment_method="cash")
+    assert engine.refund_split(RULES, order, 4000, 198000) == (0, 2000, 2000)
+
+
+def test_ref04_the_customer_can_choose_credit():
+    assert engine.refund_split(RULES, base_order(), 4000, 0, to_credit=True) == (0, 4000, 0)
+
+
+def test_lat05_a_cash_failure_pays_nothing_because_nothing_was_collected():
+    order = failed(payment_method="cash", driver_wait_minutes=3)
+    assert engine.failed_contact_refund_dh(RULES, order) == 0
+    assert engine.failed_contact_refund_dh(RULES, failed(payment_method="cash", credit_paid_dh=2000)) == 2000
+
+
+def test_lat05_a_failed_cash_order_leaves_a_capped_balance():
+    assert engine.failed_cash_balance_dh(RULES, failed(payment_method="cash")) == 3000
+
+
+def test_lat05_cold_chain_items_are_not_refunded():
+    item = ItemFact("Insulin", 1, 9000, cold_chain=True)
+    order = failed(category="pharmacy", subtotal_dh=9000, discount_dh=0, tip_dh=500, items=(item,))
+    assert engine.failed_contact_refund_dh(RULES, order) == 500
+
+
+def test_gen03_the_final_subtotal_sets_the_amount_paid_and_the_seventy_percent_rule():
+    order = base_order(subtotal_dh=20000, final_subtotal_dh=15000, discount_dh=0)
+    assert order.paid_dh == 15000 + 800 + 300 + 500
+    assert engine.full_refund_applies(RULES, order, [(ItemFact("x", 1, 10500), 1)])
+
+
+def test_prm01_dates_are_doha_dates():
+    from datetime import datetime as moment
+
+    late_utc = moment(2026, 9, 30, 20, 59, tzinfo=timezone.utc)
+    doha_next_day = moment(2026, 9, 30, 22, 30, tzinfo=timezone.utc)
+    assert promo("SUMMER25", now=late_utc).outcome == EXECUTE
+    assert promo("SUMMER25", now=doha_next_day).code == "code_expired"
+
+
+def test_prm01_zone_and_base_fee_rules():
+    assert promo("FREEDROP", zone="D").code == "code_not_for_this_zone"
+    assert promo("FREEDROP", zone="A").outcome == EXECUTE
+    assert promo("PARCEL10", category="parcel", base_fee_dh=1500).code == "below_minimum_spend"
+    assert promo("PARCEL10", category="parcel", base_fee_dh=2000).outcome == EXECUTE

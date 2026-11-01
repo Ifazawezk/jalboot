@@ -15,12 +15,12 @@ ORDER_ID = re.compile(r"\b[A-Z]{1,3}-\d{3,}\b")
 
 HANDOFF_REPLIES = {
     "safety": {
-        "en": "I am sorry this happened. If anyone is in danger or needs a doctor, please call emergency services on 999 first. I am connecting you with a person right now.",
-        "ar": "نأسف لما حدث. إذا كان أي شخص في خطر أو يحتاج إلى طبيب، يرجى الاتصال بالطوارئ على الرقم 999 أولا. أحوّلك الآن إلى موظف مباشرة.",
+        "en": "If anyone is in danger or needs a doctor, please call emergency services on 999 first. I am passing this to our safety team now.",
+        "ar": "إذا كان أي شخص في خطر أو يحتاج إلى طبيب، يُرجى الاتصال بالطوارئ على الرقم 999 أولًا. أحوّل الأمر الآن إلى فريق السلامة.",
     },
     "customer_request": {
-        "en": "Of course. I am connecting you with a person, and they will see this conversation so you do not have to repeat yourself.",
-        "ar": "بالتأكيد. أحوّلك إلى موظف، وسيطّلع على هذه المحادثة حتى لا تضطر إلى إعادة ما قلته.",
+        "en": "Of course. I have asked a person to join. They will see this conversation, so you do not have to repeat yourself.",
+        "ar": "بالتأكيد. طلبت انضمام موظف، وسيطّلع على هذه المحادثة دون الحاجة إلى إعادة ما قلته.",
     },
     "upset_customer": {
         "en": "I am sorry about this. I am connecting you with a person who can look at it properly, and they will see everything so far.",
@@ -28,19 +28,19 @@ HANDOFF_REPLIES = {
     },
     "account_security": {
         "en": "I am sorry. I am passing this to our safety team now so your account can be protected.",
-        "ar": "نأسف لذلك. أحوّل الأمر الآن إلى فريق الأمان لحماية حسابك.",
+        "ar": "نأسف لذلك. أحوّل الأمر الآن إلى فريق السلامة لحماية حسابك.",
     },
     "agent_complaint": {
         "en": "I am sorry about your experience. I am passing this to a person who can look into it.",
         "ar": "نأسف لما واجهته. سأحوّل الأمر إلى موظف ليتابعه معك.",
     },
     "policy_requires_person": {
-        "en": "This needs a person to review, so I am connecting you with one now. They will see everything so far.",
-        "ar": "هذا الطلب يحتاج إلى مراجعة موظف، لذا أحوّلك إليه الآن، وسيطّلع على كل ما سبق.",
+        "en": "This needs a person to review, so I have passed it to the team. They will see everything so far.",
+        "ar": "يحتاج هذا الأمر إلى مراجعة موظف، لذا حوّلته إلى الفريق، وسيطّلع على كل ما سبق.",
     },
     "rule_conflict": {
         "en": "I do not want to guess on this one, so I am connecting you with a person who can decide.",
-        "ar": "لا أريد أن أخمّن في هذا الأمر، لذا أحوّلك إلى موظف يمكنه اتخاذ القرار.",
+        "ar": "هذه الحالة تحتاج إلى قرار موظف، لذا أحوّلك إليه الآن.",
     },
     "repeated_failure": {
         "en": "I have not been able to solve this, so I am connecting you with a person who can help.",
@@ -52,7 +52,7 @@ HANDOFF_REPLIES = {
     },
     "low_confidence": {
         "en": "I am not sure I can answer this correctly, so I am connecting you with a person who can help.",
-        "ar": "لست متأكدا من أنني أستطيع الإجابة بشكل صحيح، لذا أحوّلك إلى موظف يمكنه مساعدتك.",
+        "ar": "لا أستطيع تأكيد الإجابة الصحيحة هنا، لذا أحوّلك إلى موظف.",
     },
 }
 

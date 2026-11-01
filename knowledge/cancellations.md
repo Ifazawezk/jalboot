@@ -95,7 +95,7 @@ Example: item subtotal QAR 100, code QAR 20, delivery fee QAR 8, service fee QAR
 | Parcel | `driver_assigned` | QAR 5 |
 | Parcel | `picked_up`, `on_the_way` | Cannot be cancelled. Use return to sender (PCL-05). |
 
-A charge can never exceed the net items. The tip is always returned when an order is cancelled before delivery. A rejected prescription is never charged (PHR-02).
+On grocery and pharmacy orders, a charge can never exceed the net items. The tip is always returned when an order is cancelled before delivery. A rejected prescription is never charged (PHR-02).
 
 <div lang="ar" dir="rtl">
 
@@ -113,7 +113,7 @@ A charge can never exceed the net items. The tip is always returned when an orde
 | طرد | `driver_assigned` | 5 ر.ق |
 | طرد | `picked_up` أو `on_the_way` | لا يمكن الإلغاء، ويُستخدم خيار الإعادة إلى المرسل (PCL-05). |
 
-ولا يجوز أن تتجاوز رسوم الإلغاء صافي الأصناف. وتُعاد الإكرامية دائمًا إذا أُلغي الطلب قبل التسليم. ولا تُفرض أي رسوم عند رفض الوصفة الطبية (PHR-02).
+ولا يجوز في طلبات البقالة والصيدلية أن تتجاوز رسوم الإلغاء صافي الأصناف. وتُعاد الإكرامية دائمًا إذا أُلغي الطلب قبل التسليم. ولا تُفرض أي رسوم عند رفض الوصفة الطبية (PHR-02).
 
 </div>
 
@@ -155,7 +155,7 @@ The grace period beats the scheduled limit. A customer who books a slot 30 minut
 
 ## CAN-04: Free exits and cancellations by the merchant or the company
 
-The customer can cancel with a full refund including tip, at any status before delivery, when:
+The customer can cancel a food, grocery or pharmacy order with a full refund including tip, at any status before delivery, when:
 
 - It is 45 minutes or more past `promised_at` and the order is not delivered.
 - The live estimate is 30 minutes or more later than `promised_at` and the order is not yet `picked_up`.
@@ -169,7 +169,7 @@ A rejected prescription is a pharmacist's decision, not a merchant cancellation,
 
 ### الإلغاء المجاني والإلغاء من جانب التاجر أو الشركة
 
-يمكن للعميل الإلغاء مع استرداد كامل يشمل الإكرامية، في أي حالة تسبق التسليم، إذا تحقق أحد الآتي:
+يمكن للعميل إلغاء طلب الطعام أو البقالة أو الصيدلية مع استرداد كامل يشمل الإكرامية، في أي حالة تسبق التسليم، إذا تحقق أحد الآتي:
 
 - مرور 45 دقيقة أو أكثر بعد `promised_at` دون تسليم الطلب.
 - تأخر الوقت المتوقع المباشر 30 دقيقة أو أكثر عن `promised_at` ولم يصل الطلب بعد إلى حالة `picked_up`.
@@ -192,7 +192,7 @@ A rejected prescription is a pharmacist's decision, not a merchant cancellation,
 ### الطلبات النقدية وتكرار الإلغاء
 
 - لا يُحصَّل أي مبلغ في الطلب النقدي قبل التسليم، فتتحول رسوم الإلغاء إلى مديونية على الحساب بحد أقصى 30 ر.ق، ويُعفى العميل مما زاد على ذلك.
-- يجب سداد المديونية بالبطاقة أو محفظة الهاتف قبل الطلب التالي.
+- يجب سداد المديونية بالبطاقة أو المحفظة الإلكترونية قبل الطلب التالي.
 - إذا وقعت 3 عمليات إلغاء برسوم خلال 7 أيام متحركة، يُوقف الدفع نقدًا عند الاستلام مدة 30 يومًا. ولا تُحسب عمليات الإلغاء المجانية ضمن هذا العدد.
 
 </div>

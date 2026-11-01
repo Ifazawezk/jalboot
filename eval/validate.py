@@ -299,8 +299,15 @@ def main() -> int:
     table: dict[str, Counter] = {}
     texts: dict[str, str] = {}
 
+    # The held-out files stay out of the repo until the final scored run, so they are
+    # reported as unpublished, not as missing.
+    published = (HERE / "test").exists()
+    if not published:
+        print("test/: not published yet. It ships after the final scored run, with its frozen manifest.")
     for set_name in SETS:
         for split in SPLITS:
+            if split == "test" and not published:
+                continue
             path = HERE / split / f"{set_name}.jsonl"
             rows = load(path, problems)
             table[f"{set_name}/{split}"] = Counter(row.get("lang") for row in rows)

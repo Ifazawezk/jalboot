@@ -135,7 +135,7 @@ Redelivery is free. The customer gets redelivery or a refund, never both. If the
 - أن يبقى العنوان نفسه.
 - ألا تكون إعادة التوصيل قد تمت في هذا الطلب، إذ يُسمح بها مرة واحدة (1) لكل طلب.
 
-وإعادة التوصيل مجانية. ويحصل العميل إما عليها وإما على الاسترداد، لا على كليهما. وإذا لم يصل الصنف خلال 60 دقيقة من الطلب، تُرد قيمته بدلًا من ذلك. ولا تتاح إعادة التوصيل في طلبات الصيدلية أو أثناء تفعيل مؤشر الطقس السيئ.
+وإعادة التوصيل مجانية. ويحصل العميل إما عليها وإما على الاسترداد، لا على كليهما. وإذا لم يصل الصنف خلال 60 دقيقة من طلب إعادة التوصيل، تُرد قيمته بدلًا من ذلك. ولا تتاح إعادة التوصيل في طلبات الصيدلية أو أثناء تفعيل مؤشر الطقس السيئ.
 
 </div>
 
@@ -143,7 +143,7 @@ Redelivery is free. The customer gets redelivery or a refund, never both. If the
 
 | Complaint | Window | Refund |
 |---|---|---|
-| Arrived cold or too warm | 2 hours | 50% of net item price |
+| Arrived at the wrong temperature | 2 hours | 50% of net item price |
 | Soggy, stale, overcooked or similar | 24 hours | 50% of net item price |
 | Spilled or crushed in transit | 24 hours | Treat as damaged: full net item price |
 | Taste or personal preference | Not applicable | None |
@@ -156,8 +156,8 @@ A quality claim does not count toward the 70% rule, even if every item in the or
 
 | الشكوى | المهلة | المبلغ المردود |
 |---|---|---|
-| وصل باردًا أو غير ساخن بما يكفي | ساعتان (2) | 50% من صافي سعر الصنف |
-| طري أكثر من اللازم أو غير طازج أو محترق أو ما شابه | 24 ساعة | 50% من صافي سعر الصنف |
+| وصل بدرجة حرارة غير مناسبة | ساعتان (2) | 50% من صافي سعر الصنف |
+| طري أكثر من اللازم أو غير طازج أو مطهو أكثر من اللازم أو ما شابه | 24 ساعة | 50% من صافي سعر الصنف |
 | انسكب أو تضرر أثناء النقل | 24 ساعة | يُعامل معاملة التالف: كامل صافي سعر الصنف |
 | المذاق أو التفضيل الشخصي | لا ينطبق | لا يوجد |
 

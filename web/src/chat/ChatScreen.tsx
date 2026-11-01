@@ -9,7 +9,7 @@ import {
   identityOpen,
   lastSpokenText,
 } from '../lib/chatState';
-import { formatClock, formatQar } from '../lib/format';
+import { formatClock } from '../lib/format';
 import { Icon } from '../ui/Icon';
 import { useChat } from './ChatProvider';
 import { IdentityPanel, RecordedIdentity } from './Identity';
@@ -201,11 +201,10 @@ function Composer() {
 }
 
 function CaseFile() {
-  const { t, locale } = useI18n();
-  const { state, policy } = useChat();
+  const { t } = useI18n();
+  const { state } = useChat();
   const orders = useMemo(() => collectOrders(state.items), [state.items]);
   const sources = useMemo(() => collectSources(state.items), [state.items]);
-  const limit = policy?.refund.automatedLimitQar;
   const joined = state.handoff?.status === 'joined';
   const waiting = state.handoff && !joined;
   const status = state.closed
@@ -259,9 +258,7 @@ function CaseFile() {
           </dd>
         </div>
       </dl>
-      {limit != null && (
-        <p className="fine">{t('case.rule', { limit: formatQar(limit, locale) })}</p>
-      )}
+      <p className="fine">{t('case.rule')}</p>
     </aside>
   );
 }

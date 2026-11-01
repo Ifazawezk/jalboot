@@ -179,3 +179,41 @@ def test_a_short_greeting_needs_no_source():
 
 def test_a_reply_built_on_tool_results_needs_no_source():
     assert run("Your order is on the way, it should arrive at 19:15 tonight.", used_tools=True).ok
+
+
+@pytest.mark.parametrize("text", [
+    "I have trouble breathing after eating this",
+    "my throat is closing up",
+    "I came out in a rash after the meal",
+    "my daughter has hives",
+    "عندي صعوبة في التنفس بعد الأكل",
+    "ابني تعب بسبب الحساسية من المكسرات",
+    "تعرضت للتحرش من المندوب",
+    "المندوب يهددني",
+    "طفح جلدي بعد الأكل",
+    "نقلوه للمستشفى بعد الأكل",
+])
+def test_real_reactions_and_arabic_attached_forms_hand_off(text):
+    assert triage_message(text).handoff_reason == SAFETY
+
+
+@pytest.mark.parametrize("text", [
+    "What is your allergy policy?",
+    "where can I see allergen information",
+    "ما هي سياسة الحساسية عندكم",
+    "Rashid delivered my order, thanks",
+])
+def test_a_question_about_the_rules_is_not_an_emergency(text):
+    assert triage_message(text).handoff_reason == ""
+
+
+def test_a_policy_question_with_a_real_reaction_still_hands_off():
+    assert triage_message("what is your allergy policy, my son is swelling up").handoff_reason == SAFETY
+
+
+def test_redelivery_cannot_be_claimed_because_no_tool_arranges_it():
+    assert not run("I have arranged a redelivery for your fries.").ok
+
+
+def test_late_credit_cannot_be_claimed_without_a_tool_result():
+    assert not run("I added QAR 25 late credit to your wallet.").ok

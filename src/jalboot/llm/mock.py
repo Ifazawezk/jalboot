@@ -57,6 +57,14 @@ REFUSALS = {
     "cannot_cancel_now": ("This order can no longer be cancelled.", "لم يعد من الممكن إلغاء هذا الطلب."),
     "order_already_finished": ("This order is already finished, so it cannot be cancelled.", "اكتمل هذا الطلب، لذا لا يمكن إلغاؤه."),
     "no_duplicate_charge_found": ("I can only see one charge for this order.", "لا أرى سوى عملية خصم واحدة لهذا الطلب."),
+    "no_refund_value": ("That unit was the free one of the pair, so there is nothing to refund.", "هذه الوحدة هي المجانية في العرض، لذا لا يوجد مبلغ يُرد."),
+    "nothing_to_refund": ("No money was collected on this order, so there is nothing to refund.", "لم يُحصَّل أي مبلغ على هذا الطلب، لذا لا يوجد ما يُرد."),
+    "full_refund_already_given": ("This order has already been fully refunded.", "تم رد قيمة هذا الطلب بالكامل من قبل."),
+    "one_code_per_order": ("Only one code can be used on an order.", "لا يمكن استخدام أكثر من رمز واحد في الطلب."),
+    "code_not_for_this_zone": ("That code does not cover this delivery zone.", "هذا الرمز لا يشمل منطقة التوصيل هذه."),
+    "delivery_already_free": ("Delivery is already free, so the code was not used.", "التوصيل مجاني أصلا، لذا لم يُستخدم الرمز."),
+    "zone_not_served": ("We do not deliver food to that area.", "لا نوصل الطعام إلى هذه المنطقة."),
+    "parcel_not_lost_yet": ("It is too early to report this parcel as lost.", "من المبكر اعتبار هذا الطرد مفقودا."),
     "already_refunded": ("That has already been refunded on this order.", "تم رد قيمة هذا من قبل في هذا الطلب."),
     "item_already_refunded": ("That item has already been refunded.", "تم رد قيمة هذا الصنف من قبل."),
     "late_credit_already_issued": ("Late credit for this order has already been added.", "تمت إضافة رصيد التأخير لهذا الطلب من قبل."),
@@ -77,6 +85,7 @@ QUESTION_WORDS = re.compile(
     r"^\s*(how|what|when|why|which|can i|do you|does|is there|are there|كم|كيف|متي|هل|ما |ماذا|لماذا|ليش)"
     r"|\bhow (much|long|many)\b"
 )
+ONE_UNIT = ("only one", "one of", "one wrap", "one was", "واحد", "وحده", "حبه")
 YES = ("yes", "go ahead", "confirm", "ok", "okay", "sure", "نعم", "اي", "ايوه", "موافق", "تمام", "اكد")
 
 
@@ -139,6 +148,23 @@ def _text(content: str) -> LLMReply:
 
 def _number(value: float) -> str:
     return f"{value:g}"
+
+
+def _minutes_ar(count: int) -> str:
+    """Arabic counts change the noun: دقيقة، دقيقتان، 5 دقائق، 15 دقيقة."""
+    if count == 1:
+        return "دقيقة واحدة"
+    if count == 2:
+        return "دقيقتين"
+    return f"{count} دقائق" if 3 <= count <= 10 else f"{count} دقيقة"
+
+
+def _units(items: list[dict[str, Any]], folded: str) -> int | None:
+    """How many units a claim is about. Fewer than all only when the customer says so."""
+    largest = max((int(item.get("quantity", 1)) for item in items), default=1)
+    if largest == 1:
+        return None
+    return 1 if any(normalize(word) in folded for word in ONE_UNIT) else largest
 
 
 class MockPlanner:
@@ -222,20 +248,29 @@ class MockPlanner:
                 return _call("issue_credit", order_id=first["order_id"], amount_qar=credit, reason="late_delivery")
             if fee and "issue_refund" not in done:
                 return _call("issue_refund", order_id=first["order_id"], amount_qar=fee, reason="late_delivery_fee")
-        return _text(self._late_text(turn, first, credit, fee))
+        return _text(self._late_text(turn, first))
 
-    def _late_text(self, turn: Turn, first: dict[str, Any], credit: float, fee: float) -> str:
+    def _late_text(self, turn: Turn, first: dict[str, Any]) -> str:
+        """Says only what a tool result shows, so a refused credit is never claimed."""
+
+        def paid(tool: str) -> float:
+            for name, result in turn.results:
+                if name == tool and result.get("status") == "done":
+                    return float(result.get("amount_qar") or 0)
+            return 0.0
+
+        credit, fee = paid("issue_credit"), paid("issue_refund")
         minutes = first.get("minutes_late", 0)
         reason = first.get("delay_reason_text") or ""
         cite = self._cite(turn)
         if turn.language == "ar":
-            parts = [f"تأخر طلبك {first['order_id']} بمقدار {minutes} دقيقة."]
+            parts = [f"تأخر طلبك {first['order_id']} {_minutes_ar(minutes)}."]
             if reason:
                 parts.append(f"السبب: {reason}.")
             if credit:
-                parts.append(f"أضفنا رصيدا بقيمة {_number(credit)} ريال.")
+                parts.append(f"أضفنا رصيدا بقيمة {_number(credit)} ر.ق.")
             if fee:
-                parts.append(f"وأعدنا رسوم التوصيل {_number(fee)} ريال.")
+                parts.append(f"وأعدنا رسوم التوصيل {_number(fee)} ر.ق.")
             if not credit and not fee:
                 parts.append("لا يستحق هذا الطلب رصيد تأخير.")
             return " ".join(parts) + cite
@@ -278,16 +313,21 @@ class MockPlanner:
         details = turn.results[0][1]
         if not details.get("ok"):
             return self._refusal(turn, details)
-        names = [str(i.get("name_en") or i["name"]) for i in self._named_items(details, folded)]
-        if not names:
+        chosen = self._named_items(details, folded)
+        if not chosen:
             return _text(_say(("Which item was affected?", "ما الصنف المقصود؟"), turn.language))
+        units = _units(chosen, folded)
+        lines = [
+            {"name": str(i.get("name_en") or i["name"]), **({"quantity": units} if units else {})} for i in chosen
+        ]
+        claim = {"reason": reason, "items": lines}
         name, last = turn.results[-1]
         if name == "get_order_details":
-            return _call("quote_refund", order_id=order_id, reason=reason, items=names)
+            return _call("quote_refund", order_id=order_id, **claim)
         if name == "quote_refund":
             if not last.get("ok"):
                 return self._refusal(turn, last)
-            return _call("issue_refund", order_id=order_id, amount_qar=last["amount_qar"], reason=reason, items=names)
+            return _call("issue_refund", order_id=order_id, amount_qar=last["amount_qar"], **claim)
         return self._refund_text(turn, last)
 
     def _refund_text(self, turn: Turn, result: dict[str, Any]) -> LLMReply:

@@ -23,6 +23,7 @@ from jalboot.policy.rules import Rules, percent_of, to_dh
 from jalboot.world import catalog
 
 DEFAULT_ANCHOR = datetime(2026, 11, 3, 15, 0, tzinfo=timezone.utc)  # 18:00 in Doha
+DOHA = timezone(timedelta(hours=3))
 PAYMENT_METHODS = ("card", "card", "card", "wallet", "cash")
 
 
@@ -79,7 +80,9 @@ class WorldBuilder:
                     customer_id=customer.id,
                     label=("Home", "Work", "Family")[position],
                     zone=zone,
-                    line=f"Zone {self.random.randrange(10, 90)}, Street {self.random.randrange(100, 980)}, "
+                    # Zones here start at 110. Real Doha zones stop well below that, so an
+                    # address cannot match a real building.
+                    line=f"Zone {self.random.randrange(110, 190)}, Street {self.random.randrange(100, 980)}, "
                          f"Building {self.random.randrange(1, 120)}, {zone}",
                     lat=round(lat + self.random.uniform(-0.01, 0.01), 5),
                     lng=round(lng + self.random.uniform(-0.01, 0.01), 5),
@@ -104,9 +107,11 @@ class WorldBuilder:
 
     def build_drivers(self, count: int) -> None:
         for index in range(count):
+            name, name_ar = self._name()
             self.drivers.append(Driver(
                 id=f"D-{300 + index}",
-                name=self._name()[0],
+                name=name,
+                name_ar=name_ar,
                 vehicle=self.random.choices(("motorbike", "car"), (80, 20))[0],
                 zone=self.random.choice(catalog.ZONES)[0],
                 rating=round(self.random.uniform(4.0, 5.0), 1),
@@ -116,7 +121,8 @@ class WorldBuilder:
         chosen = self.random.sample(catalog.ITEMS[order.category], self.random.randrange(1, 4))
         subtotal = 0
         for name, name_ar, low, high in chosen:
-            price = self.random.randrange(low, high + 1) * 100
+            # A parcel has no item price: the sender pays only the delivery fee.
+            price = 0 if order.category == "parcel" else self.random.randrange(low, high + 1) * 100
             quantity = self.random.choice((1, 1, 1, 2))
             subtotal += price * quantity
             order.items.append(OrderItem(
@@ -130,12 +136,18 @@ class WorldBuilder:
         if category == "parcel":
             return to_dh(self.rules.get("parcels.base_fee_qar")[letter])
         fee = self.rules.get("fees.delivery_fee_qar")[letter][category]
-        # Food is not delivered to Zone D, so those orders use the Zone C fee.
-        return to_dh(fee if fee is not None else self.rules.get("fees.delivery_fee_qar")["C"]["food"])
+        return to_dh(fee)
 
     def _service_fee_dh(self, subtotal: int) -> int:
         fee = percent_of(subtotal, self.rules.get("fees.service_fee.pct"))
         return min(max(fee, self.rules.dh("fees.service_fee.min_qar")), self.rules.dh("fees.service_fee.max_qar"))
+
+    def _parcel_promise(self, placed: datetime) -> datetime:
+        """PCL-04: booked by 16:00, promised by the end of that day, otherwise the next."""
+        local = placed.astimezone(DOHA)
+        cutoff = local.replace(hour=16, minute=0, second=0, microsecond=0)
+        day = local if local <= cutoff else local + timedelta(days=1)
+        return day.replace(hour=23, minute=59, second=59, microsecond=0).astimezone(timezone.utc)
 
     def _timeline(self, order: Order, merchant: Merchant, late: bool) -> None:
         placed = order.placed_at
@@ -144,12 +156,17 @@ class WorldBuilder:
         picked = ready + timedelta(minutes=self.random.randrange(2, 9))
         travel = self.random.randrange(9, 26)
         order.promised_at = placed + timedelta(minutes=merchant.prep_minutes + 22)
+        if order.category == "parcel":
+            order.promised_at = self._parcel_promise(placed)
+            travel = self.random.randrange(60, 300)
         arrived = picked + timedelta(minutes=travel)
         if late:
             order.delay_reason = self.random.choice(catalog.DELAY_REASONS)
             arrived = max(arrived, order.promised_at) + timedelta(minutes=self.random.randrange(12, 75))
         steps = [("placed", placed), ("accepted", accepted), ("ready", ready), ("picked_up", picked)]
         if order.status == "delivered":
+            # A slow parcel placed just before the anchor must not arrive in the future.
+            arrived = min(arrived, self.anchor - timedelta(minutes=1))
             order.delivered_at = arrived
             steps.append(("delivered", arrived))
         elif order.status == "cancelled":
@@ -164,8 +181,11 @@ class WorldBuilder:
         for index in range(count):
             customer = self.random.choice(self.customers)
             category = self.random.choices(categories, (62, 24, 8, 6))[0]
-            merchant = self.random.choice(by_category[category])
             address = self.random.choice(self.addresses[customer.id])
+            # FEE-01: food is not delivered to Zone D.
+            if category == "food" and self.fee_zone.get(address.zone) == "D":
+                category = "grocery"
+            merchant = self.random.choice(by_category[category])
             live = index >= count - max(count // 40, 8)
             path = self.rules.get("general.order_status_paths")[category]
             status = (
@@ -183,7 +203,8 @@ class WorldBuilder:
                 driver_id=None if status == "placed" else self.random.choice(self.drivers).id,
                 category=category,
                 status=status,
-                payment_method=self.random.choice(PAYMENT_METHODS),
+                # PCL-02: parcels are prepaid, so a driver never carries cash for one.
+                payment_method=self.random.choice(PAYMENT_METHODS[:-1] if category == "parcel" else PAYMENT_METHODS),
                 placed_at=placed,
                 address_id=address.id,
                 address_text=address.line,

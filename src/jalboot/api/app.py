@@ -147,15 +147,14 @@ def health(runtime: Runtime = Depends(get_runtime)) -> dict[str, Any]:
 
 @api.get("/policy")
 def policy(runtime: Runtime = Depends(get_runtime)) -> dict[str, Any]:
+    """Public, so it holds only what a customer may be told. Approval limits are
+    internal (REF-05, ESC-03): someone who knows the limit can size a claim to fit it."""
     rules = runtime.rules
     return {
         "policyVersion": rules.get("meta.policy_version"),
         "currency": rules.get("meta.currency"),
         "assistant": runtime.mode,
         "refund": {
-            "automatedLimitQar": rules.get("refunds.approval_limits_qar.automated"),
-            "newAccountAutomatedLimitQar": rules.get("refunds.new_account.automated_limit_qar"),
-            "agentLimitQar": rules.get("refunds.approval_limits_qar.agent"),
             "cardBusinessDays": rules.get("refunds.timing.card_business_days"),
             "creditMinutes": rules.get("refunds.timing.credit_minutes"),
         },
@@ -345,6 +344,22 @@ def desk_logout(
     result = Response(status_code=204)
     result.delete_cookie(COOKIE, path="/", httponly=True, samesite=runtime.settings.cookie_samesite)
     return result
+
+
+@api.get("/desk/policy")
+def desk_policy(
+    _staff: StaffUser = Depends(desk_user), runtime: Runtime = Depends(get_runtime),
+) -> dict[str, Any]:
+    """The internal limits, for signed-in staff only."""
+    rules = runtime.rules
+    return {
+        "refund": {
+            "automatedLimitQar": rules.get("refunds.approval_limits_qar.automated"),
+            "newAccountAutomatedLimitQar": rules.get("refunds.new_account.automated_limit_qar"),
+            "agentLimitQar": rules.get("refunds.approval_limits_qar.agent"),
+            "supervisorLimitQar": rules.get("refunds.approval_limits_qar.supervisor"),
+        },
+    }
 
 
 @api.get("/desk/summary")

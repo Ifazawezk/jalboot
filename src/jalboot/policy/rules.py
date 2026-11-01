@@ -1,7 +1,7 @@
 """Loads the machine-readable policy and handles money.
 
-knowledge/rules.json is the one place a limit is written down. The policy documents
-quote the same figures in prose, and a test checks that they still agree.
+The engine reads its limits from knowledge/rules.json. The policy documents quote the
+same figures in prose, and a test checks that they still agree.
 """
 
 from __future__ import annotations

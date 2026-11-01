@@ -36,7 +36,7 @@ import {
   type RawEntry,
   type RawRefund,
 } from '../data/desk';
-import { MOCK_POLICY, MOCK_RULES } from '../data/mockRules';
+import { MOCK_DESK_POLICY, MOCK_POLICY, MOCK_RULES } from '../data/mockRules';
 import { recordingsFor } from '../data/recordings';
 import {
   AGENT_NOOR,
@@ -479,6 +479,9 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
       locale = next;
     },
 
+    async getDeskPolicy() {
+      return MOCK_DESK_POLICY;
+    },
     async getPolicy() {
       return MOCK_POLICY;
     },
@@ -519,6 +522,13 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
 
     async *sendMessage(conversationId, input: SendMessageInput, signal): AsyncGenerator<StreamEvent> {
       const c = need(conversations.get(conversationId), 'Conversation');
+      if (c.state === 'closed') {
+        throw new ApiError(409, {
+          code: 'conversation_closed',
+          message: 'This conversation has ended.',
+          retryable: false,
+        });
+      }
       c.locale = input.locale;
 
       const earlier = turns.get(input.clientMessageId);
@@ -736,6 +746,24 @@ export function createMockApi(options: MockOptions = {}): SupportApi {
     async claimConversation(id) {
       const c = need(conversations.get(id), 'Conversation');
       joinAgent(c, AGENT_NOOR);
+      return viewConversation(c);
+    },
+    async closeConversation(id) {
+      const c = need(conversations.get(id), 'Conversation');
+      const pending = joinTimers.get(c.id);
+      if (pending) clearTimeout(pending);
+      joinTimers.delete(c.id);
+      c.state = 'closed';
+      c.waitingSince = null;
+      emitConversation(c.id, { type: 'conversation.closed', at: new Date().toISOString() });
+      addAudit({
+        actorKind: 'agent',
+        actorName: c.agentName ?? AGENT_NOOR,
+        action: 'conversation.closed',
+        target: c.id,
+        detail: { en: 'Ended the conversation', ar: 'أنهى المحادثة' },
+      });
+      touch(c);
       return viewConversation(c);
     },
     async replyToConversation(id, text) {

@@ -95,7 +95,8 @@ Example: a food order with an item subtotal of QAR 200. Commission is 22%, or QA
 
 | Cause | Who pays |
 |---|---|
-| Missing, wrong or poor-quality item, allergen mismatch, expired item, merchant cancellation after accepting | Merchant pays the net item value |
+| Missing, wrong or poor-quality item, allergen mismatch, expired item | Merchant pays the refunded net item value |
+| Merchant cancels after accepting | Merchant is not paid for the order. No further deduction |
 | Late delivery, order lost by the driver, not received, damage in transit | Jalboot. The merchant is paid in full |
 | Cause cannot be established | Split 50% merchant, 50% Jalboot |
 
@@ -109,7 +110,8 @@ If merchant-fault refunds exceed 5% of a merchant's orders in the rolling 30 day
 
 | السبب | من يتحمل |
 |---|---|
-| صنف ناقص أو خاطئ أو رديء الجودة، أو عدم تطابق معلومات الحساسية، أو صنف منتهي الصلاحية، أو إلغاء التاجر بعد القبول | يتحمل التاجر صافي قيمة الصنف |
+| صنف ناقص أو خاطئ أو رديء الجودة، أو عدم تطابق معلومات الحساسية، أو صنف منتهي الصلاحية | يتحمل التاجر صافي قيمة الصنف المردودة |
+| إلغاء التاجر بعد القبول | لا يحصل التاجر على مقابل الطلب، دون أي استقطاع إضافي |
 | تأخر التوصيل، أو فقدان الطلب لدى المندوب، أو عدم الاستلام، أو التلف أثناء النقل | تتحملها جالبوت، ويحصل التاجر على مستحقاته كاملة |
 | تعذر تحديد السبب | تُقسم بنسبة 50% على التاجر و50% على جالبوت |
 

@@ -4,8 +4,8 @@ Money is stored as whole dirhams (1 QAR = 100 dirhams) in columns ending in _dh.
 Floats would round, and a refund limit that is off by a fraction is a real bug.
 
 Several safety rules also live here as constraints, so that they hold even if
-application code has a bug: a refund or approval key can only exist once, and an
-amount cannot be zero or negative.
+application code has a bug: a refund or approval key can only exist once, a refund
+cannot be zero or negative, and an approval cannot be negative.
 """
 
 from __future__ import annotations
@@ -81,6 +81,7 @@ class Driver(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
+    name_ar: Mapped[str] = mapped_column(String(120), default="")
     vehicle: Mapped[str] = mapped_column(String(16), default="motorbike")
     zone: Mapped[str] = mapped_column(String(60), default="")
     rating: Mapped[float] = mapped_column(default=4.7)
