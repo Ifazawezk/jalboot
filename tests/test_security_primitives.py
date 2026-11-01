@@ -136,3 +136,12 @@ def test_a_failed_transaction_writes_no_audit_row():
     except RuntimeError:
         pass
     assert session.scalar(select(AuditEvent).limit(1)) is None
+
+
+def test_known_limit_deleting_the_newest_audit_rows_is_not_detected():
+    """The module and docs/security.md say so. If this ever fails, update them."""
+    session = fresh()
+    add_events(session)
+    session.execute(text("DELETE FROM audit_events WHERE seq=3"))
+    session.commit()
+    assert audit.verify_chain(session) == (True, None)

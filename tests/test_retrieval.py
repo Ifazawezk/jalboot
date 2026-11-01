@@ -42,7 +42,7 @@ def test_ngrams_survive_a_typo_that_breaks_word_matching():
 
 
 def test_char_ngrams_fold_before_counting():
-    assert char_ngrams("الطلبات") == char_ngrams("الطلبات")
+    assert char_ngrams("الطَّلَبات") == char_ngrams("الطلبات")
     assert char_ngrams("أهلا") == char_ngrams("اهلا")
 
 

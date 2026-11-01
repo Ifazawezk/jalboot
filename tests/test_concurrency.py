@@ -19,6 +19,7 @@ from jalboot.policy.rules import Rules
 from jalboot.tools.approvals import DecisionError, decide
 from jalboot.tools.executor import ToolContext, ToolExecutor
 from jalboot.world.demo import add_demo_customers
+from jalboot.tools.settle import settle_credit
 from jalboot.world.generator import DEFAULT_ANCHOR, generate_world
 from tests.conftest import database_url
 
@@ -137,3 +138,20 @@ def test_the_audit_chain_survives_parallel_writers(sessions):
         assert audit.verify_chain(session) == (True, None)
 
 
+
+
+def test_two_credits_at_once_both_reach_the_wallet(sessions):
+    """Security review 16: each session read the same balance, so one credit was lost."""
+    first, second = sessions(), sessions()
+    orders = [session.get(Order, "JB-700102") for session in (first, second)]
+    before = orders[0].customer.wallet_dh
+    assert orders[1].customer.wallet_dh == before
+    settle_credit(second, orders[1], 2000, reason="goodwill", key="b", approved_by="t", now=DEFAULT_ANCHOR)
+    second.commit()
+    settle_credit(first, orders[0], 2000, reason="goodwill", key="a", approved_by="t", now=DEFAULT_ANCHOR)
+    first.commit()
+    assert orders[0].customer.wallet_dh == before + 4000
+    first.close()
+    second.close()
+    with sessions() as session:
+        assert session.get(Customer, "C-1001").wallet_dh == before + 4000

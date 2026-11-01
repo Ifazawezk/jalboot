@@ -13,6 +13,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from jalboot.policy.engine import CREDIT_REASONS
+
 REFUND_REASONS = [
     "missing_item", "wrong_item", "damaged_item", "spoiled_item", "quality", "cold_food",
     "chilled_item", "expired_product", "cold_chain", "allergen", "foreign_object",
@@ -20,7 +22,6 @@ REFUND_REASONS = [
     "duplicate_charge", "late_delivery_fee", "failed_contact_refund", "whole_wrong_order",
     "driver_change_short",
 ]
-CREDIT_REASONS = ["late_delivery", "goodwill", "cancellation_credit", "expired_item_credit"]
 TICKET_CATEGORIES = [
     "late_delivery", "missing_item", "wrong_item", "refund_status", "promo_issue",
     "address_change", "payment_issue", "driver_conduct", "pharmacy_prescription",
@@ -101,18 +102,21 @@ TOOLS = {
             "Get the live status and estimated arrival of one of the customer's orders.",
             {"order_id": ORDER_ID},
             ("order_id",),
+            writes=True,
         ),
         ToolSpec(
             "get_order_details",
             "Get items, prices, fees, payment and delivery details of one of the customer's orders.",
             {"order_id": ORDER_ID},
             ("order_id",),
+            writes=True,
         ),
         ToolSpec(
             "explain_delay",
             "Get why an order is late, how late it is and any late credit that is due.",
             {"order_id": ORDER_ID},
             ("order_id",),
+            writes=True,
         ),
         ToolSpec(
             "quote_refund",
@@ -147,7 +151,7 @@ TOOLS = {
             {
                 "order_id": ORDER_ID,
                 "amount_qar": {"type": "number", "description": "Amount in QAR"},
-                "reason": {"type": "string", "enum": CREDIT_REASONS},
+                "reason": {"type": "string", "enum": list(CREDIT_REASONS)},
             },
             ("order_id", "amount_qar", "reason"),
             writes=True,
@@ -221,6 +225,7 @@ TOOLS = {
 
 MAX_TEXT = 2000
 MAX_LINES = 50
+MAX_AMOUNT_QAR = 1_000_000
 
 
 def _claim_line(entry: Any) -> bool:
@@ -234,8 +239,10 @@ def _claim_line(entry: Any) -> bool:
 
 TYPE_CHECKS = {
     "string": lambda v: isinstance(v, str) and bool(v.strip()),
-    # JSON from a model can hold NaN or Infinity, which no amount of money can be.
-    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v),
+    # JSON from a model can hold NaN, Infinity or 1e308, and no amount of money is any of them.
+    "number": lambda v: (
+        isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and abs(v) <= MAX_AMOUNT_QAR
+    ),
     "boolean": lambda v: isinstance(v, bool),
     "array": lambda v: isinstance(v, list) and len(v) <= MAX_LINES and all(_claim_line(entry) for entry in v),
 }

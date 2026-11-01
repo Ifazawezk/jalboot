@@ -4,6 +4,8 @@ These tests call the tool layer directly, the way a compromised model would. Not
 here depends on a prompt.
 """
 
+import json
+from contextlib import contextmanager
 from datetime import timedelta
 
 import pytest
@@ -11,9 +13,11 @@ from sqlalchemy import func, select
 
 from jalboot import audit
 from jalboot.db.models import Address, Approval, AuditEvent, Customer, Order, Refund, StaffUser, Ticket
+from jalboot.policy.rules import Rules
 from jalboot.security.passwords import hash_password
 from jalboot.tools import approvals
 from jalboot.tools.approvals import DecisionError, decide
+from jalboot.tools.facts import claim_facts, report_issues
 from tests.conftest import ANCHOR, RULES, make_conversation, tools_for
 
 MISSING = dict(order_id="JB-700102", amount_qar=4.0, reason="missing_item", items=[{"name": "Karak tea"}])
@@ -362,7 +366,7 @@ def test_approval_rechecks_the_cap_at_decision_time(db, layla):
                   reason="wrong_item", idempotency_key="other", created_at=ANCHOR))
     db.commit()
     with pytest.raises(DecisionError) as blocked:
-        decide(db, approval_id, staff(db), "approve", "", 1, ANCHOR, RULES)
+        decide(db, approval_id, staff(db, role="supervisor"), "approve", "", 1, ANCHOR, RULES)
     assert blocked.value.code == "amount_exceeds_paid"
 
 
@@ -392,8 +396,8 @@ def test_the_first_cancel_request_fixes_the_status(db):
 
 def test_gen02_a_first_report_inside_the_window_stands_when_the_customer_returns(db):
     conversation = make_conversation(db)
-    quote = {"order_id": "JB-700102", "reason": "missing_item", "items": [{"name": "Karak tea"}]}
-    assert tools_for(db, conversation).execute("quote_refund", quote)["amount_qar"] == 4.0
+    first = tools_for(db, conversation).execute("issue_refund", {**MISSING, "amount_qar": 9.0})
+    assert first["error"] == "above_item_value"
     late = ANCHOR + timedelta(hours=30)
     assert tools_for(db, conversation, now=late).execute("issue_refund", MISSING)["status"] == "done"
 
@@ -625,7 +629,8 @@ def test_acc03_food_cannot_move_to_zone_d(db):
 def test_gen02_a_chat_that_opened_before_delivery_cannot_stretch_a_window(db):
     """Code review bug 3: the time belongs to the order, not to the conversation."""
     order = db.get(Order, "JB-700102")
-    order.extra = {**(order.extra or {}), "first_report_at": (order.delivered_at - timedelta(days=5)).isoformat()}
+    early = (order.delivered_at - timedelta(days=5)).isoformat()
+    order.extra = {**(order.extra or {}), "first_reports": {"item:karak tea": early}}
     db.commit()
     late = ANCHOR + timedelta(hours=30)
     tools = tools_for(db, make_conversation(db), now=late)
@@ -836,3 +841,276 @@ def test_a_retry_to_the_same_address_changes_nothing_and_costs_nothing(db):
 def test_prm01_the_limit_comes_from_the_rules_file(db, layla):
     layla.execute("apply_promo", {"code": "SAVE20"})
     assert layla.execute("apply_promo", {"code": "FREEDROP"})["error"] == "one_code_per_order"
+
+
+def test_a_read_runs_outside_the_write_lock_and_a_refund_inside_it(layla, monkeypatch):
+    real, depth, held = audit.serial_write, [0], {}
+
+    @contextmanager
+    def counted(session):
+        depth[0] += 1
+        with real(session):
+            yield
+        depth[0] -= 1
+
+    monkeypatch.setattr(audit, "serial_write", counted)
+
+    class Watching:
+        def search(self, query, language, k=4):
+            held["search"] = depth[0]
+            return []
+
+    layla.ctx.knowledge = Watching()
+    layla.execute("search_knowledge", {"query": "refund policy"})
+    assert held["search"] == 0
+
+    original = layla._issue_refund
+
+    def watched(**arguments):
+        held["refund"] = depth[0]
+        return original(**arguments)
+
+    layla._issue_refund = watched
+    layla.execute("issue_refund", MISSING)
+    assert held["refund"] == 1
+
+
+def test_the_claim_windows_come_from_the_rules(db):
+    customer, order = db.get(Customer, "C-1001"), db.get(Order, "JB-700102")
+    db.add(Refund(
+        id="R-OLD", order_id=order.id, customer_id=customer.id, amount_dh=100, method="card",
+        reason="missing_item", created_at=ANCHOR - timedelta(days=40), idempotency_key="old",
+    ))
+    db.flush()
+    assert claim_facts(db, customer, order, ANCHOR, RULES).claims_30d == 0
+    wider = Rules(json.loads(json.dumps(RULES.data)))
+    wider.data["refunds"]["repeat_claims"]["window_days"] = 45
+    assert claim_facts(db, customer, order, ANCHOR, wider).claims_30d == 1
+
+
+def with_extra(order, **fields):
+    order.extra = {**(order.extra or {}), **fields}
+
+
+def paid_on(db, order_id):
+    return sum(db.scalars(select(Refund.amount_dh).where(Refund.order_id == order_id)))
+
+
+def test_a_duplicate_charge_is_paid_once_whatever_items_are_listed(db, layla):
+    """Security review 2: a changed item list used to look like a new claim."""
+    order = db.get(Order, "JB-700102")
+    charge = {"at": ANCHOR.isoformat(), "amount_dh": 3000, "kind": "final"}
+    with_extra(order, charges=[charge, charge])
+    db.commit()
+    claim = {"order_id": order.id, "amount_qar": 30.0, "reason": "duplicate_charge"}
+    assert layla.execute("issue_refund", claim)["status"] == "done"
+    for items in ([{"name": "Karak tea"}], [{"name": "Hummus plate"}], [{"name": "Karak tea"}, {"name": "Hummus plate"}]):
+        assert layla.execute("issue_refund", {**claim, "items": items})["replayed"] is True
+    assert paid_on(db, order.id) == 3000
+    assert layla.execute("quote_refund", {"order_id": order.id, "reason": "duplicate_charge"})["amount_qar"] == 0.0
+
+
+def test_a_change_shortfall_is_paid_once_whatever_items_are_listed(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.payment_method = "cash"
+    with_extra(order, driver_change_short_dh=2000)
+    db.commit()
+    claim = {"order_id": order.id, "amount_qar": 20.0, "reason": "driver_change_short"}
+    assert layla.execute("issue_refund", claim)["status"] == "done"
+    assert layla.execute("issue_refund", {**claim, "items": [{"name": "Karak tea"}]})["replayed"] is True
+    assert paid_on(db, order.id) == 2000
+
+
+def test_not_received_on_a_failed_order_cannot_top_up_the_failed_delivery_refund(db, layla):
+    order = db.get(Order, "JB-700102")
+    order.status, order.tip_dh, order.delivered_at = "failed_customer", 500, None
+    with_extra(order, driver_wait_minutes=10, driver_calls=3)
+    db.commit()
+    quote = layla.execute("quote_refund", {"order_id": order.id, "reason": "not_received"})
+    assert quote == {"ok": True, "order_id": order.id, "reason": "failed_contact_refund", "amount_qar": 5.0}
+    first = {"order_id": order.id, "amount_qar": 5.0, "reason": "failed_contact_refund"}
+    assert layla.execute("issue_refund", first)["status"] == "done"
+    again = layla.execute("issue_refund", {"order_id": order.id, "amount_qar": 40.0, "reason": "not_received"})
+    assert again["replayed"] is True
+    assert paid_on(db, order.id) == 500
+
+
+def dear_order(db):
+    """QAR 700 of food, so three claims can pass an agent's limit together."""
+    order = db.get(Order, "JB-700103")
+    prices = {"Mixed grill plate": 25000, "Grilled hammour": 20000}
+    for item in order.items:
+        item.unit_price_dh = prices[item.name]
+    order.subtotal_dh, order.total_dh = 70000, 71100
+    db.commit()
+    return order
+
+
+def claim_item(tools, order, name, quantity, amount):
+    return tools.execute("issue_refund", {
+        "order_id": order.id, "amount_qar": amount, "reason": "wrong_item",
+        "items": [{"name": name, "quantity": quantity}],
+    })
+
+
+def test_ref05_pending_claims_set_the_level_when_a_claim_is_filed(db, layla):
+    """Security review 3: three claims filed together used to all say agent."""
+    order = dear_order(db)
+    filed = [
+        claim_item(layla, order, "Mixed grill plate", 1, 250.0),
+        claim_item(layla, order, "Mixed grill plate", 2, 250.0),
+        claim_item(layla, order, "Grilled hammour", 1, 200.0),
+    ]
+    assert [db.get(Approval, row["approval_id"]).required_role for row in filed] == ["agent", "supervisor", "supervisor"]
+
+
+def test_ref05_an_agent_cannot_approve_past_the_limit_for_the_total_on_the_order(db, layla):
+    order = dear_order(db)
+    first = claim_item(layla, order, "Mixed grill plate", 1, 250.0)["approval_id"]
+    second = claim_item(layla, order, "Mixed grill plate", 2, 250.0)["approval_id"]
+    db.get(Approval, second).required_role = "agent"
+    db.commit()
+    agent = staff(db)
+    decide(db, first, agent, "approve", "", 1, ANCHOR, RULES)
+    with pytest.raises(DecisionError) as blocked:
+        decide(db, second, agent, "approve", "", 1, ANCHOR, RULES)
+    assert blocked.value.code == "approval_limit_exceeded"
+    assert db.get(Approval, second).required_role == "supervisor"
+    assert paid_on(db, order.id) == 25000
+    decide(db, second, staff(db, role="supervisor", staff_id="S-8"), "approve", "", 1, ANCHOR, RULES)
+    assert paid_on(db, order.id) == 50000
+
+
+def test_ref05_rejecting_is_not_held_to_the_total_on_the_order(db, layla):
+    order = dear_order(db)
+    approval_id = claim_item(layla, order, "Mixed grill plate", 1, 250.0)["approval_id"]
+    db.add(Refund(id="R-X", order_id=order.id, customer_id="C-1001", amount_dh=26000, method="original",
+                  reason="quality", idempotency_key="other", created_at=ANCHOR))
+    db.commit()
+    assert decide(db, approval_id, staff(db), "reject", "", 1, ANCHOR, RULES).approval.status == "rejected"
+
+
+def test_a_claim_waiting_for_a_person_counts_toward_the_automated_limit(db, layla):
+    file_large_refund(db, layla)
+    small = layla.execute("issue_refund", {
+        "order_id": "JB-700103", "amount_qar": 4.0, "reason": "missing_item",
+        "items": [{"name": "Mixed grill plate", "quantity": 1}],
+    })
+    assert small["status"] == "pending_approval"
+
+
+def parcel(db):
+    order = db.get(Order, "JB-700102")
+    order.category = "parcel"
+    db.commit()
+    return order
+
+
+def test_pcl03_claims_on_a_parcel_cannot_pass_its_cover(db, layla):
+    """Security review 3: three reasons used to pay QAR 600 on QAR 200 of cover."""
+    order = parcel(db)
+    claim = {"order_id": order.id, "amount_qar": 200.0, "reason": "damaged_item"}
+    approval_id = layla.execute("issue_refund", claim)["approval_id"]
+    lost = layla.execute("issue_refund", {**claim, "reason": "not_received"})
+    assert (lost["error"], lost["max_qar"]) == ("above_parcel_cover", 0.0)
+    decide(db, approval_id, staff(db), "approve", "", 1, ANCHOR, RULES)
+    assert layla.execute("quote_refund", {"order_id": order.id, "reason": "not_received"})["error"] == "parcel_cover_used"
+
+
+def test_pcl03_cover_is_checked_again_when_a_person_decides(db, layla):
+    order = parcel(db)
+    approval_id = layla.execute("issue_refund", {
+        "order_id": order.id, "amount_qar": 150.0, "reason": "damaged_item",
+    })["approval_id"]
+    db.add(Refund(id="R-X", order_id=order.id, customer_id="C-1001", amount_dh=10000, method="original",
+                  reason="not_received", idempotency_key="other", created_at=ANCHOR))
+    db.commit()
+    with pytest.raises(DecisionError) as blocked:
+        decide(db, approval_id, staff(db), "approve", "", 1, ANCHOR, RULES)
+    assert blocked.value.code == "above_parcel_cover"
+
+
+def goodwill(tools, order_id):
+    return tools.execute("issue_credit", {"order_id": order_id, "amount_qar": 30.0, "reason": "goodwill"})
+
+
+def test_ref07_waiting_goodwill_counts_toward_the_thirty_day_cap(layla):
+    """Security review 3: three QAR 30 approvals used to pay QAR 90 against QAR 60."""
+    assert goodwill(layla, "JB-700102")["status"] == "pending_approval"
+    assert goodwill(layla, "JB-700103")["status"] == "pending_approval"
+    assert goodwill(layla, "JB-700104")["error"] == "goodwill_cap_30d"
+
+
+def test_ref07_the_thirty_day_cap_is_checked_again_when_a_person_decides(db, layla):
+    approval_id = goodwill(layla, "JB-700102")["approval_id"]
+    db.add(Refund(id="R-X", order_id="JB-700103", customer_id="C-1001", amount_dh=4000, method="compensation",
+                  reason="goodwill", idempotency_key="other", created_at=ANCHOR))
+    db.commit()
+    with pytest.raises(DecisionError) as blocked:
+        decide(db, approval_id, staff(db), "approve", "", 1, ANCHOR, RULES)
+    assert blocked.value.code == "goodwill_cap_30d"
+
+
+def test_a_slow_decision_does_not_close_the_window_the_customer_met(db, layla):
+    approval_id = file_large_refund(db, layla)
+    later = ANCHOR + timedelta(days=9)
+    assert decide(db, approval_id, staff(db), "approve", "", 1, later, RULES).refund.amount_dh == 9000
+
+
+def test_gen02_a_report_about_one_item_does_not_hold_the_window_for_another(db, layla):
+    """Security review 6: the first report used to cover every later issue on the order."""
+    assert layla.execute("issue_refund", MISSING)["status"] == "done"
+    later = tools_for(db, make_conversation(db, name="conv-2"), now=ANCHOR + timedelta(days=30))
+    soup = {"order_id": "JB-700102", "amount_qar": 12.0, "reason": "missing_item", "items": [{"name": "Lentil soup"}]}
+    assert later.execute("issue_refund", soup)["error"] == "outside_reporting_window"
+
+
+def test_gen02_a_claim_cannot_borrow_an_older_issues_time_by_naming_both(db, layla):
+    assert layla.execute("issue_refund", MISSING)["status"] == "done"
+    later = tools_for(db, make_conversation(db, name="conv-2"), now=ANCHOR + timedelta(days=30))
+    both = {"order_id": "JB-700102", "amount_qar": 12.0, "reason": "missing_item",
+            "items": [{"name": "Karak tea"}, {"name": "Lentil soup"}]}
+    assert later.execute("issue_refund", both)["error"] == "outside_reporting_window"
+
+
+def test_gen02_a_quote_is_not_a_report(db, layla):
+    layla.execute("quote_refund", {"order_id": "JB-700104", "reason": "late_delivery_fee"})
+    later = tools_for(db, make_conversation(db, name="conv-2"), now=ANCHOR + timedelta(days=30))
+    assert later.execute("issue_refund", {
+        "order_id": "JB-700104", "amount_qar": 8.0, "reason": "late_delivery_fee",
+    })["error"] == "outside_reporting_window"
+
+
+def test_late_credit_and_the_late_fee_are_one_delay_for_the_report(layla):
+    assert report_issues("late_delivery", []) == report_issues("late_delivery_fee", []) == ["late"]
+
+
+def test_grc04_a_rejected_substitute_needs_a_substitution_on_the_line(db, layla):
+    """Security review 12."""
+    claim = {"order_id": "JB-700102", "amount_qar": 4.0, "reason": "substitute_rejected", "items": [{"name": "Karak tea"}]}
+    assert layla.execute("issue_refund", claim)["error"] == "no_substitution_on_line"
+    line = next(item for item in db.get(Order, "JB-700102").items if item.name == "Karak tea")
+    line.extra = {**(line.extra or {}), "substitute_for": "Green tea"}
+    db.commit()
+    assert layla.execute("issue_refund", claim)["status"] == "done"
+
+
+@pytest.mark.parametrize("amount", [1e308, -1e308, 1_000_001.0])
+def test_an_absurd_amount_is_refused_and_audited(db, layla, amount):
+    """Security review 17: this used to crash the turn with no audit row."""
+    assert layla.execute("issue_refund", {**MISSING, "amount_qar": amount})["error"] == "invalid_argument"
+    assert audit_rows(db, "guardrail.blocked")
+
+
+def test_pcl04_a_parcel_claim_is_for_delay_loss_or_damage(db, layla):
+    """Found by the hostile run: any reason used to reach a parcel's cover, on any status."""
+    order = parcel(db)
+    claim = {"order_id": order.id, "amount_qar": 20.0, "reason": "wrong_item", "items": [{"name": "Karak tea"}]}
+    assert layla.execute("issue_refund", claim)["error"] == "reason_not_for_parcels"
+    assert layla.execute("quote_refund", {"order_id": order.id, "reason": "missing_item"})["error"] == "reason_not_for_parcels"
+
+
+def test_a_change_shortfall_is_never_a_parcel_claim(db, layla):
+    order = parcel(db)
+    claim = {"order_id": order.id, "amount_qar": 140.0, "reason": "driver_change_short"}
+    assert layla.execute("issue_refund", claim)["error"] == "no_change_shortfall_recorded"

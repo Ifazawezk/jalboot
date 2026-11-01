@@ -156,7 +156,7 @@ The customer must report within 24 hours of `delivered_at`. Check two things: pr
 
 - Exactly 150 m counts as within range.
 - For a "leave at door" order, a proof photo showing the right door within 150 m means the order counts as delivered, and no refund applies.
-- Only 2 refunds under this section are allowed in the rolling 90 days. The next case goes to a Trust review, even if there is no proof of delivery.
+- Refunds under this section are limited in the rolling 90 days. Beyond that limit, a person reviews the case, even if there is no proof of delivery.
 
 <div lang="ar" dir="rtl">
 
@@ -171,7 +171,7 @@ The customer must report within 24 hours of `delivered_at`. Check two things: pr
 
 - المسافة البالغة 150 مترًا تمامًا تُعد ضمن النطاق.
 - في طلب "اترك الطلب عند الباب"، إذا أظهرت صورة الإثبات الباب الصحيح وكانت المسافة في حدود 150 مترًا، يُعد الطلب مسلَّمًا ولا يُرد المبلغ.
-- لا يُسمح إلا بعمليتي استرداد (2) بموجب هذا القسم خلال 90 يومًا متحركة، وتُحال الحالة التالية إلى مراجعة فريق الثقة حتى لو لم يوجد إثبات تسليم.
+- عمليات الاسترداد بموجب هذا القسم محدودة خلال 90 يومًا متحركة، وبعد تجاوز الحد يراجع موظف الحالة حتى لو لم يوجد إثبات تسليم.
 
 </div>
 
