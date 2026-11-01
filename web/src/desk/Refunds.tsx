@@ -119,7 +119,9 @@ function Docket({ refund, onDecide }: { refund: Refund; onDecide: (refund: Refun
           </span>
         </p>
         <h2 id={`refund-${refund.id}`} tabIndex={-1} dir="auto">
-          {refund.customer}, <span className="ticket__store">{refund.store}</span>
+          {refund.customer}
+          {locale === 'ar' ? '، ' : ', '}
+          <span className="ticket__store">{refund.store}</span>
         </h2>
         <p className="ticket__summary">{refund.summary}</p>
         {refund.risks.length > 0 && (

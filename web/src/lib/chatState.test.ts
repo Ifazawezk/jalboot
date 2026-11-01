@@ -224,6 +224,17 @@ describe('helpers', () => {
   });
 });
 
+describe('a closed conversation', () => {
+  it('no longer says a person is chatting', () => {
+    const state = run([
+      { type: 'handoff.update', handoff: { status: 'joined', agentName: 'Sara', etaMinutes: null, position: null } },
+      { type: 'conversation.closed', at: '2026-11-01T00:00:00Z' },
+    ]);
+    expect(state.closed).toBe(true);
+    expect(state.handoff).toBeNull();
+  });
+});
+
 describe('asking for a person', () => {
   it('says so when the request failed, and leaves the way to ask again open', () => {
     const state = run([{ type: 'handoff.failed' }]);

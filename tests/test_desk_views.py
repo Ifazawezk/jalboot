@@ -76,6 +76,18 @@ def test_arabic_evidence_names_items_in_arabic(db):
     assert "Karak" not in evidence(view(db, row, "ar"), "الأصناف")["value"]
 
 
+@pytest.mark.parametrize("typed", ["karak tea", "KARAK TEA", "karak"])
+def test_arabic_evidence_finds_the_item_however_it_was_typed(db, typed):
+    """A claim keeps the name as the customer or the model wrote it."""
+    row = approval(db, items=[{"name": typed, "quantity": 1}])
+    assert evidence(view(db, row, "ar"), "الأصناف")["value"] == "شاي كرك"
+
+
+def test_arabic_evidence_keeps_a_name_it_cannot_match_rather_than_dropping_it(db):
+    row = approval(db, items=[{"name": "mystery box", "quantity": 1}])
+    assert evidence(view(db, row, "ar"), "الأصناف")["value"] == "mystery box"
+
+
 def test_the_policy_title_is_readable_and_not_just_the_section_code(db):
     policy = view(db, approval(db), "en")["policy"]
     assert policy["section"] == "WRG-01"

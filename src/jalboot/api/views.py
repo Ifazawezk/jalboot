@@ -278,6 +278,16 @@ def refund_summary(approval: Approval, staff_name: str | None) -> dict[str, Any]
     }
 
 
+def _arabic_item(order: Order, typed: str) -> str:
+    """A claim keeps the name as it was typed, so this matches the way the tools do. A
+    name that matches nothing is kept, because the approver still needs to read it."""
+    wanted = typed.casefold()
+    for item in order.items:
+        if item.name_ar and wanted in item.name.casefold():
+            return item.name_ar
+    return typed
+
+
 def _risks(session: Session, rules: Rules, approval: Approval, order: Order, now: datetime, language: str) -> list[str]:
     customer = session.get(Customer, approval.customer_id)
     facts = claim_facts(session, customer, order, now)
@@ -310,9 +320,8 @@ def refund_view(
     risks = _risks(session, rules, approval, order, now, language)
     section = POLICY_SECTIONS.get(reason, "REF-03")
     label = pick(REASON_LABELS.get(reason, UNKNOWN_REASON), language)
-    arabic_items = {item.name: item.name_ar for item in order.items}
     names = [str(entry["name"]) for entry in (approval.payload or {}).get("items") or []]
-    items = "، ".join(arabic_items.get(name) or name for name in names) if arabic else ", ".join(names)
+    items = "، ".join(_arabic_item(order, name) for name in names) if arabic else ", ".join(names)
     total = f"{to_qar(order.total_dh):.2f}"
     evidence: list[dict[str, Any]] = [
         {"label": pick(("Order total", "إجمالي الطلب"), language), "value": pick((f"QAR {total}", f"{total} ر.ق"), language)},
