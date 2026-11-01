@@ -1,0 +1,98 @@
+{
+ "id": "ar-safety",
+ "locale": "ar",
+ "title": "حالة عاجلة",
+ "summary": "بلاغ عن حساسية يذهب إلى موظف فورا.",
+ "recordedAt": "2026-11-01T02:13:53Z",
+ "conversationId": "rec-ar-safety",
+ "source": "groq/openai/gpt-oss-20b",
+ "steps": [
+  {
+   "waitMs": 500,
+   "event": {
+    "type": "customer.message",
+    "id": "c1",
+    "text": "ابني عنده حساسية من الأكل اللي وصلنا وتورم وجهه"
+   }
+  },
+  {
+   "waitMs": 600,
+   "event": {
+    "type": "message.start",
+    "messageId": "m1"
+   }
+  },
+  {
+   "waitMs": 300,
+   "event": {
+    "type": "tool.start",
+    "toolCallId": "t1",
+    "tool": "handoff_to_human",
+    "label": "جارٍ البحث عن موظف لمساعدتك"
+   }
+  },
+  {
+   "waitMs": 1100,
+   "event": {
+    "type": "handoff.update",
+    "handoff": {
+     "status": "queued",
+     "agentName": null,
+     "etaMinutes": null,
+     "position": null
+    }
+   }
+  },
+  {
+   "waitMs": 700,
+   "event": {
+    "type": "tool.end",
+    "toolCallId": "t1",
+    "status": "ok",
+    "label": "تم طلب موظف لمساعدتك"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "إذا كان أي شخص في خطر أو يحت"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "اج إلى طبيب، يُرجى الاتصال ب"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "الطوارئ على الرقم 999 أولًا."
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": " أحوّل الأمر الآن إلى فريق ا"
+   }
+  },
+  {
+   "waitMs": 40,
+   "event": {
+    "type": "text.delta",
+    "delta": "لسلامة."
+   }
+  },
+  {
+   "waitMs": 200,
+   "event": {
+    "type": "message.end",
+    "finish": "handoff"
+   }
+  }
+ ]
+}

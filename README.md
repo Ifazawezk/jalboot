@@ -227,6 +227,17 @@ Open <http://127.0.0.1:8000>. The server hosts the API and the web app on one or
 
 The first start builds a seeded world in `var/jalboot.sqlite3`: 400 customers, 80 drivers, 3,000 orders and 600 tickets, plus two demo customers. `WORLD_SEED` and `WORLD_SCALE` change it.
 
+### The static demo
+
+The public demo is a static site with no server and no key, so it can go on GitHub Pages:
+
+```bash
+cd web
+VITE_BASE_PATH=/jalboot/ npm run build:demo   # writes web/dist-demo. In Git Bash, add MSYS_NO_PATHCONV=1
+```
+
+It plays the recordings in [`demo/recordings`](demo/recordings) and the scripted examples, and labels each one. A recording is a real model run on simulated data, made by `scripts/record_demo.py` through the real API, identity check and desk included. Nothing in one is written by hand, and it names its model and date. The pauses are set for reading, not measured. The scripted examples are written by hand and say so.
+
 ### Demo accounts
 
 | Who | Sign in with | Notes |
@@ -455,7 +466,7 @@ No. They come from simulated tickets, and they are not the evaluation results. T
 - **A confirmed charge proves a later turn, not agreement.** Code makes sure the customer was quoted first. A model that ignores a "no" in a later turn could still confirm, which is why the test cases forbid it.
 - **The audit chain carries no secret key.** It shows a changed row, or a removed row with rows after it. Deleting the newest rows goes unnoticed, and someone with full database access could rewrite the whole chain.
 - **Photo evidence is simulated.** There is no upload. A photo counts when the order's simulated record says one is on file.
-- **There are no real recordings yet.** The sample conversations in the web app are scripted. Recordings of real model runs come from `scripts/record_demo.py`, which has not completed a run.
+- **The recordings show a few runs, not a typical one.** Each is one real run on simulated data. They were kept as they came, flaws included, and the Arabic ones were not checked by an Arabic speaker. They are not evidence of quality. The scored results are in [Results](#results).
 - **The name is not cleared.** A few web searches found no Gulf delivery company called Jalboot. That is not a trademark or company registry check.
 - **Redaction covers phones, emails, card numbers and codes.** Names and addresses in free text stay, and in `llm` mode they reach the provider.
 - **Some rules are not enforced in code.** ESC-03 also bans medical and legal advice and admissions of fault. Triage sends health reports to a person, but no reply check covers these.
