@@ -6,24 +6,21 @@ place names and are used only so the simulation reads naturally.
 
 from __future__ import annotations
 
+# Area, Arabic name, approximate centre. The areas and their fee zones match
+# fees.zones in knowledge/rules.json.
 ZONES = [
-    ("West Bay", "الخليج الغربي"),
-    ("Lusail", "لوسيل"),
-    ("The Pearl", "اللؤلؤة"),
-    ("Al Sadd", "السد"),
-    ("Msheireb", "مشيرب"),
-    ("Al Waab", "الوعب"),
-    ("Al Gharrafa", "الغرافة"),
-    ("Al Rayyan", "الريان"),
-    ("Al Wakrah", "الوكرة"),
-    ("Old Airport", "المطار القديم"),
-    ("Bin Mahmoud", "بن محمود"),
-    ("Najma", "نجمة"),
-    ("Umm Salal", "أم صلال"),
-    ("Al Khor", "الخور"),
-    ("Madinat Khalifa", "مدينة خليفة"),
-    ("Ain Khaled", "عين خالد"),
-    ("Al Thumama", "الثمامة"),
+    ("Al Dafna", "الدفنة", 25.310, 51.520), ("West Bay", "الخليج الغربي", 25.320, 51.530),
+    ("Msheireb", "مشيرب", 25.286, 51.527), ("Al Sadd", "السد", 25.283, 51.500),
+    ("Bin Mahmoud", "بن محمود", 25.280, 51.513), ("Al Mansoura", "المنصورة", 25.270, 51.530),
+    ("Najma", "نجمة", 25.270, 51.540), ("Old Airport", "المطار القديم", 25.250, 51.550),
+    ("Madinat Khalifa", "مدينة خليفة", 25.320, 51.470), ("Al Gharrafa", "الغرافة", 25.340, 51.450),
+    ("Al Waab", "الوعب", 25.260, 51.460), ("Al Aziziyah", "العزيزية", 25.240, 51.450),
+    ("Onaiza", "عنيزة", 25.320, 51.510), ("The Pearl", "اللؤلؤة", 25.370, 51.550),
+    ("Al Duhail", "الدحيل", 25.350, 51.480), ("Lusail", "لوسيل", 25.420, 51.500),
+    ("Al Rayyan", "الريان", 25.290, 51.420), ("Al Wakrah", "الوكرة", 25.170, 51.600),
+    ("Al Wukair", "الوكير", 25.130, 51.550), ("Muaither", "معيذر", 25.270, 51.390),
+    ("Umm Salal", "أم صلال", 25.420, 51.400), ("Al Khor", "الخور", 25.680, 51.500),
+    ("Mesaieed", "مسيعيد", 24.990, 51.550), ("Al Shahaniya", "الشحانية", 25.370, 51.220),
 ]
 
 FIRST_NAMES = [
@@ -95,15 +92,7 @@ DELAY_REASONS = (
     "driver_reassigned",
 )
 
-PROMOS = [
-    # code, kind, value, largest discount QAR, smallest subtotal QAR, category, days to expiry
-    ("DOHA10", "percent", 10, 20, 40, "", 30),
-    ("FRESH15", "percent", 15, 25, 60, "grocery", 21),
-    ("WELCOME20", "fixed", 20, 20, 50, "", 45),
-    ("CARE5", "fixed", 5, 5, 30, "pharmacy", 14),
-    ("PARCEL5", "fixed", 5, 5, 20, "parcel", 14),
-    ("RAMADAN25", "percent", 25, 40, 80, "food", -30),
-]
+ITEM_TRANSLATIONS = {name: name_ar for group in ITEMS.values() for name, name_ar, _low, _high in group}
 
 TICKET_TOPICS = [
     # category, weight, English subject, Arabic subject

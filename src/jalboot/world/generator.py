@@ -17,12 +17,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from jalboot.db.models import (
-    Address, Customer, Driver, Merchant, Order, OrderEvent, OrderItem, Promo, Ticket, WorldMeta,
+    Address, Customer, Driver, Merchant, Order, OrderEvent, OrderItem, Ticket, WorldMeta,
 )
+from jalboot.policy.rules import Rules, percent_of, to_dh
 from jalboot.world import catalog
 
-DEFAULT_ANCHOR = datetime(2026, 10, 15, 15, 0, tzinfo=timezone.utc)  # 18:00 in Doha
-LIVE_STATUSES = ("placed", "preparing", "picked_up", "on_the_way")
+DEFAULT_ANCHOR = datetime(2026, 11, 3, 15, 0, tzinfo=timezone.utc)  # 18:00 in Doha
 PAYMENT_METHODS = ("card", "card", "card", "wallet", "cash")
 
 
@@ -31,16 +31,19 @@ def _fake_phone(index: int) -> str:
 
 
 class WorldBuilder:
-    def __init__(self, seed: int, anchor: datetime):
+    def __init__(self, seed: int, anchor: datetime, rules: Rules):
         self.random = random.Random(seed)
         self.seed = seed
         self.anchor = anchor
+        self.rules = rules
+        self.fee_zone = {
+            area: letter for letter, zone in rules.get("fees.zones").items() for area in zone["areas"]
+        }
         self.customers: list[Customer] = []
         self.addresses: dict[str, list[Address]] = {}
         self.merchants: list[Merchant] = []
         self.drivers: list[Driver] = []
         self.orders: list[Order] = []
-        self.promos: list[Promo] = []
         self.tickets: list[Ticket] = []
 
     def _name(self) -> tuple[str, str]:
@@ -70,7 +73,7 @@ class WorldBuilder:
             self.customers.append(customer)
             zones = self.random.sample(catalog.ZONES, self.random.choice((1, 2, 2, 3)))
             saved = []
-            for position, (zone, _zone_ar) in enumerate(zones):
+            for position, (zone, _zone_ar, lat, lng) in enumerate(zones):
                 saved.append(Address(
                     id=f"A-{number}-{position + 1}",
                     customer_id=customer.id,
@@ -78,6 +81,8 @@ class WorldBuilder:
                     zone=zone,
                     line=f"Zone {self.random.randrange(10, 90)}, Street {self.random.randrange(100, 980)}, "
                          f"Building {self.random.randrange(1, 120)}, {zone}",
+                    lat=round(lat + self.random.uniform(-0.01, 0.01), 5),
+                    lng=round(lng + self.random.uniform(-0.01, 0.01), 5),
                 ))
             self.addresses[customer.id] = saved
 
@@ -85,7 +90,7 @@ class WorldBuilder:
         number = 200
         for category, names in catalog.MERCHANTS.items():
             for name, name_ar in names:
-                for zone, zone_ar in self.random.sample(catalog.ZONES, 2 if category == "food" else 1):
+                for zone, zone_ar, _lat, _lng in self.random.sample(catalog.ZONES, 2 if category == "food" else 1):
                     number += 1
                     self.merchants.append(Merchant(
                         id=f"M-{number}",
@@ -120,6 +125,18 @@ class WorldBuilder:
             ))
         return subtotal
 
+    def _delivery_fee_dh(self, category: str, zone: str) -> int:
+        letter = self.fee_zone.get(zone, "A")
+        if category == "parcel":
+            return to_dh(self.rules.get("parcels.base_fee_qar")[letter])
+        fee = self.rules.get("fees.delivery_fee_qar")[letter][category]
+        # Food is not delivered to Zone D, so those orders use the Zone C fee.
+        return to_dh(fee if fee is not None else self.rules.get("fees.delivery_fee_qar")["C"]["food"])
+
+    def _service_fee_dh(self, subtotal: int) -> int:
+        fee = percent_of(subtotal, self.rules.get("fees.service_fee.pct"))
+        return min(max(fee, self.rules.dh("fees.service_fee.min_qar")), self.rules.dh("fees.service_fee.max_qar"))
+
     def _timeline(self, order: Order, merchant: Merchant, late: bool) -> None:
         placed = order.placed_at
         accepted = placed + timedelta(minutes=2)
@@ -150,8 +167,9 @@ class WorldBuilder:
             merchant = self.random.choice(by_category[category])
             address = self.random.choice(self.addresses[customer.id])
             live = index >= count - max(count // 40, 8)
+            path = self.rules.get("general.order_status_paths")[category]
             status = (
-                self.random.choice(LIVE_STATUSES) if live
+                self.random.choice(path[:-1]) if live
                 else self.random.choices(("delivered", "cancelled"), (93, 7))[0]
             )
             placed = (
@@ -172,27 +190,18 @@ class WorldBuilder:
             )
             subtotal = self._order_items(order)
             order.subtotal_dh = subtotal
-            order.delivery_fee_dh = self.random.choice((800, 1000, 1200, 1500))
-            order.total_dh = subtotal + order.delivery_fee_dh
+            order.delivery_fee_dh = self._delivery_fee_dh(category, address.zone)
+            order.other_fees_dh = 0 if category == "parcel" else self._service_fee_dh(subtotal)
+            order.tip_dh = self.random.choice((0, 0, 0, 200, 500, 1000))
+            order.total_dh = subtotal + order.delivery_fee_dh + order.other_fees_dh + order.tip_dh
             self._timeline(order, merchant, late=self.random.random() < 0.18)
             self.orders.append(order)
-
-    def build_promos(self) -> None:
-        for code, kind, value, largest, smallest, category, days in catalog.PROMOS:
-            self.promos.append(Promo(
-                code=code,
-                kind=kind,
-                value=value,
-                max_discount_dh=largest * 100,
-                min_subtotal_dh=smallest * 100,
-                category=category,
-                expires_at=self.anchor + timedelta(days=days),
-            ))
 
     def build_tickets(self, count: int) -> None:
         topics = catalog.TICKET_TOPICS
         weights = [topic[1] for topic in topics]
         delivered = [order for order in self.orders if order.status == "delivered"]
+        self.language_of = {customer.id: customer.language for customer in self.customers}
         for index in range(count):
             category, _weight, subject, subject_ar = self.random.choices(topics, weights)[0]
             order = self.random.choice(delivered)
@@ -200,7 +209,10 @@ class WorldBuilder:
             if created > self.anchor:
                 created = self.anchor - timedelta(minutes=self.random.randrange(1, 300))
             resolved = self.random.random() < 0.9
-            language = order.customer.language if order.customer else "en"
+            language = self.language_of[order.customer_id]
+            # The share the bot closes rises slowly across the window, so the desk has a trend.
+            progress = 1 - (self.anchor - created).total_seconds() / (60 * 86400)
+            by_bot = resolved and self.random.random() < 0.52 + 0.2 * max(progress, 0.0)
             self.tickets.append(Ticket(
                 id=f"T-{70000 + index}",
                 customer_id=order.customer_id,
@@ -212,6 +224,8 @@ class WorldBuilder:
                 language=language,
                 source="seed",
                 csat=self.random.choices((5, 4, 3, 2, 1), (46, 28, 14, 7, 5))[0] if resolved else None,
+                resolved_by=("bot" if by_bot else "agent") if resolved else "",
+                first_reply_seconds=self.random.randrange(3, 20) if by_bot else self.random.randrange(40, 900),
                 created_at=created,
                 resolved_at=created + timedelta(minutes=self.random.randrange(4, 400)) if resolved else None,
             ))
@@ -225,16 +239,16 @@ def generate_world(
     drivers: int = 80,
     orders: int = 3000,
     tickets: int = 600,
+    rules: Rules | None = None,
 ) -> dict[str, int]:
     """Fill an empty database and return how many rows of each kind were made."""
     if session.scalar(select(WorldMeta.id).limit(1)) is not None:
         raise ValueError("this database already holds a world")
-    builder = WorldBuilder(seed, anchor)
+    builder = WorldBuilder(seed, anchor, rules or Rules.load())
     builder.build_customers(customers)
     builder.build_merchants()
     builder.build_drivers(drivers)
     builder.build_orders(orders)
-    builder.build_promos()
     builder.build_tickets(tickets)
 
     session.add_all(builder.customers)
@@ -243,7 +257,6 @@ def generate_world(
     session.add_all(builder.drivers)
     session.flush()
     session.add_all(builder.orders)
-    session.add_all(builder.promos)
     session.flush()
     session.add_all(builder.tickets)
     counts = {
@@ -252,7 +265,6 @@ def generate_world(
         "drivers": len(builder.drivers),
         "orders": len(builder.orders),
         "tickets": len(builder.tickets),
-        "promos": len(builder.promos),
     }
     session.add(WorldMeta(seed=seed, anchor=anchor, notice=catalog.SIMULATION_NOTICE, counts=counts))
     session.commit()

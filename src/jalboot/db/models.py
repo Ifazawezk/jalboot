@@ -57,6 +57,8 @@ class Address(Base):
     label: Mapped[str] = mapped_column(String(40))
     zone: Mapped[str] = mapped_column(String(60))
     line: Mapped[str] = mapped_column(String(200))
+    lat: Mapped[float] = mapped_column(default=0.0)
+    lng: Mapped[float] = mapped_column(default=0.0)
     verified: Mapped[bool] = mapped_column(Boolean, default=True)
 
     customer: Mapped[Customer] = relationship(back_populates="addresses")
@@ -95,6 +97,8 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(20), index=True)
     subtotal_dh: Mapped[int] = mapped_column(Integer, default=0)
     delivery_fee_dh: Mapped[int] = mapped_column(Integer, default=0)
+    other_fees_dh: Mapped[int] = mapped_column(Integer, default=0)
+    tip_dh: Mapped[int] = mapped_column(Integer, default=0)
     discount_dh: Mapped[int] = mapped_column(Integer, default=0)
     total_dh: Mapped[int] = mapped_column(Integer, default=0)
     payment_method: Mapped[str] = mapped_column(String(16), default="card")
@@ -145,26 +149,14 @@ class OrderEvent(Base):
     order: Mapped[Order] = relationship(back_populates="events")
 
 
-class Promo(Base):
-    __tablename__ = "promos"
-
-    code: Mapped[str] = mapped_column(String(32), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(12))
-    value: Mapped[int] = mapped_column(Integer)
-    max_discount_dh: Mapped[int] = mapped_column(Integer, default=0)
-    min_subtotal_dh: Mapped[int] = mapped_column(Integer, default=0)
-    category: Mapped[str] = mapped_column(String(16), default="")
-    expires_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
-    extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-
-
 class PromoRedemption(Base):
     __tablename__ = "promo_redemptions"
-    __table_args__ = (UniqueConstraint("code", "customer_id", name="uq_promo_once_per_customer"),)
+    __table_args__ = (UniqueConstraint("code", "customer_id", "period", name="uq_promo_per_period"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(ForeignKey("promos.code"))
+    code: Mapped[str] = mapped_column(String(32))
+    # A calendar month such as 2026-11, or "once" for a code with a lifetime limit.
+    period: Mapped[str] = mapped_column(String(8))
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
     order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"))
     amount_dh: Mapped[int] = mapped_column(Integer)
@@ -183,6 +175,9 @@ class Conversation(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
     assigned_staff_id: Mapped[Optional[str]] = mapped_column(ForeignKey("staff_users.id"), nullable=True)
+    priority: Mapped[str] = mapped_column(String(12), default="normal")
+    token_hash: Mapped[str] = mapped_column(String(64), default="", index=True)
+    order_id: Mapped[str] = mapped_column(String(32), default="")
     handoff_reason: Mapped[str] = mapped_column(String(32), default="")
     handoff_summary: Mapped[str] = mapped_column(Text, default="")
     handoff_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
@@ -202,6 +197,8 @@ class Message(Base):
     conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
     role: Mapped[str] = mapped_column(String(16))
     text: Mapped[str] = mapped_column(Text)
+    client_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    turn_state: Mapped[str] = mapped_column(String(20), default="")
     language: Mapped[str] = mapped_column(String(2), default="en")
     citations: Mapped[list[Any]] = mapped_column(JSON, default=list)
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
@@ -214,7 +211,7 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
+    customer_id: Mapped[Optional[str]] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
     order_id: Mapped[Optional[str]] = mapped_column(ForeignKey("orders.id"), nullable=True)
     conversation_id: Mapped[Optional[str]] = mapped_column(ForeignKey("conversations.id"), nullable=True)
     category: Mapped[str] = mapped_column(String(32), index=True)
@@ -225,6 +222,8 @@ class Ticket(Base):
     language: Mapped[str] = mapped_column(String(2), default="en")
     source: Mapped[str] = mapped_column(String(16), default="seed")
     csat: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    resolved_by: Mapped[str] = mapped_column(String(16), default="")
+    first_reply_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     resolved_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
@@ -246,6 +245,7 @@ class Approval(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     reason: Mapped[str] = mapped_column(Text, default="")
     required_role: Mapped[str] = mapped_column(String(16), default="agent")
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     decided_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     decided_by: Mapped[Optional[str]] = mapped_column(ForeignKey("staff_users.id"), nullable=True)
@@ -266,6 +266,7 @@ class Refund(Base):
     amount_dh: Mapped[int] = mapped_column(Integer)
     method: Mapped[str] = mapped_column(String(16))
     reason: Mapped[str] = mapped_column(String(32))
+    items: Mapped[list[Any]] = mapped_column(JSON, default=list)
     approved_by: Mapped[str] = mapped_column(String(32), default="policy")
     approval_id: Mapped[Optional[str]] = mapped_column(ForeignKey("approvals.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
