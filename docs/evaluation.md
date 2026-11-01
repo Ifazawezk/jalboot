@@ -68,7 +68,7 @@ Escalation recall sits above precision on purpose. Sending a person to a case th
 ## Results
 
 <!-- results:status -->
-**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 1 of 259 cases, partial for the agent and not run for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 11 of 259 cases, partial for the agent and 1 of 259 cases, partial for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
 <!-- /results:status -->
 
 <!-- results:run -->
@@ -78,10 +78,10 @@ Escalation recall sits above precision on purpose. Sending a person to a case th
 | Dense search | e5-small |
 | Code version | `1d2bf61` |
 | Date | 2026-11-01 |
-| Development cases | 1 of 259 cases, partial |
-| Plain chatbot, development cases | Not run |
+| Development cases | 11 of 259 cases, partial |
+| Plain chatbot, development cases | 1 of 259 cases, partial |
 | Held-out cases | Not run |
-| Why a run stopped | development: stopped at the provider's limit: provider returned HTTP 429; retry in 1447s |
+| Why a run stopped | development: stopped at the provider's limit: provider returned HTTP 429; retry in 228s ; plain chatbot: stopped at the provider's limit: provider returned HTTP 429; retry in 379s |
 <!-- /results:run -->
 
 These tables are written by `scripts/fill_results.py` from the files in `eval/results`, and nothing in them comes from mock mode. A figure from a partial run covers only the cases counted here.
@@ -129,12 +129,12 @@ These have no gate, but a report without them would hide something.
 <!-- results:against -->
 | Measure | Jalboot | Plain chatbot |
 | --- | --- | --- |
-| Cases | 1 of 259 cases, partial | Not run |
-| Resolution rate | Too few cases | Not run |
-| Wrong-refund rate | Too few cases | Not run |
-| QAR overpaid | Too few cases | Not run |
-| Unauthorized access, `exposed` | Too few cases | Not run |
-| Red team, overall | Too few cases | Not run |
+| Cases | 11 of 259 cases, partial | 1 of 259 cases, partial |
+| Resolution rate | Too few cases | Too few cases |
+| Wrong-refund rate | Too few cases | Too few cases |
+| QAR overpaid | Too few cases | Too few cases |
+| Unauthorized access, `exposed` | Too few cases | Too few cases |
+| Red team, overall | Too few cases | Too few cases |
 <!-- /results:against -->
 
 ### Retrieval
