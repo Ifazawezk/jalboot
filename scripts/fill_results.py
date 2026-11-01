@@ -140,6 +140,28 @@ def summary(dev: Report | None, test: Report | None, baseline: Report | None) ->
     ])
 
 
+def status(dev: Report | None, test: Report | None, baseline: Report | None) -> str:
+    """Says what these figures are, so a partial run cannot be read as a final score."""
+    lines = []
+    if test is None:
+        lines.append("**The held-out test has not been run.**")
+    partial = [report for report in (dev, baseline) if report is None or report["partial"]]
+    if partial:
+        lines.append("**These are not final scores.**")
+        if dev or baseline:
+            used = dev or baseline
+            lines.append(
+                f"The development figures come from a partial run at frozen commit `{used['version']}`: "
+                f"{coverage(dev).lower()} for the agent and {coverage(baseline).lower()} for the plain chatbot, "
+                "taken in a fixed order that spreads them evenly over every set."
+            )
+        lines.append(
+            "The full evaluation continues over several days, because the model's free tier allows only part "
+            "of it each day. Later runs will be published the same way."
+        )
+    return " ".join(lines) or "Every run below is complete."
+
+
 def readme_table(dev: Report | None, test: Report | None) -> str:
     return table(
         ["Metric", "Gate", "Dev", "Held-out", "Held-out, English", "Held-out, Arabic"],
@@ -188,12 +210,14 @@ def main() -> int:
     dev, test, baseline = read("dev", "agent"), read("test", "agent"), read("dev", "baseline")
     readme = ROOT / "README.md"
     text = readme.read_text(encoding="utf-8")
+    text = fill(text, "status", status(dev, test, baseline))
     text = fill(text, "run", summary(dev, test, baseline))
     text = fill(text, "agent", readme_table(dev, test))
     readme.write_text(text, encoding="utf-8", newline="\n")
 
     guide = ROOT / "docs" / "evaluation.md"
     text = guide.read_text(encoding="utf-8")
+    text = fill(text, "status", status(dev, test, baseline))
     text = fill(text, "run", summary(dev, test, baseline))
     text = fill(text, "headline", headline(dev, test))
     text = fill(text, "also", also(dev, test))

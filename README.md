@@ -321,6 +321,10 @@ Full tables and intervals are in [docs/evaluation.md](docs/evaluation.md). No fi
 
 ### The agent
 
+<!-- results:status -->
+**The held-out test has not been run.** **These are not final scores.** The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+<!-- /results:status -->
+
 <!-- results:run -->
 | Run detail | Value |
 | --- | --- |
@@ -366,9 +370,9 @@ From [`eval/results/retrieval-dev.json`](eval/results/retrieval-dev.json): searc
 | BM25 + dense | 0.96 | 0.98 | 0.907 |  |
 | **BM25 + n-grams + dense** | **0.96** | **0.98** | **0.877** | **`EMBEDDINGS=e5-small`** |
 | Best system + reranker | 0.94 | 0.98 | 0.881 | Left out |
-| Held-out test set | TODO | TODO | TODO | |
+| Held-out test set | Not run | Not run | Not run | |
 
-**These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so they are picked from their own test. One question moves a recall by 0.02. The held-out test set will give the honest number. On these questions, adding dense search to the default gained 5 questions at Recall@3 and lost none.
+**These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so they are picked from their own test. One question moves a recall by 0.02. The held-out test set will give the honest number, and it has not been run. On these questions, adding dense search to the default gained 5 questions at Recall@3 and lost none.
 
 ### The compromised-model test
 

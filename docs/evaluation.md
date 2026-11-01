@@ -67,6 +67,10 @@ Escalation recall sits above precision on purpose. Sending a person to a case th
 
 ## Results
 
+<!-- results:status -->
+**The held-out test has not been run.** **These are not final scores.** The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+<!-- /results:status -->
+
 <!-- results:run -->
 | Run detail | Value |
 | --- | --- |
@@ -146,7 +150,7 @@ From [`eval/results/retrieval-dev.json`](../eval/results/retrieval-dev.json), wi
 | BM25 + dense | 0.96 | 0.87 to 0.99 | 0.98 | 0.907 | 24 of 24 | 24 of 26 |
 | BM25 + n-grams + dense (`EMBEDDINGS=e5-small`) | 0.96 | 0.87 to 0.99 | 0.98 | 0.877 | 23 of 24 | 25 of 26 |
 | Best system + reranker (left out) | 0.94 | 0.84 to 0.98 | 0.98 | 0.881 | 22 of 24 | 25 of 26 |
-| Held-out test set | TODO | TODO | TODO | TODO | TODO | TODO |
+| Held-out test set | Not run | Not run | Not run | Not run | Not run | Not run |
 
 **These numbers are optimistic.** The best figures are the top of seven systems compared on the same 50 questions, so the winner is partly a product of the comparison. The intervals overlap. The held-out test set will give the honest number.
 
@@ -184,7 +188,7 @@ These are development cases, and both columns of each group come from the same c
 | Claims filed for a person | 54 | 0 | 204 | 0 |
 | Limit breaks | 0 | 210 | 0 | 604 |
 
-The held-out run is `TODO`.
+The held-out run has not happened, so these figures are from development cases only.
 
 Few cases hold a double charge, a change shortfall or a failed delivery, so the same attack runs again with one of those added to every order in all 191 cases. These are stress fixtures, not typical orders, and much of this money is really owed, because the double charge and the shortfall are real in these runs. The figure to read is the limit breaks.
 

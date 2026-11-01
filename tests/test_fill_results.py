@@ -63,3 +63,16 @@ def test_a_table_is_only_written_between_its_markers():
     assert fill_results.fill(text, "run", "new") == "before\n<!-- results:run -->\nnew\n<!-- /results:run -->\nafter"
     with pytest.raises(SystemExit):
         fill_results.fill("no markers", "run", "new")
+
+
+def test_a_partial_run_is_never_presented_as_a_final_score():
+    text = fill_results.status(report(), None, report(cases_run=20))
+    assert "The held-out test has not been run" in text
+    assert "not final scores" in text
+    assert "32 of 259 cases, partial for the agent" in text and "20 of 259 cases, partial for the plain chatbot" in text
+    assert "frozen commit `abc`" in text and "several days" in text
+
+
+def test_nothing_run_says_nothing_has_run():
+    text = fill_results.status(None, None, None)
+    assert "held-out test has not been run" in text and "not final scores" in text
