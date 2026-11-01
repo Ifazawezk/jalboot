@@ -26,6 +26,7 @@
 | Building an AI agent that can take actions | [Security model](#security-model) and [docs/security.md](docs/security.md) |
 | Checking how it was measured | [docs/evaluation.md](docs/evaluation.md) |
 | Hoping to run it | [Quick start](#quick-start) |
+| Adding your own API key | [With a real model](#with-a-real-model) |
 | Planning to add policies, tools or test cases | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ## Why
@@ -270,11 +271,35 @@ These were run against the mock planner. It matches keywords and fills templates
 
 ### With a real model
 
-```bash
-cp .env.example .env             # then set LLM_MODE=llm and LLM_API_KEY
+Jalboot starts in mock mode, so it runs with no key. To use a real model, put your own key in a file named `.env` in the main `jalboot` folder, next to this README.
+
+1. Get a key. Groq has a free tier at <https://console.groq.com/keys>. Any server that speaks the OpenAI API works too.
+2. Create the file:
+
+   ```bash
+   cp .env.example .env             # PowerShell: Copy-Item .env.example .env
+   ```
+
+3. Open `.env` and set these two lines:
+
+   ```ini
+   LLM_MODE=llm
+   LLM_API_KEY=your-key-here
+   ```
+
+4. Restart the server with `python -m jalboot.cli serve --port 8000`.
+
+To check it worked, open <http://127.0.0.1:8000/api/v1/health>. It says `"assistant":"live"` with a real model and `"assistant":"mock"` without one. To go back, set `LLM_MODE=mock`. If you set `LLM_MODE=llm` with no key, the server stops at startup with `LLM_MODE=llm needs a key`.
+
+For a provider other than Groq, also set these in `.env`:
+
+```ini
+LLM_PROVIDER=compatible
+LLM_BASE_URL=https://your-server/v1
+LLM_MODEL=your-model-name
 ```
 
-`.env` is ignored by git, and a variable already set in your shell wins over it. The default is `openai/gpt-oss-20b` on Groq. Set `LLM_PROVIDER=compatible` with `LLM_BASE_URL` and `LLM_MODEL` for another server. In `llm` mode the redacted messages and retrieved passages go to that provider, and its terms apply.
+`.env` is ignored by git, so your key stays on your machine. Never put a real key in `.env.example`, and a variable already set in your shell wins over the file. The default is `openai/gpt-oss-20b` on Groq. In `llm` mode the redacted messages and retrieved passages go to that provider, and its terms apply. The public demo plays recordings, so it takes no key.
 
 ### Settings
 
