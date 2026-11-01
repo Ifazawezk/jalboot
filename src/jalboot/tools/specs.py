@@ -17,8 +17,9 @@ REFUND_REASONS = [
     "chilled_item", "expired_product", "cold_chain", "allergen", "foreign_object",
     "broken_seal", "illness", "not_received", "modifier_missed", "substitute_rejected",
     "duplicate_charge", "late_delivery_fee", "failed_contact_refund", "whole_wrong_order",
+    "driver_change_short",
 ]
-CREDIT_REASONS = ["late_delivery", "goodwill"]
+CREDIT_REASONS = ["late_delivery", "goodwill", "cancellation_credit", "expired_item_credit"]
 TICKET_CATEGORIES = [
     "late_delivery", "missing_item", "wrong_item", "refund_status", "promo_issue",
     "address_change", "payment_issue", "driver_conduct", "pharmacy_prescription",
@@ -126,7 +127,7 @@ TOOLS = {
         ),
         ToolSpec(
             "issue_credit",
-            "Add late credit or goodwill credit to the customer's wallet for an order.",
+            "Add credit to the customer's wallet for an order, for lateness, a merchant cancellation, an expired item or goodwill.",
             {
                 "order_id": ORDER_ID,
                 "amount_qar": {"type": "number", "description": "Amount in QAR"},

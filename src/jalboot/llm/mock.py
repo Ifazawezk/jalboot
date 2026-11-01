@@ -57,6 +57,9 @@ REFUSALS = {
     "cannot_cancel_now": ("This order can no longer be cancelled.", "لم يعد من الممكن إلغاء هذا الطلب."),
     "order_already_finished": ("This order is already finished, so it cannot be cancelled.", "اكتمل هذا الطلب، لذا لا يمكن إلغاؤه."),
     "no_duplicate_charge_found": ("I can only see one charge for this order.", "لا أرى سوى عملية خصم واحدة لهذا الطلب."),
+    "already_refunded": ("That has already been refunded on this order.", "تم رد قيمة هذا من قبل في هذا الطلب."),
+    "item_already_refunded": ("That item has already been refunded.", "تم رد قيمة هذا الصنف من قبل."),
+    "late_credit_already_issued": ("Late credit for this order has already been added.", "تمت إضافة رصيد التأخير لهذا الطلب من قبل."),
 }
 
 INTENT_WORDS: dict[str, tuple[str, ...]] = {
@@ -70,6 +73,10 @@ INTENT_WORDS: dict[str, tuple[str, ...]] = {
     "late": ("late", "delay", "مأخر", "متاخر", "تاخر", "تأخر", "التاخير"),
     "track": ("where is", "where's", "track", "status", "وين", "اين", "متي يوصل", "حاله طلبي"),
 }
+QUESTION_WORDS = re.compile(
+    r"^\s*(how|what|when|why|which|can i|do you|does|is there|are there|كم|كيف|متي|هل|ما |ماذا|لماذا|ليش)"
+    r"|\bhow (much|long|many)\b"
+)
 YES = ("yes", "go ahead", "confirm", "ok", "okay", "sure", "نعم", "اي", "ايوه", "موافق", "تمام", "اكد")
 
 
@@ -147,6 +154,9 @@ class MockPlanner:
         intent = classify(folded)
         if self._pending_cancel(turn, folded):
             return _call("cancel_order", order_id=order_id, confirm_charge=True) if not turn.results else self._after_cancel(turn)
+        # A question with no order number is about the policy, not about an order.
+        if not ORDER_ID.search(turn.text) and QUESTION_WORDS.search(folded):
+            return self._plan_question(turn, None, folded)
         handler = getattr(self, f"_plan_{intent}", self._plan_question)
         return handler(turn, order_id, folded)
 
@@ -229,7 +239,7 @@ class MockPlanner:
             if not credit and not fee:
                 parts.append("لا يستحق هذا الطلب رصيد تأخير.")
             return " ".join(parts) + cite
-        parts = [f"Your order {first['order_id']} is {minutes} minutes late."]
+        parts = [f"Your order {first['order_id']} was {minutes} minutes late."]
         if reason:
             parts.append(f"The cause was {reason}.")
         if credit:
@@ -241,15 +251,24 @@ class MockPlanner:
         return " ".join(parts) + cite
 
     def _named_items(self, details: dict[str, Any], folded: str) -> list[dict[str, Any]]:
-        found = []
-        for item in details.get("items", []):
-            labels = [normalize(str(item.get("name") or "")), normalize(str(item.get("name_en") or ""))]
-            for label in labels:
-                words = [w for w in label.split() if len(w) >= 3]
-                if label and (label in folded or any(word in folded for word in words)):
-                    found.append(item)
-                    break
-        return found
+        """Matches whole names first. A shared word such as "plate" would match every
+        plate on the order, so single words only count when they belong to one item."""
+        items = details.get("items", [])
+
+        def labels(item: dict[str, Any]) -> list[str]:
+            return [normalize(str(item.get(key) or "")) for key in ("name", "name_en")]
+
+        exact = [item for item in items if any(label and label in folded for label in labels(item))]
+        if exact:
+            return exact
+        seen: dict[str, list[dict[str, Any]]] = {}
+        for item in items:
+            for label in labels(item):
+                for word in label.split():
+                    if len(word) >= 3 and item not in seen.setdefault(word, []):
+                        seen[word].append(item)
+        unique = [found[0] for word, found in seen.items() if len(found) == 1 and word in folded]
+        return [item for item in items if item in unique]
 
     def _plan_item_claim(self, turn: Turn, order_id: str | None, folded: str, reason: str) -> LLMReply:
         if not order_id:

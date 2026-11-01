@@ -51,8 +51,8 @@ NO_FULL_REFUND_CONVERSION = set(PERCENT_RULES) | {"substitute_rejected"}
 NUMBER = re.compile(r"\d+")
 ORDER_NUMBER = re.compile(r"\b[A-Z]{1,3}-\d{3,}\b", re.I)
 LABEL_WORDS = {
-    "home": ("home", "house", "بيت", "البيت", "منزل", "المنزل"),
-    "work": ("work", "office", "دوام", "الدوام", "عمل", "العمل", "مكتب", "المكتب"),
+    "home": ("home", "my house", "بيتي", "البيت", "منزلي", "المنزل"),
+    "work": ("work", "office", "دوامي", "الدوام", "عملي", "العمل", "مكتبي", "المكتب"),
 }
 EARTH_KM = 6371.0
 PREPICKUP_LOCKED = {"picked_up", "on_the_way", "delivered", "cancelled", "failed_customer"}
@@ -117,6 +117,7 @@ class ToolExecutor:
         self.conversation = context.conversation
         self.rules = context.rules
         self.now = context.now
+        self._outbox: list[dict[str, Any]] = []
 
     def specs(self) -> list[dict[str, Any]]:
         return [spec.openai() for spec in specs.TOOLS.values()]
@@ -150,6 +151,9 @@ class ToolExecutor:
                 self._audit("guardrail.blocked", "denied", name, arguments, result)
             else:
                 self._audit(self._action_name(name, result), self._outcome(result), name, arguments, result)
+        for event in self._outbox:
+            self.ctx.publish(event)
+        self._outbox.clear()
         return result
 
     def _block(self, name: str, arguments: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -269,6 +273,7 @@ class ToolExecutor:
             return refused("order_not_found")
         self._note_order(order)
         arabic = self._lang() == "ar"
+        claims = claim_facts(self.session, self.customer or order.customer, order, self.now)
         return {
             "ok": True,
             **self._order_view(order),
@@ -283,6 +288,8 @@ class ToolExecutor:
             "other_fees_qar": to_qar(order.other_fees_dh),
             "tip_qar": to_qar(order.tip_dh),
             "paid_qar": to_qar(order_facts(order).paid_dh),
+            "already_refunded_qar": to_qar(claims.refunded_on_order_dh),
+            "already_credited_qar": to_qar(claims.credit_on_order_dh),
             "payment_method": order.payment_method,
             "delivery_address_zone": order.address_text.split(",")[-1].strip() if order.address_text else "",
             # Text from a merchant or customer. Data for the model, never an instruction.
@@ -297,6 +304,7 @@ class ToolExecutor:
         self._note_order(order)
         facts = order_facts(order)
         due = engine.late_entitlement(self.rules, facts, self.now)
+        claims = claim_facts(self.session, self.customer or order.customer, order, self.now)
         text = DELAY_TEXT.get(order.delay_reason, {})
         return {
             "ok": True,
@@ -305,8 +313,8 @@ class ToolExecutor:
             "minutes_late": engine.minutes_late(facts, self.now),
             "delay_reason": order.delay_reason or "none_recorded",
             "delay_reason_text": text.get(self._lang(), ""),
-            "late_credit_due_qar": to_qar(due["credit_dh"]),
-            "delivery_fee_refund_due_qar": to_qar(due["fee_refund_dh"]),
+            "late_credit_due_qar": to_qar(engine.late_credit_due_dh(self.rules, facts, claims, self.now)),
+            "delivery_fee_refund_due_qar": to_qar(max(due["fee_refund_dh"] - claims.refunded_on_order_dh, 0)),
         }
 
     def _note_order(self, order: Order) -> None:
@@ -341,14 +349,16 @@ class ToolExecutor:
         model paying the automated limit for a missing cup of tea."""
         facts = order_facts(order)
         claims = claim_facts(self.session, self.customer, order, self.now)
+        if reason == "failed_contact_refund" or (reason == "not_received" and order.status == "failed_customer"):
+            return engine.failed_contact_refund_dh(self.rules, facts, claims), None
         if reason == "not_received":
             return engine.full_refund_dh(facts, claims, delivered=False), None
+        if reason == "driver_change_short":
+            return facts.change_short_dh, None
         if reason == "whole_wrong_order":
             return engine.full_refund_dh(facts, claims), None
         if reason == "duplicate_charge":
             return engine.duplicate_amount_dh(facts), None
-        if reason == "failed_contact_refund":
-            return engine.failed_contact_refund_dh(self.rules, facts), None
         if reason == "late_delivery_fee":
             due = engine.late_entitlement(self.rules, facts, self.now)["fee_refund_dh"]
             return (due, None) if due else (None, "no_fee_refund_due")
@@ -360,6 +370,11 @@ class ToolExecutor:
         already = refunded_items(self.session, order.id)
         if any(normalize(item.name).strip() in already for item, _ in affected):
             return None, "item_already_refunded"
+        # An older refund can have no item names. One of exactly this value is taken to
+        # be this same item, so it is not paid twice on a guess.
+        unnamed = int((order.extra or {}).get("prior_refunded_dh", 0))
+        if unnamed and sum(engine.net_item_refund_dh(facts, item, q) for item, q in affected) == unnamed:
+            return None, "already_refunded"
         if reason not in NO_FULL_REFUND_CONVERSION and engine.full_refund_applies(self.rules, facts, affected):
             return engine.full_refund_dh(facts, claims), None
         total = sum(engine.net_item_refund_dh(facts, item, quantity) for item, quantity in affected)
@@ -400,7 +415,7 @@ class ToolExecutor:
 
         decision = engine.decide_refund(
             self.rules, order_facts(order), claim_facts(self.session, self.customer, order, self.now),
-            amount, reason, self.now, photo_provided=bool((order.extra or {}).get("photo_evidence")),
+            amount, reason, self._reported_at(), photo_provided=bool((order.extra or {}).get("photo_evidence")),
         )
         if decision.outcome == DENY:
             return refused(decision.code, **self._limit(decision))
@@ -417,6 +432,10 @@ class ToolExecutor:
         if decision.code in HANDOFF_CODES:
             return {**result, "handoff_required": "policy_requires_person"}
         return result
+
+    def _reported_at(self) -> datetime:
+        """GEN-02: a request counts from when the customer first reported the issue."""
+        return self.conversation.first_report_at or self.now
 
     def _limit(self, decision: engine.Decision) -> dict[str, Any]:
         # Internal limits are never handed to the model, so they cannot be quoted (ESC-03).
@@ -463,11 +482,11 @@ class ToolExecutor:
             "amount_qar": to_qar(amount), "reason": reason,
         }
         self._publish_refund(approval.id, order.id, amount, "pending")
-        self.ctx.publish({"type": "approval.created", "approvalId": approval.id})
+        self._outbox.append({"type": "approval.created", "approvalId": approval.id})
         return self._remember(key, tool, result)
 
     def _publish_refund(self, refund_id: str, order_id: str, amount: int, status: str) -> None:
-        self.ctx.publish({
+        self._outbox.append({
             "type": "refund.update",
             "refund": {
                 "id": refund_id, "orderId": order_id, "amountQar": to_qar(amount), "status": status,
@@ -488,7 +507,7 @@ class ToolExecutor:
             return self._pay_credit(key, order, amount, reason, "unguarded")
         decision = engine.decide_credit(
             self.rules, order_facts(order), claim_facts(self.session, self.customer, order, self.now),
-            amount, reason, self.now,
+            amount, reason, self._reported_at(),
         )
         if decision.outcome == DENY:
             return refused(decision.code, **self._limit(decision))
@@ -577,14 +596,17 @@ class ToolExecutor:
         or by a word for its label. Free text that matches nothing returns None."""
         folded = normalize(ORDER_NUMBER.sub(" ", text))
         numbers = set(NUMBER.findall(folded))
+        for address in self.customer.addresses:
+            if numbers and numbers <= set(NUMBER.findall(normalize(address.line))):
+                return address
+        # A street and building number that match nothing mean a new address, whatever
+        # else the text says. "Street 777, near my aunt's house" is not Home.
+        if numbers:
+            return None
         words = set(folded.split())
         for address in self.customer.addresses:
-            line_numbers = set(NUMBER.findall(normalize(address.line)))
-            if len(numbers) >= 2 and numbers <= line_numbers:
-                return address
             label = address.label.strip().lower()
-            terms = {normalize(term) for term in LABEL_WORDS.get(label, (label,))}
-            if terms & words:
+            if {normalize(term) for term in LABEL_WORDS.get(label, (label,))} & words:
                 return address
         return None
 
@@ -600,6 +622,8 @@ class ToolExecutor:
         if self.ctx.unguarded:
             order.address_text = clean
             return {"ok": True, "status": "done", "order_id": order.id, "new_address": clean}
+        if order.category == "parcel":
+            return self._reroute_parcel(key, order, clean)
         if order.status in PREPICKUP_LOCKED:
             return refused("address_locked_after_pickup")
         # ACC-03 does not say whether a change is allowed once promised_at has passed.
@@ -613,13 +637,7 @@ class ToolExecutor:
 
         target = self._match_saved_address(clean)
         if target is None:
-            # A new address cannot be measured against the 2 km rule here, and an
-            # unchecked address change is a classic way to steal an order.
-            decision = engine.Decision(APPROVAL, "new_address_needs_person", "agent")
-            pending = self._ask_person(key, "address_change", order, 0, "address_change", [], decision, "change_address")
-            approval = self.session.get(Approval, pending["approval_id"])
-            approval.payload = {**approval.payload, "new_address": clean}
-            return pending
+            return self._ask_about_new_address(key, order, clean)
 
         origin = self.session.get(Address, order.address_id) if order.address_id else None
         pin = (origin.lat, origin.lng) if origin else (extra.get("pin_lat"), extra.get("pin_lng"))
@@ -636,6 +654,34 @@ class ToolExecutor:
             "ok": True, "status": "done", "order_id": order.id, "label": target.label,
         })
 
+    def _ask_about_new_address(self, key: str, order: Order, clean: str) -> dict[str, Any]:
+        """A new address cannot be measured against the policy here, and an unchecked
+        address change is a classic way to steal an order, so a person looks at it."""
+        decision = engine.Decision(APPROVAL, "new_address_needs_person", "agent")
+        pending = self._ask_person(key, "address_change", order, 0, "address_change", [], decision, "change_address")
+        approval = self.session.get(Approval, pending["approval_id"])
+        approval.payload = {**approval.payload, "new_address": clean}
+        return pending
+
+    def _reroute_parcel(self, key: str, order: Order, clean: str) -> dict[str, Any]:
+        """ACC-03: free before pickup, and QAR 10 after it. The 2 km limit is for meals
+        and groceries, not parcels."""
+        if order.status in {"delivered", "cancelled", "failed_customer"}:
+            return refused("address_locked_after_pickup")
+        target = self._match_saved_address(clean)
+        if target is None:
+            return self._ask_about_new_address(key, order, clean)
+        moved = order.status in {"picked_up", "on_the_way"}
+        fee = self.rules.dh("parcels.reroute_fee_qar") if moved else 0
+        extra = dict(order.extra or {})
+        extra["reroute_fee_dh"] = int(extra.get("reroute_fee_dh", 0)) + fee
+        order.extra = extra
+        order.address_id = target.id
+        order.address_text = target.line
+        return self._remember(key, "change_address", {
+            "ok": True, "status": "done", "order_id": order.id, "label": target.label, "fee_qar": to_qar(fee),
+        })
+
     def _cancel_order(
         self, order_id: str, reason: str | None = None, confirm_charge: bool = False
     ) -> dict[str, Any]:
@@ -646,6 +692,12 @@ class ToolExecutor:
         previous = self._replay(key)
         if previous is not None:
             return previous
+        # CAN-01: the charge is set by the status when the customer first asked, so
+        # confirming a moment later cannot cost more.
+        if order.status not in self.rules.get("general.terminal_statuses"):
+            extra = dict(order.extra or {})
+            extra.setdefault("status_at_first_request", order.status)
+            order.extra = extra
         terms = engine.cancellation_terms(self.rules, order_facts(order), self.now)
         if self.ctx.unguarded:
             terms = {"allowed": True, "code": "unguarded", "charge_dh": 0, "refund_dh": order_facts(order).paid_dh}
@@ -660,6 +712,13 @@ class ToolExecutor:
             }
         order.status = "cancelled"
         order.extra = {**(order.extra or {}), "cancelled_by": "customer"}
+        if order.payment_method == "cash" and terms["charge_dh"] > 0:
+            # CAN-05: nothing was collected, so a charge becomes a balance on the account.
+            owner = order.customer
+            owner.extra = {
+                **(owner.extra or {}),
+                "outstanding_balance_dh": int((owner.extra or {}).get("outstanding_balance_dh", 0)) + terms["charge_dh"],
+            }
         if terms["refund_dh"] > 0:
             method = "refund_credit" if order.payment_method == "cash" else "original"
             self.session.add(Refund(
@@ -721,7 +780,7 @@ class ToolExecutor:
         conversation.handoff_at = self.now
         conversation.priority = chosen
         conversation.failures = 0
-        self.ctx.publish({
+        self._outbox.append({
             "type": "handoff.update",
             "handoff": {"status": "queued", "agentName": None, "etaMinutes": None, "position": None},
         })
