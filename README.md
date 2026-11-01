@@ -45,7 +45,7 @@ So Jalboot treats the model as an untrusted planner. It can read, draft and prop
 - **Knows when to stop.** Safety, legal threats, account takeover, complaints about staff, requests for a person and upset customers are caught in code before any model runs.
 - **Gives people a real desk.** Live conversations, a refund queue with role limits, an audit log, top issues and quality charts, in both languages. The desk's charts are built from simulated tickets and are not evaluation results.
 - **Runs with no key.** `LLM_MODE=mock` swaps the model for a rule based planner, so the whole system runs offline. Mock results are never offered as a measure of quality.
-- **Is measured on held-out cases.** 364 test cases, 105 of them held out, score what the tools logged rather than what the bot said it did. See [Results](#results).
+- **Is set up to be measured on held-out cases.** 364 test cases, 105 of them held out and not yet run, score what the tools logged rather than what the bot said it did. See [Results](#results).
 - **Assumes the model can be taken over.** A [compromised-model test](#if-the-model-is-taken-over) skips the model and fires hostile tool calls straight at the tool layer, with the gates on and then off, and records what really changed.
 
 ## Screenshots
@@ -359,7 +359,8 @@ From [`eval/results/retrieval-dev.json`](eval/results/retrieval-dev.json): searc
 ### Reading these results
 
 
-- **The test cases are not fully independent.** They were written after reading parts of the backend, so they can share its blind spots. The gold answers follow the policy documents, not the code, and no case was moved because of how the code handled it. That helps, but it does not replace cases from someone who has never seen the code.
+- **The test cases are not fully independent.** The gold answers were written after reading `engine.py` and `triage.py`, so they can share those files' blind spots. They follow the policy documents, and a development case only changed when the policy text supported the change. That helps, but it does not replace cases from someone who has never seen the code.
+- **No Arabic speaker has reviewed the cases or the Arabic text.** The Arabic results say how the system does against gold answers that nobody fluent has checked.
 - **The world is simulated.** The customers are scripted, and real people are stranger.
 - **The sets are small.** With 45 support cases, a measured 0.80 has an interval of roughly 0.66 to 0.89.
 
@@ -430,7 +431,10 @@ No. They come from simulated tickets, and they are not the evaluation results. T
 - **Triage misses what nobody listed**, and it can fire on a word used innocently. It is a floor under the model, not a classifier.
 - **The reply checks are narrow.** A citation check proves the passage was retrieved, not that it supports the sentence. A figure check matches values, so a real number from the wrong rule passes. The claim check is a phrase list in two languages.
 - **A confirmed charge proves a later turn, not agreement.** Code makes sure the customer was quoted first. A model that ignores a "no" in a later turn could still confirm, which is why the test cases forbid it.
-- **The audit chain carries no secret key.** It shows tampering with part of the log. Someone with full database access could rewrite the whole chain.
+- **The audit chain carries no secret key.** It shows a changed row, or a removed row with rows after it. Deleting the newest rows goes unnoticed, and someone with full database access could rewrite the whole chain.
+- **Photo evidence is simulated.** There is no upload. A photo counts when the order's simulated record says one is on file.
+- **There are no real recordings yet.** The sample conversations in the web app are scripted. Recordings of real model runs come from `scripts/record_demo.py`, which has not completed a run.
+- **The name is not cleared.** A few web searches found no Gulf delivery company called Jalboot. That is not a trademark or company registry check.
 - **Redaction covers phones, emails, card numbers and codes.** Names and addresses in free text stay, and in `llm` mode they reach the provider.
 - **Some rules are not enforced in code.** ESC-03 also bans medical and legal advice and admissions of fault. Triage sends health reports to a person, but no reply check covers these.
 - **No independent review has been done.** There has been no outside security audit, and nobody independent has checked the test cases.
@@ -448,6 +452,8 @@ The policy documents do not settle every case. Where two rules collide, GEN-04 s
 | Cash order part-paid with credit, cancelled with a charge | CAN-05 caps a cash charge and REF-04 orders refunds, but neither splits a charge across credit and uncollected cash | `cash_and_credit_charge` |
 | Wallet at its limit with late credit due | REF-04 sends excess refund credit to the card, and says nothing about goodwill-type credit | `wallet_at_limit` |
 | Parcel refused at the door for damage | PCL-05 treats a refusal as a return at 50 percent of the base fee, while PCL-04 treats damage as a claim with no fee | No rule of its own. The test case expects a handoff |
+
+Three more needed a ruling, and were clear enough to settle in the policy text: a severe weather flag removes late credit, only the late tiers shift during iftar, and refund points round down.
 
 ### Other gaps
 
