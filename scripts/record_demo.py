@@ -60,7 +60,7 @@ SCENES: list[dict[str, Any]] = [
     {
         "id": "en-approval", "locale": "en", "phone": LAYLA, "title": "Refund needs a person",
         "summary": "A large claim waits for a person. The desk approves it live.",
-        "messages": ["The grilled hammour on JB-700103 was the wrong dish."],
+        "messages": ["The grilled hammour on JB-700103 was the wrong dish.", "Yes, please refund it."],
         "desk": "approve",
     },
     {
@@ -131,7 +131,9 @@ def verify(client, cid, auth, phone, recorder) -> None:
 def desk_decide(client, recorder, action: str) -> None:
     signed = client.post(f"{V1}/desk/session", json={"email": STAFF, "password": PASSWORD}).json()
     refunds = client.get(f"{V1}/desk/refunds").json()["refunds"]
-    pending = next(row for row in refunds if row["status"] == "pending")
+    pending = next((row for row in refunds if row["status"] == "pending"), None)
+    if pending is None:
+        raise RuntimeError("the model filed no claim, so the desk has nothing to decide")
     decided = client.post(
         f"{V1}/desk/refunds/{pending['id']}/decision", headers={"X-CSRF-Token": signed["csrfToken"]},
         json={"action": action, "note": "", "version": pending["version"]},

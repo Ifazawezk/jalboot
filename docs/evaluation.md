@@ -223,7 +223,9 @@ The compromised-model test needs no key and no model:
 python -m jalboot.evaluation.hostile --split dev
 ```
 
-Every command writes to `eval/runs/`, which git ignores, so trying one cannot change a published result. `--publish` writes to `eval/results/` instead. A mock run or a sample cannot be published.
+Every command writes to `eval/runs/`, which git ignores, so trying one cannot change a published result. `--publish` writes to `eval/results/` instead. A mock run cannot be published. A run cut short can be, and it is marked partial with its exact count.
+
+Cases run in a fixed order that spreads them evenly over every set and topic, so a run stopped by a limit is a fair cross-section and not just the first set. `--limit` stops at the first N cases of that order, and the agent and the plain chatbot get the same N.
 
 ## Rules for the test split
 
