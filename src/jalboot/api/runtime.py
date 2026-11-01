@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import secrets
 import threading
 import time
 from dataclasses import dataclass, field
@@ -22,7 +21,7 @@ from jalboot.kb.store import KnowledgeBase, load_encoder, load_passages
 from jalboot.llm.client import LLMClient, client_from_env
 from jalboot.llm.mock import MockPlanner
 from jalboot.policy.rules import Rules
-from jalboot.security.passwords import hash_password, verify_password
+from jalboot.security.passwords import verify_password
 from jalboot.world.demo import add_demo_customers, add_staff
 from jalboot.world.generator import generate_world
 
@@ -94,12 +93,7 @@ def seed_if_empty(session: Session, settings: Settings) -> None:
     )
     meta = session.scalar(select(WorldMeta))
     add_demo_customers(session, meta.anchor)
-    # add_staff takes one password, so a public server gives it a throwaway one first.
-    add_staff(session, secrets.token_urlsafe(32) if chosen else _dev_password())
-    if chosen:
-        for staff in session.scalars(select(StaffUser)):
-            staff.password_hash = hash_password(chosen[staff.role])
-        session.commit()
+    add_staff(session, chosen or dict.fromkeys(STAFF_PASSWORD_VARIABLES, _dev_password()))
     log.info("generated a simulated world: %s", meta_counts)
 
 
