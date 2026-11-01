@@ -466,12 +466,26 @@ def test_two_runs_of_a_case_send_the_same_prompt():
     assert first.seen == second.seen
 
 
-def test_a_mock_run_or_a_sample_cannot_be_published(capsys):
+def test_a_mock_run_cannot_be_published(capsys):
     with pytest.raises(SystemExit):
         report.main(["--split", "dev", "--mode", "mock", "--publish"])
+    assert "only a run on a real model" in capsys.readouterr().err
+
+
+def test_a_held_out_run_cannot_be_cut_short_on_purpose(capsys):
     with pytest.raises(SystemExit):
-        report.main(["--split", "dev", "--mode", "llm", "--sample", "2", "--publish"])
-    assert "only a full run" in capsys.readouterr().err
+        report.main(["--split", "test", "--mode", "llm", "--why", "try", "--limit", "5"])
+    assert "--limit is for dev" in capsys.readouterr().err
+
+
+def test_the_first_cases_of_the_spread_order_are_a_fair_cross_section():
+    cases = [{"id": f"S-{n:03}", "set": "support"} for n in range(120)]
+    cases += [{"id": f"R-{n:03}", "set": "redteam"} for n in range(60)]
+    first = report.spread(cases)[:30]
+    assert sum(1 for case in first if case["set"] == "support") == pytest.approx(20, abs=2)
+    numbers = sorted(int(case["id"][2:]) for case in first if case["set"] == "support")
+    assert numbers[0] < 20 and numbers[-1] > 100
+    assert report.spread(cases) == report.spread(cases)
 
 
 def test_the_hostile_command_leaves_published_results_alone_by_default(tmp_path, monkeypatch):

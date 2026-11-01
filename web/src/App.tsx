@@ -64,17 +64,18 @@ function ThemeButton() {
 
 function ModeBanner() {
   const api = useApi();
-  const { assistant } = useChat();
+  const { assistant, recordings } = useChat();
   const { t } = useI18n();
   const banner = bannerFor(api.mode, assistant);
   if (!banner) return null;
+  const recorded = banner === 'demo' && recordings.some((recording) => recording.source);
   return (
     <p className={banner === 'mock' ? 'mode' : `mode mode--${banner}`}>
       <strong>
         {banner === 'demo' && <span className="rec-dot" aria-hidden="true" />}
-        {t(`mode.${banner}.title`)}
+        {t(recorded ? 'mode.recorded.title' : `mode.${banner}.title`)}
       </strong>{' '}
-      <span>{t(`mode.${banner}.body`)}</span>
+      <span>{t(recorded ? 'mode.recorded.body' : `mode.${banner}.body`)}</span>
     </p>
   );
 }

@@ -10,6 +10,8 @@ export const en = {
   'app.pageTitle.chat': '{brand} help',
   'app.pageTitle.desk': '{brand} support desk',
 
+  'mode.recorded.title': 'Recordings and examples',
+  'mode.recorded.body': 'Recorded real model runs on simulated data, and scripted examples, played in your browser. Nothing here is live.',
   'mode.demo.title': 'Scripted example',
   'mode.demo.body': 'Scripted examples played in your browser, not real conversations. Nothing here is live.',
   'mode.mock.title': 'Sample data',
@@ -131,6 +133,10 @@ export const en = {
   'case.rule': 'Some refunds are reviewed by a person before they are paid.',
 
   'rec.heading': 'Scripted examples.',
+  'rec.headingMixed': 'Recordings and examples.',
+  'rec.pickBodyMixed': 'Recordings are real model runs on simulated data, paced for reading. Scripted examples are written by hand, and each one says so.',
+  'rec.recorded': 'Recording',
+  'rec.recordedBody': 'Real run of {model} on simulated data, {date}',
   'rec.pick': 'Pick one.',
   'rec.pickBody': 'Each one is a scripted example, not a real conversation. It plays at a set pace.',
   'rec.label': 'Scripted example',

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useApi } from '../App';
+import { recordedModel, type Recording } from '../data/recordings';
 import type { MessageKey } from '../i18n/en';
 import { useI18n } from '../i18n/context';
 import {
@@ -47,24 +48,31 @@ function Intro() {
   );
 }
 
+function recordingLabel(recording: Recording, t: ReturnType<typeof useI18n>['t']): string {
+  if (!recording.source) return t('rec.label');
+  return t('rec.recordedBody', { model: recordedModel(recording), date: recording.recordedAt.slice(0, 10) });
+}
+
 function RecordingPicker() {
   const { t } = useI18n();
   const { recordings, play } = useChat();
+  const mixed = recordings.some((recording) => recording.source);
   return (
     <div className="intro">
       <h1 id="page-title" tabIndex={-1}>
-        {t('rec.heading')} <mark>{t('rec.pick')}</mark>
+        {t(mixed ? 'rec.headingMixed' : 'rec.heading')} <mark>{t('rec.pick')}</mark>
       </h1>
-      <p className="intro__lead">{t('rec.pickBody')}</p>
+      <p className="intro__lead">{t(mixed ? 'rec.pickBodyMixed' : 'rec.pickBody')}</p>
       <ul className="rows">
         {recordings.map((recording) => {
           const seconds = recording.steps.reduce((sum, step) => sum + step.waitMs, 0) / 1000;
           return (
-            <li key={recording.id}>
+            <li key={recording.id} data-kind={recording.source ? 'recorded' : 'scripted'}>
               <button type="button" onClick={() => play(recording.id)}>
                 <span>
                   <strong>{recording.title}</strong>
                   <small>{recording.summary}</small>
+                  <small>{recordingLabel(recording, t)}</small>
                 </span>
                 <bdi className="mono rows__meta">{formatClock(seconds)}</bdi>
                 <Icon name="play" />
@@ -90,9 +98,10 @@ function PlaybackBar() {
         <p>
           <span className="tag tag--rec">
             <span className="rec-dot" aria-hidden="true" />
-            {t('rec.label')}
+            {t(recording.source ? 'rec.recorded' : 'rec.label')}
           </span>
           <strong>{recording.title}</strong>
+          {recording.source && <small className="muted">{recordingLabel(recording, t)}</small>}
           <span className="muted">{t(status === 'finished' ? 'rec.finished' : 'rec.playing')}</span>
         </p>
         <progress value={step} max={total} aria-label={t('rec.progress')} />
