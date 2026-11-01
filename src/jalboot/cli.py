@@ -3,11 +3,36 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 
 from jalboot.env import load_env_file
 
 SHUTDOWN_SECONDS = 2
+# Below the point where select() fails on Windows, which is about 510 sockets.
+MAX_CONNECTIONS = 480
+
+
+def selector_loop() -> asyncio.AbstractEventLoop:
+    """The default Windows loop stops accepting for good after a burst of connection
+    resets (WinError 64), with the process still alive and looking healthy. A selector
+    loop cannot run subprocesses on Windows, and nothing in serve starts one."""
+    return asyncio.SelectorEventLoop()
+
+
+def capped_protocol() -> type[asyncio.Protocol]:
+    """The selector loop has a limit of its own: past about 510 sockets select() raises,
+    which ends the event loop for good. This drops a connection before asyncio registers
+    it, so too many clients get refused until others leave, and the server survives."""
+    from uvicorn.protocols.http.h11_impl import H11Protocol
+
+    class CappedProtocol(H11Protocol):
+        def connection_made(self, transport: asyncio.Transport) -> None:  # type: ignore[override]
+            super().connection_made(transport)
+            if len(self.connections) > MAX_CONNECTIONS:
+                transport.abort()
+
+    return CappedProtocol
 
 
 def serve(args: argparse.Namespace) -> int:
@@ -15,9 +40,12 @@ def serve(args: argparse.Namespace) -> int:
 
     from jalboot.api.app import create_app
 
+    windows = sys.platform == "win32"
     # An event stream never ends by itself, so Ctrl+C must not wait for one.
     uvicorn.run(
         create_app(), host=args.host, port=args.port, log_level="info", timeout_graceful_shutdown=SHUTDOWN_SECONDS,
+        loop="jalboot.cli:selector_loop" if windows else "auto",
+        http=capped_protocol() if windows else "auto",
     )
     return 0
 
