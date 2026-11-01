@@ -290,7 +290,7 @@ def _arabic_item(order: Order, typed: str) -> str:
 
 def _risks(session: Session, rules: Rules, approval: Approval, order: Order, now: datetime, language: str) -> list[str]:
     customer = session.get(Customer, approval.customer_id)
-    facts = claim_facts(session, customer, order, now)
+    facts = claim_facts(session, customer, order, now, rules, excluding=approval.id)
     risks: list[str] = []
     rule = str((approval.payload or {}).get("rule", ""))
     if rule == "photo_needed":
@@ -301,6 +301,12 @@ def _risks(session: Session, rules: Rules, approval: Approval, order: Order, now
         risks.append(pick(("New account", "حساب جديد"), language))
     if rule == "proof_of_delivery_exists":
         risks.append(pick(("Proof of delivery on file", "يوجد إثبات تسليم"), language))
+    if facts.pending_on_order_dh:
+        waiting = f"{to_qar(facts.pending_on_order_dh):.2f}"
+        risks.append(pick(
+            (f"Another QAR {waiting} is waiting on this order", f"مبلغ آخر قيمته {waiting} ر.ق قيد المراجعة على هذا الطلب"),
+            language,
+        ))
     return risks
 
 

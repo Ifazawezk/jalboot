@@ -434,7 +434,7 @@ def test_a_cases_claim_counts_become_real_refund_rows():
     session, customer, order, now = seeded({
         "claims_30d": 3, "claims_90d": 8, "claims_total_30d_dh": 30000, "not_received_90d": 2, "goodwill_30d_dh": 2000,
     })
-    facts = claim_facts(session, customer, order, now)
+    facts = claim_facts(session, customer, order, now, RULES)
     assert facts.claims_30d == 3
     assert facts.claims_90d == 8
     assert facts.claims_total_30d_dh == 30000
@@ -445,7 +445,7 @@ def test_a_cases_claim_counts_become_real_refund_rows():
 def test_a_cases_refund_on_an_order_names_the_item_it_was_for():
     session, customer, order, now = seeded({"refunded_on_order_dh": {"JB-1001": 9000}})
     assert refunded_items(session, "JB-1001") == {"lamb mandi": 1}
-    assert claim_facts(session, customer, order, now).refunded_on_order_dh == 9000
+    assert claim_facts(session, customer, order, now, RULES).refunded_on_order_dh == 9000
 
 
 class Counting(Stops):

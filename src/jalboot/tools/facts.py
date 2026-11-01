@@ -83,12 +83,11 @@ def order_facts(order: Order) -> OrderFacts:
 
 
 def claim_facts(
-    session: Session, customer: Customer, order: Order | None, now: datetime, rules: Rules | None = None,
+    session: Session, customer: Customer, order: Order | None, now: datetime, rules: Rules,
     *, excluding: str | None = None,
 ) -> ClaimFacts:
     """Works out history from the refunds table. Figures the customer or the model
     states are never used here. `excluding` leaves out the approval being decided."""
-    rules = rules or Rules.load()
     session.refresh(customer, ["wallet_dh"])
     refunded = credited = late_credit = late_fee = 0
     by_reason: Counter[str] = Counter()

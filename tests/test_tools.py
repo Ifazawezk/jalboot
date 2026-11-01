@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import func, select
 
 from jalboot import audit
+from jalboot.api import views
 from jalboot.db.models import Address, Approval, AuditEvent, Customer, Order, Refund, StaffUser, Ticket
 from jalboot.policy.rules import Rules
 from jalboot.security.passwords import hash_password
@@ -1122,3 +1123,20 @@ def test_a_refusal_from_outside_the_tools_is_on_the_audit_log(db, layla):
     row = audit_rows(db, "guardrail.blocked")[-1]
     assert (row.outcome, row.detail["tool"], row.detail["error"]) == ("denied", "issue_refund", "needs_customer_request")
     assert refund_count(db) == 0
+
+
+def test_the_approver_sees_other_claims_waiting_on_the_order(db, layla):
+    """Security review 3: one approval at a time hides what they add up to."""
+    order = dear_order(db)
+    first = claim_item(layla, order, "Mixed grill plate", 1, 250.0)["approval_id"]
+    second = claim_item(layla, order, "Grilled hammour", 1, 200.0)["approval_id"]
+    risks = views._risks(db, RULES, db.get(Approval, first), order, ANCHOR, "en")
+    assert "Another QAR 200.00 is waiting on this order" in risks
+    arabic = views._risks(db, RULES, db.get(Approval, second), order, ANCHOR, "ar")
+    assert any("250.00" in risk for risk in arabic)
+
+
+def test_an_approval_does_not_warn_about_itself(db, layla):
+    approval_id = file_large_refund(db, layla)
+    risks = views._risks(db, RULES, db.get(Approval, approval_id), db.get(Order, "JB-700103"), ANCHOR, "en")
+    assert not any("waiting on this order" in risk for risk in risks)
