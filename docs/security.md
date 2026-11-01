@@ -207,11 +207,12 @@ These are the parts of the design that would need work before real use. The [REA
 
 - **False claims that fit the rules get paid.** See [above](#if-the-model-is-taken-over). A person or fraud signals would be needed to catch them.
 - **Identity is simulated.** There is no SMS provider. With the simulated code on, anyone who knows a phone number can pass. With it off, nobody can.
-- **Docker has never been run.** Any hardening in the image is untested.
+- **Docker has never been run.** It is not installed on the machine this was built on, so any hardening in the image is untested. The image defaults to `ENVIRONMENT=production`, and compose runs as development unless `ENVIRONMENT` is set.
 - **Chat has no rate limits.** Conversations and messages are not throttled, so a script can spend model tokens or fill the database.
-- **The client key is the socket address.** Behind a proxy, every client could share one throttle key unless the proxy is set up to pass the real address. The same setup affects the Origin check, which compares against the scheme the server sees. Neither has been tested behind a proxy.
+- **The client key is the socket address.** The stream, login and code limits all key on it. A proxy must pass the real address, or every customer shares one set of limits, which means 20 open chats in total. The same setup affects the Origin check, which compares against the scheme the server sees. Neither has been tested behind a proxy. The public demo is a static page, so nothing is deployed behind one.
 - **Conversation tokens do not expire** while a chat is open. Closing a chat ends what its token can do.
 - **One client can fill the Windows connection limit.** Holding 480 idle connections keeps others out until they close. The stream limits do not cover a connection that never sends a request.
+- **The desk's clocks are not exact.** The simulated clock restarts at the world's anchor when the server restarts, so the resolved-today count can carry over between runs. The wait clock compares a simulated handoff time with the browser's clock, so it shows 0:00 now and will be wrong after the anchor date.
 - **Staff have no second factor.** Any signed-in staff member can read any conversation. Roles limit money decisions, not reading.
 - **A citation check is not a truth check.** It proves the passage was retrieved, not that it supports the sentence.
 - **A figure check matches values.** A true number from the wrong rule passes it.
