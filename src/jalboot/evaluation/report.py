@@ -15,7 +15,6 @@ import hashlib
 import json
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 from jalboot.env import ROOT, load_env_file
 from jalboot.evaluation import scoring

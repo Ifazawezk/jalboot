@@ -1,5 +1,4 @@
 import os
-from datetime import timedelta
 
 import pytest
 from sqlalchemy import text
