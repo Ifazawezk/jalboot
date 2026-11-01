@@ -49,6 +49,7 @@ export interface NoticeItem {
   notice:
     | 'handoff_queued'
     | 'handoff_joined'
+    | 'handoff_failed'
     | 'closed'
     | 'refund_decided'
     | 'identity_verified'
@@ -79,6 +80,7 @@ export type ChatAction =
   | { type: 'identity.restart' }
   | { type: 'identity.verified' }
   | { type: 'identity.cancelled' }
+  | { type: 'handoff.failed' }
   | { type: 'turn.stopped' }
   | { type: 'turn.failed'; message: string; retryable: boolean }
   | { type: 'reset' };
@@ -182,7 +184,10 @@ function applyRefund(state: ChatState, refund: RefundSummary): ChatState {
   return updateOpenBot(state, (item) => ({ ...item, refunds: [...item.refunds, refund] }));
 }
 
-function addNotice(state: ChatState, notice: 'identity_verified' | 'identity_cancelled'): ChatState {
+function addNotice(
+  state: ChatState,
+  notice: 'identity_verified' | 'identity_cancelled' | 'handoff_failed',
+): ChatState {
   return {
     ...state,
     items: [
@@ -292,6 +297,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return applyRefund(state, action.refund);
     case 'handoff.update':
       return applyHandoff(state, action.handoff);
+    case 'handoff.failed':
+      return addNotice(state, 'handoff_failed');
     case 'identity.required':
       return state.identity === 'verified' ? state : { ...state, identity: 'phone', maskedPhone: null };
     case 'identity.code_sent':

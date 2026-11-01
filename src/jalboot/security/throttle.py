@@ -21,14 +21,21 @@ def is_blocked(session: Session, key: str, now: datetime) -> bool:
 def note_failure(
     session: Session, key: str, now: datetime, limit: int = MAX_FAILURES, minutes: int = BLOCK_MINUTES,
 ) -> None:
+    """Counts one attempt. Reaching the limit within a window of this many minutes
+    blocks the key for the same length of time."""
     row = session.get(LoginThrottle, key)
     if row is None:
         row = LoginThrottle(key=key, failures=0)
         session.add(row)
+    length = timedelta(minutes=minutes)
+    if row.window_start is None or now - row.window_start >= length:
+        row.window_start = now
+        row.failures = 0
     row.failures += 1
     if row.failures >= limit:
-        row.blocked_until = now + timedelta(minutes=minutes)
+        row.blocked_until = now + length
         row.failures = 0
+        row.window_start = None
 
 
 def note_success(session: Session, key: str) -> None:

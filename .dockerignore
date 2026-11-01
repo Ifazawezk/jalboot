@@ -11,7 +11,9 @@ eval/runs
 eval/.cache
 **/__pycache__
 **/.pytest_cache
+**/*.egg-info
 web/node_modules
 web/dist
 web/dist-*
+web/screenshots
 docs/images

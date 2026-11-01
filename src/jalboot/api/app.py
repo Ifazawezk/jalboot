@@ -20,7 +20,9 @@ from starlette.exceptions import HTTPException
 from jalboot import audit
 from jalboot.api import chat, identity, metrics, views
 from jalboot.api.errors import ApiError, install_handlers, language_of
-from jalboot.api.events import SSE_HEADERS, sse_frame, stream_events
+from jalboot.api.events import (
+    MAX_STREAMS_PER_CONVERSATION, SSE_HEADERS, Subscription, TooManyStreams, sse_frame, stream_events,
+)
 from jalboot.api.guards import BrowserGuards
 from jalboot.api.runtime import Runtime, build_runtime
 from jalboot.config import Settings, load_settings
@@ -37,6 +39,9 @@ COOKIE = "jalboot_desk"
 Locale = Literal["en", "ar"]
 SHIFT_HOURS = 12
 AUDIT_PAGE = 20
+STREAM_RETRY_SECONDS = 30
+# Still limits one address trying many accounts, without blocking an office after one typo.
+LOGIN_CLIENT_LIMIT = 20
 ALLOWED_HEADERS = ["Authorization", "Content-Type", "Accept-Language", "Last-Event-ID", "X-CSRF-Token"]
 
 
@@ -56,10 +61,6 @@ class VerifyStart(BaseModel):
 
 class VerifyConfirm(BaseModel):
     code: str = Field(min_length=1, max_length=12)
-
-
-class HandoffRequest(BaseModel):
-    reason: str = Field(default="customer_request", max_length=64)
 
 
 class DeskLogin(BaseModel):
@@ -86,21 +87,78 @@ def get_session(runtime: Runtime = Depends(get_runtime)):
         yield session
 
 
-def customer_auth(
-    conversation_id: str,
-    authorization: str | None = Header(default=None),
-    runtime: Runtime = Depends(get_runtime),
-    session: Session = Depends(get_session),
-) -> Conversation:
+def conversation_for_token(session: Session, secret: str, conversation_id: str, authorization: str | None) -> Conversation:
     """Each conversation has its own token, so knowing an id reaches nothing. Unknown
     ids and wrong tokens get the same answer."""
     token = (authorization or "").removeprefix("Bearer ").strip()
     conversation = session.get(Conversation, conversation_id)
     if conversation is None or not token:
         raise ApiError(401, "unauthorized")
-    if not secrets.compare_digest(conversation.token_hash, tokens.hash_token(runtime.settings.secret_key, token)):
+    if not secrets.compare_digest(conversation.token_hash, tokens.hash_token(secret, token)):
         raise ApiError(401, "unauthorized")
+    # Closing ends what the token can do. It gets this answer rather than 401 so that
+    # a page still open can tell the customer the truth.
+    if conversation.status == "closed":
+        raise ApiError(409, "conversation_closed")
     return conversation
+
+
+def web_session_for(session: Session, secret: str, request: Request) -> WebSession:
+    row = tokens.find_session(session, secret, request.cookies.get(COOKIE), "staff")
+    if row is None:
+        raise ApiError(401, "unauthorized")
+    return row
+
+
+def active_staff(session: Session, row: WebSession) -> StaffUser:
+    staff = session.get(StaffUser, row.staff_id)
+    if staff is None or not staff.active:
+        raise ApiError(401, "unauthorized")
+    return staff
+
+
+def customer_auth(
+    conversation_id: str,
+    authorization: str | None = Header(default=None),
+    runtime: Runtime = Depends(get_runtime),
+    session: Session = Depends(get_session),
+) -> Conversation:
+    return conversation_for_token(session, runtime.settings.secret_key, conversation_id, authorization)
+
+
+def customer_stream_auth(
+    conversation_id: str,
+    authorization: str | None = Header(default=None),
+    runtime: Runtime = Depends(get_runtime),
+) -> None:
+    """For routes that stream. A dependency using get_session stays open until the
+    response ends, which for a stream means a connection held for as long as a page is
+    open. So these check in a short session of their own and keep no database object."""
+    with runtime.sessions() as session:
+        conversation_for_token(session, runtime.settings.secret_key, conversation_id, authorization)
+
+
+def desk_stream_role(request: Request, runtime: Runtime = Depends(get_runtime)) -> str:
+    """The desk version of customer_stream_auth, which keeps only the role."""
+    with runtime.sessions() as session:
+        return active_staff(session, web_session_for(session, runtime.settings.secret_key, request)).role
+
+
+def still_signed_in(runtime: Runtime, cookie: str | None) -> bool:
+    with runtime.sessions() as session:
+        row = tokens.find_session(session, runtime.settings.secret_key, cookie, "staff")
+        staff = session.get(StaffUser, row.staff_id) if row else None
+        return bool(staff and staff.active)
+
+
+def open_events(
+    request: Request, runtime: Runtime, topic: str, last_event_id: str | None, topic_limit: int | None = None,
+) -> Subscription:
+    client = request.client.host if request.client else ""
+    try:
+        return runtime.broker.subscribe(topic, resume_id(last_event_id), client=client, topic_limit=topic_limit)
+    except TooManyStreams:
+        raise ApiError(429, "too_many_streams", retryable=True, retryAfterSeconds=STREAM_RETRY_SECONDS) from None
 
 
 def desk_session(
@@ -108,17 +166,11 @@ def desk_session(
     runtime: Runtime = Depends(get_runtime),
     session: Session = Depends(get_session),
 ) -> WebSession:
-    row = tokens.find_session(session, runtime.settings.secret_key, request.cookies.get(COOKIE), "staff")
-    if row is None:
-        raise ApiError(401, "unauthorized")
-    return row
+    return web_session_for(session, runtime.settings.secret_key, request)
 
 
 def desk_user(row: WebSession = Depends(desk_session), session: Session = Depends(get_session)) -> StaffUser:
-    staff = session.get(StaffUser, row.staff_id)
-    if staff is None or not staff.active:
-        raise ApiError(401, "unauthorized")
-    return staff
+    return active_staff(session, row)
 
 
 def desk_write(
@@ -168,7 +220,7 @@ def create_conversation(
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     token = tokens.new_token()
-    now = utcnow()
+    now = runtime.clock.now()
     conversation = Conversation(
         id=f"cv_{secrets.token_hex(8)}", language=body.locale, created_at=now, updated_at=now,
         token_hash=tokens.hash_token(runtime.settings.secret_key, token),
@@ -187,11 +239,11 @@ def create_conversation(
 async def send_message(
     conversation_id: str,
     body: SendMessage,
-    conversation: Conversation = Depends(customer_auth),
+    _authorized: None = Depends(customer_stream_auth),
     runtime: Runtime = Depends(get_runtime),
 ) -> StreamingResponse:
     plan = await run_in_threadpool(
-        chat.prepare_turn, runtime, conversation.id, body.clientMessageId, body.text, body.locale,
+        chat.prepare_turn, runtime, conversation_id, body.clientMessageId, body.text, body.locale,
     )
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -239,19 +291,22 @@ def verify_start(
 
 @api.post("/conversations/{conversation_id}/verify/confirm")
 def verify_confirm(
+    request: Request,
     body: VerifyConfirm,
     conversation: Conversation = Depends(customer_auth),
     runtime: Runtime = Depends(get_runtime),
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    result = identity.confirm(session, runtime.rules, runtime.settings.secret_key, conversation, body.code)
+    result = identity.confirm(
+        session, runtime.rules, runtime.settings.secret_key, conversation, body.code,
+        request.client.host if request.client else "",
+    )
     chat.publish_conversation(runtime, session, conversation)
     return result
 
 
 @api.post("/conversations/{conversation_id}/handoff")
 def request_handoff(
-    body: HandoffRequest,
     conversation: Conversation = Depends(customer_auth),
     runtime: Runtime = Depends(get_runtime),
     session: Session = Depends(get_session),
@@ -264,7 +319,7 @@ def request_handoff(
         .order_by(Message.id).limit(1)
     )
     summary = f"Reason: customer_request\nAsked first: {first or 'nothing yet'}"
-    ToolExecutor(context).execute("handoff_to_human", {"reason": "customer_request", "summary": summary})
+    chat.reach_person(ToolExecutor(context), "customer_request", summary)
     chat.publish_conversation(runtime, session, conversation)
     chat.publish_audit_since(runtime, session, mark)
     chat.publish_summary(runtime, session)
@@ -280,13 +335,22 @@ def resume_id(last_event_id: str | None) -> int | None:
 
 @api.get("/conversations/{conversation_id}/events")
 async def conversation_events(
+    request: Request,
     conversation_id: str,
-    conversation: Conversation = Depends(customer_auth),
+    _authorized: None = Depends(customer_stream_auth),
     last_event_id: str | None = Header(default=None),
     runtime: Runtime = Depends(get_runtime),
 ) -> StreamingResponse:
-    subscription = runtime.broker.subscribe(chat.conversation_topic(conversation.id), resume_id(last_event_id))
-    return StreamingResponse(stream_events(subscription), media_type="text/event-stream", headers=SSE_HEADERS)
+    subscription = open_events(
+        request, runtime, chat.conversation_topic(conversation_id), last_event_id, MAX_STREAMS_PER_CONVERSATION,
+    )
+
+    async def still_open() -> bool:
+        return await run_in_threadpool(chat.conversation_open, runtime, conversation_id)
+
+    return StreamingResponse(
+        stream_events(subscription, still_open), media_type="text/event-stream", headers=SSE_HEADERS,
+    )
 
 
 @api.post("/desk/session")
@@ -300,23 +364,26 @@ def desk_login(
     now = utcnow()
     settings = runtime.settings
     client = request.client.host if request.client else ""
-    keys = [
-        tokens.hash_token(settings.secret_key, f"login:{body.email.lower()}"),
-        tokens.hash_token(settings.secret_key, f"login-client:{client}"),
-    ]
-    if any(throttle.is_blocked(session, key, now) for key in keys):
-        raise ApiError(429, "too_many_attempts", retryAfterSeconds=throttle.BLOCK_MINUTES * 60)
+    # Email and address together, so a wrong password neither locks out a colleague in
+    # the same office nor lets a stranger lock an account from elsewhere.
+    pair_key = tokens.hash_token(settings.secret_key, f"login:{body.email.lower()}:{client}")
+    client_key = tokens.hash_token(settings.secret_key, f"login-client:{client}")
+    # Counted before the hash, which stays outside the lock because it is slow on
+    # purpose. A burst of guesses cannot get past the limit, and a good one clears it.
+    with audit.serial_write(session):
+        session.expire_all()
+        if any(throttle.is_blocked(session, key, now) for key in (pair_key, client_key)):
+            raise ApiError(429, "too_many_attempts", retryAfterSeconds=throttle.BLOCK_MINUTES * 60)
+        throttle.note_failure(session, pair_key, now)
     staff = session.scalar(select(StaffUser).where(StaffUser.email == body.email.lower()))
     # The hash runs even for an unknown email, so timing does not reveal who has an account.
     good = verify_password(body.password, staff.password_hash if staff else DUMMY_HASH)
     if staff is None or not staff.active or not good:
-        for key in keys:
-            throttle.note_failure(session, key, now)
         with audit.serial_write(session):
+            throttle.note_failure(session, client_key, now, LOGIN_CLIENT_LIMIT)
             audit.record(session, actor_type="system", actor_id="desk", action="desk.login_failed", outcome="denied")
         raise ApiError(401, "invalid_credentials")
-    for key in keys:
-        throttle.note_success(session, key)
+    throttle.note_success(session, pair_key)
     token, row = tokens.create_session(session, settings.secret_key, "staff", staff_id=staff.id)
     session.commit()
     response.set_cookie(
@@ -405,7 +472,7 @@ def desk_claim(
     with audit.serial_write(session):
         conversation.status = "agent"
         conversation.assigned_staff_id = staff.id
-        conversation.updated_at = utcnow()
+        conversation.updated_at = runtime.clock.now()
         audit.record(
             session, actor_type="staff", actor_id=staff.id, action="handoff.joined", outcome="allowed",
             conversation_id=conversation.id, customer_id=conversation.customer_id,
@@ -429,7 +496,7 @@ def desk_reply(
 ) -> Response:
     conversation = _conversation(session, conversation_id)
     mark = chat.last_audit_seq(session)
-    now = utcnow()
+    now = runtime.clock.now()
     message = Message(
         conversation_id=conversation.id, role="agent", text=body.text, language=conversation.language,
         created_at=now, meta={"agent_name": staff.name},
@@ -461,7 +528,7 @@ def desk_close(
     """Ends a conversation. A later customer message gets conversation_closed."""
     conversation = _conversation(session, conversation_id)
     mark = chat.last_audit_seq(session)
-    now = utcnow()
+    now = runtime.clock.now()
     with audit.serial_write(session):
         conversation.status = "closed"
         conversation.resolved_by = "agent"
@@ -591,13 +658,17 @@ def desk_quality(
 @api.get("/desk/events")
 async def desk_events(
     request: Request,
-    staff: StaffUser = Depends(desk_user),
+    role: str = Depends(desk_stream_role),
     last_event_id: str | None = Header(default=None),
     runtime: Runtime = Depends(get_runtime),
 ) -> StreamingResponse:
-    topic = chat.desk_topic(staff.role, language_of(request))
-    subscription = runtime.broker.subscribe(topic, resume_id(last_event_id))
-    return StreamingResponse(stream_events(subscription), media_type="text/event-stream", headers=SSE_HEADERS)
+    subscription = open_events(request, runtime, chat.desk_topic(role, language_of(request)), last_event_id)
+    cookie = request.cookies.get(COOKIE)
+
+    async def signed_in() -> bool:
+        return await run_in_threadpool(still_signed_in, runtime, cookie)
+
+    return StreamingResponse(stream_events(subscription, signed_in), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 class WebApp(StaticFiles):

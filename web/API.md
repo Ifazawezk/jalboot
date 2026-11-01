@@ -271,8 +271,10 @@ Write `identity.verified` or `identity.failed` to the audit log, without the pho
 
 ### `POST /conversations/{id}/handoff`
 
-Request `{ "reason": "customer_request" }`. Response 200 is a `Handoff`. Automated replies stop. Later changes
-arrive as `handoff.update` on the events stream. No verification is needed to reach a person.
+No body. Response 200 is a `Handoff`. Automated replies stop. Later changes arrive as `handoff.update` on the
+events stream. No verification is needed to reach a person. A summary never stops a handoff, however long the
+customer's first message was. If the handoff really fails the answer is 500 `internal_error` with `retryable: true`,
+never a 200, so the page can say so and let the customer ask again.
 
 ### `GET /conversations/{id}/events`
 

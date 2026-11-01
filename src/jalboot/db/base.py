@@ -5,11 +5,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import DateTime, Engine, create_engine, event
+from sqlalchemy import DateTime, Engine, create_engine, event, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.types import TypeDecorator
+
+
+# Columns that a database made by an earlier version may not have.
+ADDED_COLUMNS = {
+    "login_throttle": {"window_start": "TIMESTAMP"},
+    "drivers": {"name_ar": "VARCHAR(120) NOT NULL DEFAULT ''"},
+}
+# Columns it may still have. A NOT NULL one left behind would refuse every new row.
+DROPPED_COLUMNS = {"conversations": ("topic",)}
 
 
 class Base(DeclarativeBase):
@@ -70,6 +79,25 @@ def create_schema(engine: Engine) -> None:
     from jalboot.db import models  # noqa: F401  (registers the tables)
 
     Base.metadata.create_all(engine)
+    _upgrade_schema(engine)
+
+
+def _upgrade_schema(engine: Engine) -> None:
+    """create_all adds missing tables but never changes one that exists, so a database
+    from an earlier version needs its columns brought up to date here."""
+    inspector = inspect(engine)
+    has = {table: {column["name"] for column in inspector.get_columns(table)} for table in (*ADDED_COLUMNS, *DROPPED_COLUMNS)}
+    statements = [
+        f"ALTER TABLE {table} ADD COLUMN {name} {kind}"
+        for table, columns in ADDED_COLUMNS.items() for name, kind in columns.items() if name not in has[table]
+    ] + [
+        f"ALTER TABLE {table} DROP COLUMN {name}"
+        for table, columns in DROPPED_COLUMNS.items() for name in columns if name in has[table]
+    ]
+    if statements:
+        with engine.begin() as connection:
+            for statement in statements:
+                connection.execute(text(statement))
 
 
 def utcnow() -> datetime:

@@ -222,3 +222,26 @@ describe('helpers', () => {
     expect(lastSpokenText(done.items)).toBe('On the way.');
   });
 });
+
+describe('asking for a person', () => {
+  it('says so when the request failed, and leaves the way to ask again open', () => {
+    const state = run([{ type: 'handoff.failed' }]);
+    expect(state.items).toMatchObject([{ kind: 'notice', notice: 'handoff_failed' }]);
+    expect(state.handoff).toBeNull();
+  });
+
+  it('does not end a reply that is still being written', () => {
+    const state = run([
+      { type: 'message.start', messageId: 'm1' },
+      { type: 'text.delta', delta: 'Hello' },
+      { type: 'handoff.failed' },
+    ]);
+    expect(bot(state).status).toBe('streaming');
+    expect(state.streaming).toBe(true);
+  });
+
+  it('gives each failed try its own line', () => {
+    const state = run([{ type: 'handoff.failed' }, { type: 'handoff.failed' }]);
+    expect(new Set(state.items.map((item) => item.id)).size).toBe(2);
+  });
+});

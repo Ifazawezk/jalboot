@@ -11,20 +11,22 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from jalboot.agent import replies
+from jalboot.agent.loop import TurnResult
 from jalboot.api import identity, views
 from jalboot.api.errors import ApiError, error_body
 from jalboot.api.runtime import Runtime
-from jalboot.db.base import utcnow
 from jalboot.db.models import Approval, AuditEvent, Conversation, Customer, Message, Order
-from jalboot.llm.client import LLMError
+from jalboot.llm.client import LLMClient, LLMError, LLMReply
 from jalboot.policy.engine import ROLES
 from jalboot.security.redact import redact
 from jalboot.tools.executor import ToolContext, ToolExecutor
+from jalboot.tools.specs import HANDOFF_REASONS, MAX_TEXT
 
 log = logging.getLogger("jalboot.chat")
 Emit = Callable[[dict[str, Any]], None]
@@ -32,9 +34,11 @@ CHUNK = 28
 TOOLS_WITH_ORDER = {"track_order", "get_order_details", "explain_delay"}
 NO_CODES_IN_CHAT = {
     "en": "For your safety, please do not type a code in the chat. Use the secure form instead.",
-    "ar": "حفاظا على أمانك، لا تكتب الرمز في المحادثة. استخدم النموذج الآمن.",
+    "ar": "حفاظًا على أمان حسابك، يُرجى عدم كتابة الرمز في المحادثة واستخدام نافذة التحقق الآمنة.",
 }
 LANGUAGES = ("en", "ar")
+HANDOFF_TOOL = "handoff_to_human"
+NO_SUMMARY = "No summary was written."
 
 
 @dataclass
@@ -94,6 +98,12 @@ def publish_refund(runtime: Runtime, session: Session, approval: Approval, event
     })
 
 
+def conversation_open(runtime: Runtime, conversation_id: str) -> bool:
+    with runtime.sessions() as session:
+        conversation = session.get(Conversation, conversation_id)
+        return conversation is not None and conversation.status != "closed"
+
+
 def last_audit_seq(session: Session) -> int:
     return session.scalar(select(AuditEvent.seq).order_by(AuditEvent.seq.desc()).limit(1)) or 0
 
@@ -117,15 +127,18 @@ def prepare_turn(runtime: Runtime, conversation_id: str, client_id: str, text: s
             raise ApiError(409, "turn_in_progress")
 
         try:
+            now = runtime.clock.now()
             conversation.language = locale
-            conversation.updated_at = utcnow()
-            conversation.first_report_at = conversation.first_report_at or runtime.clock.now()
-            code_expected = identity.open_challenge(session, conversation_id) is not None
-            clean, removed = redact(text, code_expected=code_expected)
+            conversation.updated_at = now
+            challenge = identity.open_challenge(session, conversation_id)
+            clean, removed = redact(
+                text, code_expected=challenge is not None,
+                is_code=identity.code_check(runtime.settings.secret_key, challenge),
+            )
             if existing is None:
                 existing = Message(
                     conversation_id=conversation_id, role="customer", text=clean, client_id=client_id,
-                    turn_state="running", language=locale, meta={"redacted": removed},
+                    turn_state="running", language=locale, meta={"redacted": removed}, created_at=now,
                 )
                 session.add(existing)
             else:
@@ -149,6 +162,38 @@ def prepare_turn(runtime: Runtime, conversation_id: str, client_id: str, text: s
             raise
 
 
+def fit_summary(summary: str) -> str:
+    """The tool refuses a blank or oversized summary. A summary only helps the person
+    who picks this up, so it must never be what stops them being reached."""
+    return (summary.strip() or NO_SUMMARY)[:MAX_TEXT]
+
+
+def reach_person(tools: ToolExecutor, reason: str, summary: str) -> dict[str, Any]:
+    """Puts the conversation in the queue for a person, or raises. Nothing tells a
+    customer that a person is coming until this has returned."""
+    outcome = tools.execute(HANDOFF_TOOL, {"reason": reason, "summary": fit_summary(summary)})
+    if not outcome.get("ok"):
+        raise ApiError(500, "internal_error", retryable=True)
+    return outcome
+
+
+def _keep_handoff_promise(
+    result: TurnResult, tools: ToolExecutor, conversation: Conversation, translate: Emit,
+) -> None:
+    """The agent chose a person but the tool refused the call, so the conversation is
+    still with the bot. The reply already says otherwise, so finish the handoff here."""
+    attempts = [entry["arguments"] for entry in result.tool_log if entry["tool"] == HANDOFF_TOOL]
+    if not attempts or conversation.status != "bot":
+        return
+    reason = attempts[-1].get("reason")
+    reason = reason if reason in HANDOFF_REASONS else "low_confidence"
+    translate({"type": "tool.start", "id": HANDOFF_TOOL, "tool": HANDOFF_TOOL})
+    outcome = reach_person(tools, reason, str(attempts[-1].get("summary") or ""))
+    translate({"type": "tool.end", "id": HANDOFF_TOOL, "tool": HANDOFF_TOOL, "result": outcome})
+    result.reply = replies.handoff_reply(reason, result.language)
+    result.finish = "handoff"
+
+
 def _history(session: Session, conversation_id: str, before_id: int) -> list[dict[str, str]]:
     rows = session.scalars(
         select(Message).where(
@@ -162,6 +207,21 @@ def _history(session: Session, conversation_id: str, before_id: int) -> list[dic
 def _customer_label(session: Session, conversation: Conversation) -> str:
     customer = session.get(Customer, conversation.customer_id) if conversation.customer_id else None
     return f"{customer.name} ({customer.id})" if customer and conversation.verified_at else ""
+
+
+class ReleasingClient:
+    """Ends the open transaction before each model call, so a slow provider holds no
+    database connection. Tools commit their own writes, so nothing is left half done."""
+
+    def __init__(self, client: LLMClient, session: Session):
+        self._client = client
+        self._session = session
+        self.provider = client.provider
+        self.model = client.model
+
+    def chat(self, messages: Sequence[dict], tools: Sequence[dict] | None = None) -> LLMReply:
+        self._session.commit()
+        return self._client.chat(messages, tools)
 
 
 def run_turn(runtime: Runtime, plan: TurnPlan, emit: Emit) -> None:
@@ -198,7 +258,10 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
 
     if plan.canned is not None:
         _text_events(plan.canned, emit)
-        session.add(Message(conversation_id=conversation.id, role="bot", text=plan.canned, language=language))
+        session.add(Message(
+            conversation_id=conversation.id, role="bot", text=plan.canned, language=language,
+            created_at=runtime.clock.now(),
+        ))
         message.turn_state = "complete"
         session.commit()
         emit({"type": "message.end", "finish": "complete"})
@@ -241,20 +304,26 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
         session=session, conversation=conversation, rules=runtime.rules, now=runtime.clock.now(),
         knowledge=runtime.knowledge, publish=on_tool_publish, turn_id=str(plan.message_id),
     )
-    result = runtime.agent().respond(
-        plan.text, ToolExecutor(context), _history(session, conversation.id, plan.message_id), language,
-        customer_label=_customer_label(session, conversation), emit=translate, failures=conversation.failures,
+    tools = ToolExecutor(context)
+    history = _history(session, conversation.id, plan.message_id)
+    customer_label = _customer_label(session, conversation)
+    session.commit()  # Search can be slow too, and it runs before the first model call.
+    result = runtime.agent(ReleasingClient(runtime.llm, session)).respond(
+        plan.text, tools, history, language,
+        customer_label=customer_label, emit=translate, failures=conversation.failures,
     )
+    _keep_handoff_promise(result, tools, conversation, translate)
 
     if result.finish == "identity_required":
         emit({"type": "identity.required", "reason": "order_tools"})
     _text_events(result.reply, emit)
 
+    now = runtime.clock.now()
     bot = Message(
         conversation_id=conversation.id, role="bot", text=result.reply, language=result.language,
-        citations=result.citations,
+        citations=result.citations, created_at=now,
         meta={
-            "tools": labels, "sources": [c.get("doc_title", "") for c in result.citations],
+            "tools": labels, "sources": views.source_titles(result.citations),
             "confidence": result.confidence, "flags": result.flags, "mode": result.mode,
         },
     )
@@ -265,7 +334,7 @@ def _run(runtime: Runtime, session: Session, plan: TurnPlan, emit: Emit) -> None
     useful = any(entry["result"].get("ok") for entry in result.tool_log) or result.citations
     if result.finish == "complete" and useful:
         conversation.resolved_by = "bot"
-    conversation.updated_at = utcnow()
+    conversation.updated_at = now
     session.commit()
 
     publish_message(runtime, conversation.id, message)

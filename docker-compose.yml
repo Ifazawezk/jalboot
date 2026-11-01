@@ -2,8 +2,8 @@
 #
 #   POSTGRES_PASSWORD=choose-one docker compose up --build
 #
-# The app listens on 127.0.0.1 only. Set the production values in .env.example, and put
-# it behind HTTPS, before exposing it to anyone.
+# The app listens on 127.0.0.1 only. Before exposing it to anyone, put it behind HTTPS and
+# set ENVIRONMENT to demo or production, with the values listed in .env.example.
 
 services:
   db:
@@ -30,8 +30,17 @@ services:
       LLM_MODE: ${LLM_MODE:-mock}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-20b}
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
       SECRET_KEY: ${SECRET_KEY:-}
       DEMO_STAFF_PASSWORD: ${DEMO_STAFF_PASSWORD:-}
+      STAFF_PASSWORD_AGENT: ${STAFF_PASSWORD_AGENT:-}
+      STAFF_PASSWORD_SUPERVISOR: ${STAFF_PASSWORD_SUPERVISOR:-}
+      STAFF_PASSWORD_FINANCE_LEAD: ${STAFF_PASSWORD_FINANCE_LEAD:-}
+      ENVIRONMENT: ${ENVIRONMENT:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      SHOW_SIMULATED_OTP: ${SHOW_SIMULATED_OTP:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
     ports:
       - "127.0.0.1:8000:8000"
 

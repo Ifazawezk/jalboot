@@ -336,6 +336,8 @@ function noticeText(item: NoticeItem, refund: RefundSummary | undefined, t: Retu
       return t('notice.handoff_queued');
     case 'handoff_joined':
       return t('notice.handoff_joined', { name });
+    case 'handoff_failed':
+      return t('notice.handoff_failed');
     case 'closed':
       return t('notice.closed');
     case 'identity_verified':
@@ -374,7 +376,11 @@ export function ChatLine({ item, items }: { item: ChatItem; items: ChatItem[] })
       const refund = items
         .flatMap((other) => (other.kind === 'bot' ? other.refunds : []))
         .find((r) => r.id === item.refundId);
-      return <p className="notice">{noticeText(item, refund, t)}</p>;
+      return (
+        <p className="notice" role={item.notice === 'handoff_failed' ? 'alert' : undefined}>
+          {noticeText(item, refund, t)}
+        </p>
+      );
     }
     case 'bot':
       return <BotMessage item={item} />;

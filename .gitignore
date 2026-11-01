@@ -44,6 +44,11 @@ web/coverage/
 
 # Browser test output that is not a published screenshot
 e2e/output/
+web/screenshots/
+
+# Coverage reports
+.coverage
+htmlcov/
 
 .DS_Store
 .vscode/

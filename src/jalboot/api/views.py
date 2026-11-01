@@ -7,17 +7,16 @@ number, a code or a customer's contact details to a staff or customer view.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from jalboot.db.models import (
-    Approval, AuditEvent, Conversation, Customer, Message, Order, Refund, StaffUser,
-)
+from jalboot.db.models import Approval, AuditEvent, Conversation, Customer, Message, Order, StaffUser
 from jalboot.policy.rules import Rules, to_qar
 from jalboot.tools.approvals import can_decide
-from jalboot.tools.facts import claim_facts, order_facts
+from jalboot.tools.facts import claim_facts
+from jalboot.world.catalog import ZONE_AR
 
 TOOL_LABELS = {
     "get_customer_profile": (("Opening your account", "جارٍ فتح حسابك"), ("Opened your account", "تم فتح حسابك")),
@@ -26,10 +25,10 @@ TOOL_LABELS = {
     "quote_refund": (("Working out your refund", "جارٍ حساب الاسترداد"), ("Worked out your refund", "تم حساب الاسترداد")),
     "issue_refund": (("Working on your refund", "جارٍ تجهيز الاسترداد"), ("Worked on your refund", "تم تجهيز الاسترداد")),
     "issue_credit": (("Adding credit to your account", "جارٍ إضافة رصيد إلى حسابك"), ("Added credit to your account", "تمت إضافة الرصيد إلى حسابك")),
-    "apply_promo": (("Checking your promo code", "جارٍ التحقق من الرمز الترويجي"), ("Checked your promo code", "تم التحقق من الرمز الترويجي")),
+    "apply_promo": (("Checking your promo code", "جارٍ التحقق من رمز الخصم"), ("Checked your promo code", "تم التحقق من رمز الخصم")),
     "change_address": (("Updating your address", "جارٍ تحديث عنوانك"), ("Updated your address", "تم تحديث عنوانك")),
     "cancel_order": (("Cancelling your order", "جارٍ إلغاء طلبك"), ("Cancelled your order", "تم إلغاء طلبك")),
-    "create_ticket": (("Opening a ticket with the team", "جارٍ فتح تذكرة مع الفريق"), ("Opened a ticket with the team", "تم فتح تذكرة مع الفريق")),
+    "create_ticket": (("Opening a ticket with the team", "جارٍ تسجيل بلاغ مع الفريق"), ("Opened a ticket with the team", "تم تسجيل بلاغ مع الفريق")),
     "handoff_to_human": (("Finding a person to help", "جارٍ البحث عن موظف لمساعدتك"), ("Asked a person to help", "تم طلب موظف لمساعدتك")),
     "search_knowledge": (("Reading the help pages", "جارٍ قراءة صفحات المساعدة"), ("Read the help pages", "تمت قراءة صفحات المساعدة")),
     "explain_delay": (("Finding out what caused the delay", "جارٍ معرفة سبب التأخير"), ("Found out what caused the delay", "تمت معرفة سبب التأخير")),
@@ -50,13 +49,62 @@ REASON_GROUPS = {
     "late_delivery_fee": "late", "goodwill": "late", "not_received": "missing_item",
     "duplicate_charge": "wrong_item", "failed_contact_refund": "missing_item", "allergen": "quality",
     "foreign_object": "quality", "broken_seal": "quality", "illness": "quality",
+    "expired_item_credit": "quality", "cancellation_credit": "late", "driver_change_short": "missing_item",
+    "address_change": "address",
 }
+# What a person reads. The reason codes themselves stay inside the system.
+REASON_LABELS = {
+    "missing_item": ("Missing item", "صنف ناقص"),
+    "wrong_item": ("Wrong item", "صنف خاطئ"),
+    "whole_wrong_order": ("Whole order wrong", "الطلب بأكمله خاطئ"),
+    "damaged_item": ("Damaged item", "صنف تالف"),
+    "spoiled_item": ("Spoiled item", "صنف فاسد"),
+    "quality": ("Food quality", "جودة الطعام"),
+    "cold_food": ("Cold food", "طعام بارد"),
+    "chilled_item": ("Chilled item not kept cold", "صنف مبرد لم يُحفظ باردًا"),
+    "expired_product": ("Expired product", "منتج منتهي الصلاحية"),
+    "cold_chain": ("Cold chain problem", "خلل في سلسلة التبريد"),
+    "allergen": ("Allergen in the order", "مادة مسببة للحساسية في الطلب"),
+    "foreign_object": ("Foreign object", "جسم غريب"),
+    "broken_seal": ("Broken seal", "ختم مكسور"),
+    "illness": ("Illness after eating", "وعكة صحية بعد تناول الطعام"),
+    "not_received": ("Order not received", "لم يصل الطلب"),
+    "modifier_missed": ("Special request missed", "لم يُنفذ طلب خاص"),
+    "substitute_rejected": ("Substitute rejected", "رُفض البديل"),
+    "duplicate_charge": ("Charged twice", "خصم مكرر"),
+    "late_delivery": ("Late delivery", "تأخر التوصيل"),
+    "late_delivery_fee": ("Delivery fee on a late order", "رسوم التوصيل لطلب متأخر"),
+    "failed_contact_refund": ("Failed delivery", "تعذر التوصيل"),
+    "driver_change_short": ("Short change from the driver", "نقص في الباقي من المندوب"),
+    "goodwill": ("Goodwill credit", "رصيد ترضية"),
+    "cancellation_credit": ("Cancellation credit", "رصيد إلغاء"),
+    "expired_item_credit": ("Expired item credit", "رصيد صنف منتهي الصلاحية"),
+    "address_change": ("Address change", "تغيير العنوان"),
+}
+UNKNOWN_REASON = ("Refund request", "طلب استرداد")
+STATUS_LABELS = {
+    "placed": ("Placed", "تم الطلب"),
+    "accepted": ("Accepted", "تم القبول"),
+    "preparing": ("Preparing", "قيد التحضير"),
+    "ready": ("Ready for pickup", "جاهز للاستلام"),
+    "picking": ("Picking items", "جارٍ جمع الأصناف"),
+    "packed": ("Packed", "تم التغليف"),
+    "driver_assigned": ("Driver assigned", "تم تعيين مندوب"),
+    "picked_up": ("Picked up", "تم الاستلام من المتجر"),
+    "on_the_way": ("On the way", "في الطريق"),
+    "delivered": ("Delivered", "تم التوصيل"),
+    "cancelled": ("Cancelled", "ملغى"),
+    "failed_customer": ("Delivery failed", "تعذر التوصيل"),
+}
+SIMULATED_PHOTO = (
+    "Simulated flag on a demo order. Customers cannot upload photos, so no real photo exists.",
+    "علامة محاكاة في طلب تجريبي. لا يمكن للعملاء رفع الصور، فلا توجد صورة حقيقية.",
+)
 POLICY_SECTIONS = {
     "missing_item": "WRG-01", "wrong_item": "WRG-01", "whole_wrong_order": "WRG-01", "quality": "WRG-05",
     "cold_food": "WRG-05", "late_delivery": "LAT-01", "late_delivery_fee": "LAT-01", "not_received": "LAT-04",
     "duplicate_charge": "PAY-03", "modifier_missed": "WRG-02", "substitute_rejected": "GRC-04",
 }
-STAGE_STATE = {"bot": "bot", "waiting": "waiting", "agent": "agent", "closed": "closed"}
 
 
 def iso(moment: datetime | None) -> str | None:
@@ -86,6 +134,19 @@ def tool_end_view(tool: str, result: dict[str, Any], language: str) -> tuple[str
     return "ok", pick(TOOL_REFUSED, language)
 
 
+def _area(order: Order, arabic: bool) -> str:
+    area = order.address_text.rsplit(",", 1)[-1].strip() if order.address_text else ""
+    return ZONE_AR.get(area, "") if arabic else area
+
+
+def _rider(order: Order, arabic: bool) -> str | None:
+    """The first name, or none at all. An Arabic card never falls back to Latin letters."""
+    if order.driver is None:
+        return None
+    name = order.driver.name_ar if arabic else order.driver.name
+    return name.split()[0] if name.strip() else None
+
+
 def order_card(order: Order, language: str) -> dict[str, Any]:
     arabic = language == "ar"
     merchant = order.merchant
@@ -98,11 +159,11 @@ def order_card(order: Order, language: str) -> dict[str, Any]:
         "vertical": order.category,
         "status": order.status,
         "store": store,
-        "area": order.address_text.rsplit(",", 1)[-1].strip() if order.address_text else "",
+        "area": _area(order, arabic),
         "placedAt": iso(order.placed_at),
         "etaAt": None if finished else iso(order.promised_at),
         "deliveredAt": iso(order.delivered_at),
-        "rider": order.driver.name.split()[0] if order.driver else None,
+        "rider": _rider(order, arabic),
         "items": [
             {
                 "name": item.name_ar if arabic and item.name_ar else item.name,
@@ -116,12 +177,18 @@ def order_card(order: Order, language: str) -> dict[str, Any]:
     }
 
 
+def source_titles(citations: Iterable[dict[str, Any]]) -> list[str]:
+    """One title per page, so two passages from the same page are listed once."""
+    titles = (str(citation.get("doc_title") or citation.get("title") or "") for citation in citations)
+    return list(dict.fromkeys(title for title in titles if title))
+
+
 def citation_view(citation: dict[str, Any]) -> dict[str, Any]:
     updated = str(citation.get("updated") or "2026-11-01")
     return {
         "n": citation["n"],
         "sourceId": citation.get("doc", citation["id"]),
-        "title": citation.get("doc_title", ""),
+        "title": citation.get("doc_title") or citation.get("title", ""),
         "section": f"{citation['id']}: {citation.get('title', '')}",
         "excerpt": str(citation.get("text", ""))[:280],
         "updatedAt": f"{updated}T00:00:00Z",
@@ -165,7 +232,7 @@ def live_conversation(session: Session, conversation: Conversation) -> dict[str,
         "id": conversation.id,
         "customer": customer_name(session, conversation),
         "locale": conversation.language,
-        "state": STAGE_STATE.get(conversation.status, "bot"),
+        "state": conversation.status,
         "priority": "high" if conversation.priority in {"P1", "P2"} else "normal",
         "verified": bool(conversation.verified_at),
         "summary": (conversation.handoff_summary or first or "")[:300],
@@ -187,7 +254,7 @@ def transcript_entry(message: Message, staff_name: str | None = None) -> dict[st
         "name": staff_name or meta.get("agent_name"),
         "text": message.text,
         "tools": list(meta.get("tools", [])),
-        "sources": list(meta.get("sources", [])),
+        "sources": list(dict.fromkeys(title for title in meta.get("sources", []) if title)),
     }
 
 
@@ -198,17 +265,13 @@ def conversation_detail(session: Session, conversation: Conversation) -> dict[st
     return {**live_conversation(session, conversation), "transcript": [transcript_entry(row) for row in rows]}
 
 
-def refund_status(approval: Approval) -> str:
-    return {"pending": "pending", "approved": "approved", "rejected": "rejected"}[approval.status]
-
-
 def refund_summary(approval: Approval, staff_name: str | None) -> dict[str, Any]:
     # An approval note is for the audit log. A rejection note is the reason the customer sees.
     return {
         "id": approval.id,
         "orderId": approval.order_id,
         "amountQar": to_qar(approval.amount_dh),
-        "status": refund_status(approval),
+        "status": approval.status,
         "decidedBy": staff_name,
         "note": approval.decision_note or None if approval.status == "rejected" else None,
         "destination": "credit" if approval.kind == "credit" else "original",
@@ -221,7 +284,7 @@ def _risks(session: Session, rules: Rules, approval: Approval, order: Order, now
     risks: list[str] = []
     rule = str((approval.payload or {}).get("rule", ""))
     if rule == "photo_needed":
-        risks.append(pick(("Photo not received yet", "لم تصل الصورة بعد"), language))
+        risks.append(pick(("No photo: customers cannot send one here", "لا توجد صورة: لا يمكن للعملاء إرسال صور هنا"), language))
     if rule == "repeat_claims" or facts.claims_30d >= 2:
         risks.append(pick((f"{facts.claims_30d} claims in 30 days", f"{facts.claims_30d} مطالبات خلال 30 يوما"), language))
     if facts.account_age_days < int(rules.get("refunds.new_account.age_days")):
@@ -246,27 +309,34 @@ def refund_view(
     reason = str((approval.payload or {}).get("reason") or approval.reason)
     risks = _risks(session, rules, approval, order, now, language)
     section = POLICY_SECTIONS.get(reason, "REF-03")
-    items = ", ".join(str(entry["name"]) for entry in (approval.payload or {}).get("items") or [])
-    evidence = [
-        {"label": pick(("Order total", "إجمالي الطلب"), language), "value": f"QAR {to_qar(order.total_dh):g}"},
-        {"label": pick(("Order status", "حالة الطلب"), language), "value": order.status},
+    label = pick(REASON_LABELS.get(reason, UNKNOWN_REASON), language)
+    arabic_items = {item.name: item.name_ar for item in order.items}
+    names = [str(entry["name"]) for entry in (approval.payload or {}).get("items") or []]
+    items = "، ".join(arabic_items.get(name) or name for name in names) if arabic else ", ".join(names)
+    total = f"{to_qar(order.total_dh):.2f}"
+    evidence: list[dict[str, Any]] = [
+        {"label": pick(("Order total", "إجمالي الطلب"), language), "value": pick((f"QAR {total}", f"{total} ر.ق"), language)},
+        {"label": pick(("Order status", "حالة الطلب"), language), "value": pick(STATUS_LABELS.get(order.status, (order.status, "")), language)},
     ]
     if items:
         evidence.append({"label": pick(("Items", "الأصناف"), language), "value": items})
+    new_address = (approval.payload or {}).get("new_address")
+    if new_address:
+        evidence.append({"label": pick(("New address", "العنوان الجديد"), language), "value": str(new_address)})
     if (order.extra or {}).get("photo_evidence"):
-        evidence.append({"label": pick(("Photo", "صورة"), language), "value": pick(("On file", "محفوظة"), language)})
+        evidence.append({"label": pick(("Photo", "صورة"), language), "value": pick(SIMULATED_PHOTO, language), "simulated": True})
     return {
         **refund_summary(approval, decider.name if decider else None),
         "conversationId": approval.conversation_id or "",
         "customer": name,
         "store": store,
         "reason": REASON_GROUPS.get(reason, "wrong_item"),
-        "summary": pick((f"{reason} on {order.id}", f"{reason} في الطلب {order.id}"), language),
+        "summary": pick((f"{label} on {order.id}", f"{label} في الطلب {order.id}"), language),
         "requestedAt": iso(approval.created_at),
         "decidedAt": iso(approval.decided_at),
         "recommendation": "review" if risks else "approve",
         "evidence": evidence,
-        "policy": {"title": section, "section": section},
+        "policy": {"title": label, "section": section},
         "risks": risks,
         "version": approval.version,
         "canDecide": can_decide(viewer.role, approval) and approval.status == "pending",
@@ -308,12 +378,3 @@ def desk_summary(session: Session, now: datetime) -> dict[str, int]:
         "resolvedToday": len(resolved),
     }
 
-
-def order_facts_paid(order: Order) -> float:
-    return to_qar(order_facts(order).paid_dh)
-
-
-__all__ = [
-    "Refund", "audit_entry", "citation_view", "conversation_detail", "desk_summary", "handoff_view", "iso",
-    "live_conversation", "order_card", "pick", "refund_summary", "refund_view", "tool_label", "transcript_entry",
-]

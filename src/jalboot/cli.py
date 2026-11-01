@@ -7,14 +7,29 @@ import sys
 
 from jalboot.env import load_env_file
 
+SHUTDOWN_SECONDS = 2
+
 
 def serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     from jalboot.api.app import create_app
 
-    uvicorn.run(create_app(), host=args.host, port=args.port, log_level="info")
+    # An event stream never ends by itself, so Ctrl+C must not wait for one.
+    uvicorn.run(
+        create_app(), host=args.host, port=args.port, log_level="info", timeout_graceful_shutdown=SHUTDOWN_SECONDS,
+    )
     return 0
+
+
+def printable_url(url: str) -> str:
+    """Hides any password, and escapes what this console cannot show, such as an
+    Arabic folder name on a Windows code page."""
+    from sqlalchemy.engine import make_url
+
+    safe = make_url(url).render_as_string(hide_password=True)
+    encoding = sys.stdout.encoding or "utf-8"
+    return safe.encode(encoding, "backslashreplace").decode(encoding)
 
 
 def seed(_args: argparse.Namespace) -> int:
@@ -22,7 +37,7 @@ def seed(_args: argparse.Namespace) -> int:
     from jalboot.config import load_settings
 
     runtime = build_runtime(load_settings())
-    print(f"world ready at {runtime.settings.database_url}")
+    print(f"world ready at {printable_url(runtime.settings.database_url)}")
     return 0
 
 

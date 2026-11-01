@@ -18,10 +18,10 @@ ISSUE_LABELS = {
     "missing_item": ("Missing item", "صنف ناقص"),
     "wrong_item": ("Wrong item", "صنف خاطئ"),
     "refund_status": ("Refund status", "حالة الاسترداد"),
-    "promo_issue": ("Promo code", "الرمز الترويجي"),
+    "promo_issue": ("Promo code", "رمز الخصم"),
     "address_change": ("Address change", "تغيير العنوان"),
     "payment_issue": ("Payment", "الدفع"),
-    "driver_conduct": ("Driver conduct", "سلوك السائق"),
+    "driver_conduct": ("Driver conduct", "سلوك المندوب"),
     "pharmacy_prescription": ("Prescription", "الوصفة الطبية"),
     "parcel_lost": ("Lost parcel", "طرد مفقود"),
     "account": ("Account", "الحساب"),
@@ -55,7 +55,7 @@ def top_issues(session: Session, now: datetime, window: int, language: str) -> l
             "count": count,
             "changePct": change,
         })
-    return issues
+    return sorted(issues, key=lambda issue: (-issue["count"], issue["id"]))
 
 
 def _bot_share(tickets: Sequence[Ticket]) -> float:
