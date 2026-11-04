@@ -118,6 +118,7 @@ class KnowledgeBase:
         cache_dir: Path | None = None,
     ):
         self.all_passages = list(passages)
+        self.include_internal = include_internal
         self.by_key = {(p.language, p.id): p for p in self.all_passages}
         self.section_ids = {p.id for p in self.all_passages}
         self.bm25: dict[str, BM25Index] = {}
@@ -138,6 +139,21 @@ class KnowledgeBase:
 
                 members.append(DenseIndex(encoder, ids, texts, cache_dir))
             self.retrievers[language] = HybridRetriever(members)
+
+    def published(self, section_id: str, language: str) -> dict[str, Any] | None:
+        """A section as the policy files hold it, in the shape search returns. None when
+        there is no such section, or customers may not see it."""
+        passage = self.by_key.get((language if language in LANGUAGES else "en", section_id))
+        if passage is None or (passage.visibility == "internal" and not self.include_internal):
+            return None
+        return {
+            "id": passage.id,
+            "doc": passage.doc,
+            "doc_title": passage.doc_title,
+            "title": passage.title,
+            "text": prompt_text(passage.text),
+            "updated": passage.updated,
+        }
 
     def hits(self, query: str, language: str, k: int = 5) -> list[Hit]:
         return self.retrievers.get(language, self.retrievers["en"]).search(query, k=k)

@@ -7,6 +7,7 @@ A reply is free text from a model, so nothing in it can be trusted by default:
     claims      a reply may only say that money moved, or that an address or an order
                 changed, when a tool result in this turn shows it, for the amount the
                 tool shows
+    support     a sentence that cites a passage must mostly use that passage's words
     leaks       no system prompt text, and no phone number or email except the
                 customer's own
 
@@ -24,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from jalboot.text.normalize import normalize
+from jalboot.text.tokenize import analyze
 
 CITATION = re.compile(r"\[(\d{1,2})\]")
 # A comma before one or two digits is a decimal point. Before three it groups thousands.
@@ -51,6 +53,13 @@ ARABIC_SEPARATORS = str.maketrans({"\u066b": ".", "\u066c": ","})
 SENTENCE_END = re.compile(r"(?<=[.!?;])\s+(?!\[\d)|\n+")
 ADDRESSED = re.compile(r"(?<!\w)(?:you|your|لك|اليك)(?!\w)|\w(?:ك|كم)(?!\w)")
 CLAUSE_END = re.compile(r"[,;:]|\bbut\b|لكن")
+NUMBER = re.compile(r"[\d.,]+")
+# A cited sentence may only leave a few of its words outside the passage it cites.
+# Tuned on the recorded development replies only: the one invented answer there left
+# 12 of 14 words outside its passage. Only one other sentence left more than 5 out,
+# and it still used two thirds of its words from the passage.
+MAX_UNSUPPORTED_WORDS = 5
+MIN_SUPPORTED_SHARE = 0.5
 
 
 def _phrases(*phrases: str) -> re.Pattern[str]:
@@ -284,6 +293,21 @@ def check_cited(reply: str, source_count: int, used_tools: bool, result: CheckRe
         result.fail("the answer does not cite its source with a marker such as [1]")
 
 
+def check_support(reply: str, evidence: Sequence[str], result: CheckResult) -> None:
+    """A marker only proves the passage was retrieved. This catches the plainest gap
+    between the two: a sentence made mostly of words the passage never uses, such as a
+    rule about gifting cited to a passage that never mentions it."""
+    for sentence in SENTENCE_END.split(_fold(reply)):
+        cited = [int(n) for n in CITATION.findall(sentence) if 1 <= int(n) <= len(evidence)]
+        if not cited:
+            continue
+        words = {word for word in analyze(CITATION.sub(" ", sentence)) if not NUMBER.fullmatch(word)}
+        known = set().union(*(analyze(evidence[n - 1]) for n in cited))
+        missing = words - known
+        if len(missing) > MAX_UNSUPPORTED_WORDS and len(missing) > len(words) * (1 - MIN_SUPPORTED_SHARE):
+            result.fail(f"the sentence citing [{cited[0]}] says things that passage does not")
+
+
 def check_figures(reply: str, known: Known, result: CheckResult) -> None:
     for value, is_money in _figures(reply):
         if value not in (known.money if is_money else known.other):
@@ -386,6 +410,8 @@ def check_reply(
     result = CheckResult()
     check_citations(reply, source_count, result)
     check_cited(reply, source_count, used_tools, result)
+    if not used_tools:
+        check_support(reply, evidence, result)
     check_figures(reply, known_figures(evidence, tool_results), result)
     check_claims(reply, done, result, offered=offered, amounts=amounts, used_tools=used_tools)
     check_leaks(reply, allowed_contacts, system_prompt, canary, result)

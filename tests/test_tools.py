@@ -1206,3 +1206,24 @@ def test_a_paid_failed_delivery_is_not_called_uncollected(db, layla):
     layla.execute("issue_refund", {"order_id": order.id, "amount_qar": 5.0, "reason": "failed_contact_refund"})
     quote = layla.execute("quote_refund", {"order_id": order.id, "reason": "failed_contact_refund"})
     assert quote["error"] == "already_refunded"
+
+
+def test_arabic_item_names_match_without_the_article(layla):
+    quote = layla.execute("quote_refund", {"order_id": "JB-700102", "reason": "missing_item", "items": [{"name": "الشاي"}]})
+    assert quote["amount_qar"] == 4.0
+
+
+def test_a_claim_keeps_the_items_its_quote_named(layla):
+    layla.execute("quote_refund", {"order_id": "JB-700102", "reason": "missing_item", "items": MISSING["items"]})
+    args = {k: v for k, v in MISSING.items() if k != "items"}
+    assert layla.execute("issue_refund", {**args, "amount_qar": 3.0})["error"] == "items_required"
+    assert layla.execute("issue_refund", args)["status"] == "done"
+
+
+def test_a_finished_cancellation_names_the_section_it_followed(db, layla):
+    very_late(db)
+    assert layla.execute("cancel_order", {"order_id": "JB-700101"})["policy"] == "CAN-04"
+
+
+def test_a_refund_names_its_section_only_when_one_section_covers_it(layla):
+    assert "policy" not in layla.execute("issue_refund", MISSING)

@@ -342,7 +342,7 @@ Jalboot is a demonstration and is not ready for real customers. The gaps that ma
 - It runs as one server process. The event broker is in memory, so several processes would need a shared one, recent events are lost on restart, and a second process starting would fail the first one's live turns.
 - Docker has never been run, nothing has been tested behind a reverse proxy, and PostgreSQL gets less testing than SQLite. The default test run uses SQLite, and the API and race tests also run on PostgreSQL when `TEST_DATABASE_URL` names a server.
 - False claims that fit the rules get paid, as [above](#if-the-model-is-taken-over). The gates limit this but cannot end it.
-- Triage is a word list that misses what nobody listed, and the reply checks are narrow: a citation check proves the passage was retrieved, not that it supports the sentence, and the claim check is a phrase list in two languages.
+- Triage is a word list that misses what nobody listed, and the reply checks are narrow: a citation check proves the passage was retrieved and shares most of the sentence's words, not that it says the same thing, and the claim check is a phrase list in two languages.
 - Redaction covers phones, emails, card numbers and codes. Names and addresses in free text stay, and in `llm` mode they reach the provider.
 - Photo evidence is simulated, with no upload. A photo counts when the order's simulated record says one is on file.
 - The demo recordings show a few runs, not a typical one. Each is one real run on simulated data, kept as it came, flaws included, and the Arabic ones were not checked by an Arabic speaker.

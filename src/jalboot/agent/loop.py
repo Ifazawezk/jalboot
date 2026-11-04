@@ -35,6 +35,7 @@ MAX_TOOL_CALLS = 8
 HISTORY_TURNS = 8
 SEARCH_TOOL = consent.SEARCH_TOOL
 CITATION_FIELDS = ("id", "doc", "doc_title", "title", "text", "updated")
+FINISHED = {"done", "pending_approval"}
 
 
 class Knowledge(Protocol):
@@ -103,9 +104,15 @@ def _acted(result: TurnResult) -> bool:
 
 
 class SupportAgent:
-    def __init__(self, llm: LLMClient, knowledge: Knowledge, *, propagate: tuple[type[BaseException], ...] = ()):
+    def __init__(
+        self, llm: LLMClient, knowledge: Knowledge, *, propagate: tuple[type[BaseException], ...] = (),
+        policy: Any = None,
+    ):
         self.llm = llm
         self.knowledge = knowledge
+        # Where the published text of each section comes from. Search results are
+        # checked against it, so a planted passage never reaches the model.
+        self.policy = policy if policy is not None else knowledge
         # Evaluation passes its budget error here: a stopped run must stop, not
         # degrade into a fallback that would be scored as a real answer.
         self.propagate = propagate
@@ -134,9 +141,32 @@ class SupportAgent:
             self._close_with_handoff(result, "repeated_failure", text, tools, history, customer_label, emit)
             return result
 
-        passages = relevant(self.knowledge.search(text, triage.language, k=4))
+        passages = relevant(self._verified(self.knowledge.search(text, triage.language, k=4), result))
         self._plan(result, text, tools, history, passages, customer_label, emit)
         return result
+
+    def _verified(self, found: Sequence[dict[str, Any]], result: TurnResult) -> list[dict[str, Any]]:
+        """A search index can be poisoned, so a passage counts only as the policy files
+        publish it. One whose title or text differs is put back to the published text, and
+        one with no published section is dropped. Neither kind can steer the model or be
+        cited. The flags tell staff which sections came back wrong."""
+        published = getattr(self.policy, "published", None)
+        if published is None:
+            return list(found)
+        kept: list[dict[str, Any]] = []
+        for passage in found:
+            section = str(passage.get("id", ""))
+            versions = [published(section, language) for language in dict.fromkeys((result.language, "en", "ar"))]
+            if versions[0] is None:
+                result.flags.append(f"dropped_source: {section}")
+                continue
+            shown = (passage.get("title"), passage.get("text"))
+            if not any(v and (v["title"], v["text"]) == shown for v in versions):
+                result.flags.append(f"restored_source: {section}")
+                passage = {**passage, **versions[0]}
+            if all(p["id"] != section for p in kept):
+                kept.append(passage)
+        return kept
 
     def _close_with_handoff(self, result, reason, text, tools, history, customer_label, emit) -> None:
         """A handoff decided by code. The reply is fixed text, so no model is involved."""
@@ -209,7 +239,10 @@ class SupportAgent:
                     else:
                         outcome = self._run_tool(result, tools, call, emit)
                     outside_text = outside_text or consent.reads_outside_text(call.name, outcome)
-                    shown = _add_sources(outcome, passages) if call.name == SEARCH_TOOL and outcome.get("ok") else outcome
+                    shown = outcome
+                    if call.name == SEARCH_TOOL and outcome.get("ok"):
+                        found = self._verified(outcome.get("passages") or [], result)
+                        shown = _add_sources({**outcome, "passages": found}, passages)
                     messages.append(prompts.tool_result_message(call.id, call.name, shown))
                     if outcome.get("error") == "identity_required":
                         result.reply = replies.identity_reply(result.language)
@@ -252,7 +285,7 @@ class SupportAgent:
         return checks.check_reply(
             reply,
             source_count=len(passages),
-            evidence=[p["text"] for p in passages],
+            evidence=[f"{p.get('title', '')}\n{p['text']}" for p in passages],
             tool_results=[entry["result"] for entry in result.tool_log if entry["tool"] != SEARCH_TOOL],
             done=effects.done,
             offered=effects.offered,
@@ -265,7 +298,8 @@ class SupportAgent:
 
     def _accept(self, result, reply, verdict, passages, text, emit) -> None:
         unsaid = replies.action_lines(result.tool_log, result.language, skip=checks.claimed_actions(reply))
-        result.reply = " ".join([reply.strip(), *unsaid])
+        applied = self._cite_applied(result, passages, verdict.citations)
+        result.reply = " ".join([reply.strip(), *unsaid, *applied])
         for number in verdict.citations:
             passage = passages[number - 1]
             citation = {"n": number, **{k: passage[k] for k in CITATION_FIELDS if k in passage}}
@@ -275,6 +309,31 @@ class SupportAgent:
         best = max((p.get("confidence", 0.0) for p in passages), default=0.0)
         result.confidence = 0.9 if used_tools else (best if verdict.citations else 0.3)
         result.failed = not used_tools and not verdict.citations and len(text.split()) > 3
+
+    def _cite_applied(self, result: TurnResult, passages: list[dict[str, Any]], citations: list[int]) -> list[str]:
+        """A reply about a finished action shows the section the tool applied, from the
+        published policy, when the model has not cited it already. Returns the markers."""
+        published = getattr(self.policy, "published", None)
+        if published is None:
+            return []
+        cited = {passages[n - 1]["id"] for n in citations}
+        markers: list[str] = []
+        for entry in result.tool_log:
+            outcome = entry["result"]
+            section = outcome.get("policy")
+            if not section or section in cited or not outcome.get("ok") or outcome.get("status") not in FINISHED:
+                continue
+            passage = published(section, result.language)
+            if passage is None:
+                continue
+            number = next((n for n, p in enumerate(passages, start=1) if p["id"] == section), None)
+            if number is None:
+                passages.append(passage)
+                number = len(passages)
+            citations.append(number)
+            cited.add(section)
+            markers.append(f"[{number}]")
+        return markers
 
     def _fall_back(self, result, text, tools, history, customer_label, emit) -> None:
         """Nothing unchecked reaches the customer, so the conversation goes to a person."""
