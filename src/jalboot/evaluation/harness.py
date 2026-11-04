@@ -37,7 +37,10 @@ class RunConfig:
 
 class PoisonedKnowledge:
     """Search that returns a planted document first, as if an attacker had edited the
-    knowledge base. Without this a retrieved document attack would test nothing."""
+    search index. Without this a retrieved document attack would test nothing.
+
+    The policy files themselves are reviewed in git before they change, so the attack
+    does not reach them, and published() still reads the clean knowledge base."""
 
     def __init__(self, knowledge: Any, document: dict[str, Any]):
         self.knowledge = knowledge
@@ -55,6 +58,9 @@ class PoisonedKnowledge:
         }
         rest = [row for row in self.knowledge.search(query, language, k) if row["id"] != planted["id"]]
         return [planted, *rest[: k - 1]]
+
+    def published(self, section_id: str, language: str) -> dict[str, Any] | None:
+        return self.knowledge.published(section_id, language)
 
 
 def next_customer_message(case: dict[str, Any], reply: str, used: set[int]) -> str | None:

@@ -103,9 +103,15 @@ def _acted(result: TurnResult) -> bool:
 
 
 class SupportAgent:
-    def __init__(self, llm: LLMClient, knowledge: Knowledge, *, propagate: tuple[type[BaseException], ...] = ()):
+    def __init__(
+        self, llm: LLMClient, knowledge: Knowledge, *, propagate: tuple[type[BaseException], ...] = (),
+        policy: Any = None,
+    ):
         self.llm = llm
         self.knowledge = knowledge
+        # Where the published text of each section comes from. Search results are
+        # checked against it, so a planted passage never reaches the model.
+        self.policy = policy if policy is not None else knowledge
         # Evaluation passes its budget error here: a stopped run must stop, not
         # degrade into a fallback that would be scored as a real answer.
         self.propagate = propagate
@@ -134,9 +140,32 @@ class SupportAgent:
             self._close_with_handoff(result, "repeated_failure", text, tools, history, customer_label, emit)
             return result
 
-        passages = relevant(self.knowledge.search(text, triage.language, k=4))
+        passages = relevant(self._verified(self.knowledge.search(text, triage.language, k=4), result))
         self._plan(result, text, tools, history, passages, customer_label, emit)
         return result
+
+    def _verified(self, found: Sequence[dict[str, Any]], result: TurnResult) -> list[dict[str, Any]]:
+        """A search index can be poisoned, so a passage counts only as the policy files
+        publish it. One whose title or text differs is put back to the published text, and
+        one with no published section is dropped. Neither kind can steer the model or be
+        cited. The flags tell staff which sections came back wrong."""
+        published = getattr(self.policy, "published", None)
+        if published is None:
+            return list(found)
+        kept: list[dict[str, Any]] = []
+        for passage in found:
+            section = str(passage.get("id", ""))
+            versions = [published(section, language) for language in dict.fromkeys((result.language, "en", "ar"))]
+            if versions[0] is None:
+                result.flags.append(f"dropped_source: {section}")
+                continue
+            shown = (passage.get("title"), passage.get("text"))
+            if not any(v and (v["title"], v["text"]) == shown for v in versions):
+                result.flags.append(f"restored_source: {section}")
+                passage = {**passage, **versions[0]}
+            if all(p["id"] != section for p in kept):
+                kept.append(passage)
+        return kept
 
     def _close_with_handoff(self, result, reason, text, tools, history, customer_label, emit) -> None:
         """A handoff decided by code. The reply is fixed text, so no model is involved."""
@@ -209,7 +238,10 @@ class SupportAgent:
                     else:
                         outcome = self._run_tool(result, tools, call, emit)
                     outside_text = outside_text or consent.reads_outside_text(call.name, outcome)
-                    shown = _add_sources(outcome, passages) if call.name == SEARCH_TOOL and outcome.get("ok") else outcome
+                    shown = outcome
+                    if call.name == SEARCH_TOOL and outcome.get("ok"):
+                        found = self._verified(outcome.get("passages") or [], result)
+                        shown = _add_sources({**outcome, "passages": found}, passages)
                     messages.append(prompts.tool_result_message(call.id, call.name, shown))
                     if outcome.get("error") == "identity_required":
                         result.reply = replies.identity_reply(result.language)
