@@ -34,6 +34,7 @@ from jalboot.db.models import (
 from jalboot.policy import engine
 from jalboot.policy.engine import APPROVAL, DENY, ESCALATE, EXECUTE, HANDOFF_CODES, ItemFact
 from jalboot.policy.rules import Rules, percent_of, to_dh, to_qar
+from jalboot.policy.sections import cancel_section, refund_section
 from jalboot.security.redact import redact
 from jalboot.text.normalize import normalize
 from jalboot.tools import specs
@@ -134,6 +135,11 @@ def refused(code: str, **details: Any) -> dict[str, Any]:
 def conflict(code: str) -> dict[str, Any]:
     """GEN-04 step 6. Nothing was changed, and the agent loop connects a person."""
     return refused("needs_person", rule=code, handoff_required="rule_conflict")
+
+
+def applied(section: str | None) -> dict[str, Any]:
+    """The policy section a finished action followed, for the reply to cite."""
+    return {"policy": section} if section else {}
 
 
 def item_label(text: str) -> str:
@@ -619,6 +625,7 @@ class ToolExecutor:
             "ok": True, "status": "done", "refund_id": settled.refund.id, "order_id": order.id,
             "amount_qar": to_qar(amount), "method": settled.refund.method, "reason": reason,
             "to_original_payment_qar": to_qar(settled.original_dh), "to_credit_qar": to_qar(settled.credit_dh),
+            **applied(refund_section(reason, order.category)),
         }
         self._publish_refund(settled.refund.id, order.id, amount, "auto_approved", settled.refund.method)
         return self._remember(key, "issue_refund", result)
@@ -639,6 +646,7 @@ class ToolExecutor:
         result = {
             "ok": True, "status": "pending_approval", "approval_id": approval.id, "order_id": order.id,
             "amount_qar": to_qar(amount), "reason": reason,
+            **(applied(refund_section(reason, order.category)) if kind != "address_change" else {}),
         }
         if kind != "address_change":
             self._publish_refund(approval.id, order.id, amount, "pending", "original")
@@ -687,6 +695,7 @@ class ToolExecutor:
         result = {
             "ok": True, "status": "done", "refund_id": refund.id, "order_id": order.id,
             "amount_qar": to_qar(amount), "method": COMPENSATION, "reason": reason,
+            **applied(refund_section(reason, order.category)),
         }
         self._publish_refund(refund.id, order.id, amount, "auto_approved", COMPENSATION)
         return self._remember(key, "issue_credit", result)
@@ -947,6 +956,9 @@ class ToolExecutor:
             "ok": True, "status": "done", "order_id": order.id, "charge_qar": to_qar(terms["charge_dh"]),
             "refund_qar": to_qar(terms["refund_dh"]), "rule": terms["code"], "credit_qar": to_qar(bonus),
             "to_credit_qar": to_qar(credit_back),
+            **applied(cancel_section(
+                terms["code"], order.category, order.payment_method == "cash" and terms["charge_dh"] > 0,
+            )),
         })
 
     def _charge_confirmed(self, order: Order, terms: dict[str, Any], confirm_charge: bool) -> bool:

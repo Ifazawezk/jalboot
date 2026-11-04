@@ -743,3 +743,12 @@ def test_a_cited_sentence_in_the_passage_own_words_is_sent(layla):
     result = run(script, layla, "How much is Plus and what does it give me?")
     assert result.finish == "complete"
     assert result.citations
+
+
+def test_a_finished_action_cites_the_section_the_tool_applied(db, layla):
+    db.get(Order, "JB-700101").promised_at = ANCHOR - timedelta(minutes=125)
+    db.commit()
+    script = Script(call("cancel_order", order_id="JB-700101"), LLMReply("All done."))
+    result = run(script, layla, "please cancel JB-700101")
+    assert [c["id"] for c in result.citations] == ["CAN-04"]
+    assert result.reply.endswith(f"[{result.citations[0]['n']}]")

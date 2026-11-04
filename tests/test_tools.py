@@ -1218,3 +1218,12 @@ def test_a_claim_keeps_the_items_its_quote_named(layla):
     args = {k: v for k, v in MISSING.items() if k != "items"}
     assert layla.execute("issue_refund", {**args, "amount_qar": 3.0})["error"] == "items_required"
     assert layla.execute("issue_refund", args)["status"] == "done"
+
+
+def test_a_finished_cancellation_names_the_section_it_followed(db, layla):
+    very_late(db)
+    assert layla.execute("cancel_order", {"order_id": "JB-700101"})["policy"] == "CAN-04"
+
+
+def test_a_refund_names_its_section_only_when_one_section_covers_it(layla):
+    assert "policy" not in layla.execute("issue_refund", MISSING)

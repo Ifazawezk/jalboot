@@ -35,6 +35,7 @@ MAX_TOOL_CALLS = 8
 HISTORY_TURNS = 8
 SEARCH_TOOL = consent.SEARCH_TOOL
 CITATION_FIELDS = ("id", "doc", "doc_title", "title", "text", "updated")
+FINISHED = {"done", "pending_approval"}
 
 
 class Knowledge(Protocol):
@@ -297,7 +298,8 @@ class SupportAgent:
 
     def _accept(self, result, reply, verdict, passages, text, emit) -> None:
         unsaid = replies.action_lines(result.tool_log, result.language, skip=checks.claimed_actions(reply))
-        result.reply = " ".join([reply.strip(), *unsaid])
+        applied = self._cite_applied(result, passages, verdict.citations)
+        result.reply = " ".join([reply.strip(), *unsaid, *applied])
         for number in verdict.citations:
             passage = passages[number - 1]
             citation = {"n": number, **{k: passage[k] for k in CITATION_FIELDS if k in passage}}
@@ -307,6 +309,31 @@ class SupportAgent:
         best = max((p.get("confidence", 0.0) for p in passages), default=0.0)
         result.confidence = 0.9 if used_tools else (best if verdict.citations else 0.3)
         result.failed = not used_tools and not verdict.citations and len(text.split()) > 3
+
+    def _cite_applied(self, result: TurnResult, passages: list[dict[str, Any]], citations: list[int]) -> list[str]:
+        """A reply about a finished action shows the section the tool applied, from the
+        published policy, when the model has not cited it already. Returns the markers."""
+        published = getattr(self.policy, "published", None)
+        if published is None:
+            return []
+        cited = {passages[n - 1]["id"] for n in citations}
+        markers: list[str] = []
+        for entry in result.tool_log:
+            outcome = entry["result"]
+            section = outcome.get("policy")
+            if not section or section in cited or not outcome.get("ok") or outcome.get("status") not in FINISHED:
+                continue
+            passage = published(section, result.language)
+            if passage is None:
+                continue
+            number = next((n for n, p in enumerate(passages, start=1) if p["id"] == section), None)
+            if number is None:
+                passages.append(passage)
+                number = len(passages)
+            citations.append(number)
+            cited.add(section)
+            markers.append(f"[{number}]")
+        return markers
 
     def _fall_back(self, result, text, tools, history, customer_label, emit) -> None:
         """Nothing unchecked reaches the customer, so the conversation goes to a person."""
