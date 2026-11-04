@@ -44,6 +44,9 @@ from jalboot.tools.facts import (
 from jalboot.tools.settle import WalletFull, new_id, settle_credit, settle_refund
 
 Publish = Callable[[dict[str, Any]], None]
+# Customers write "التمر" for a line the order calls "تمر 1 كجم", so the article comes
+# off every word on both sides before item names are compared.
+ARABIC_ARTICLE = re.compile(r"(?<!\S)(?:وال|ال)(?=\S\S)")
 # REF-03 and WRG-05: quality complaints pay half and never count toward the 70 percent rule.
 PERCENT_RULES = {
     "quality": "wrong_items.quality_refund_pct",
@@ -133,6 +136,10 @@ def conflict(code: str) -> dict[str, Any]:
     return refused("needs_person", rule=code, handoff_required="rule_conflict")
 
 
+def item_label(text: str) -> str:
+    return ARABIC_ARTICLE.sub("", normalize(text)).strip()
+
+
 def action_key(*parts: Any) -> str:
     text = json.dumps(parts, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -152,6 +159,8 @@ class ToolExecutor:
         self.rules = context.rules
         self.now = context.now
         self._outbox: list[dict[str, Any]] = []
+        # The items each quote in this turn named, and the amount it gave.
+        self._quotes: dict[tuple[str, str], tuple[list[dict[str, Any]], int]] = {}
 
     def specs(self) -> list[dict[str, Any]]:
         return [spec.openai() for spec in specs.TOOLS.values()]
@@ -394,12 +403,10 @@ class ToolExecutor:
         counted once however often it is named, so listing a QAR 4 tea eleven times is
         one QAR 4 tea. A name that could be two lines is refused rather than guessed."""
         rows = list(zip(order.items, order_facts(order).items))
-        labels = [
-            [normalize(text).strip() for text in (row.name, row.name_ar) if text] for row, _ in rows
-        ]
+        labels = [[item_label(text) for text in (row.name, row.name_ar) if text] for row, _ in rows]
         lines: dict[int, tuple[ItemFact, int]] = {}
         for entry in items:
-            wanted = normalize(entry["name"]).strip()
+            wanted = item_label(entry["name"])
             matches = [index for index, names in enumerate(labels) if wanted in names]
             if not matches and len(wanted) >= 3:
                 matches = [
@@ -511,6 +518,8 @@ class ToolExecutor:
         entitled, problem = self._entitlement_dh(order, reason, list(items or []))
         if problem:
             return refused(problem)
+        if items:
+            self._quotes[(order.id, reason)] = (list(items), entitled or 0)
         return {"ok": True, "order_id": order.id, "reason": reason, "amount_qar": to_qar(entitled or 0)}
 
     def _issue_refund(
@@ -522,6 +531,12 @@ class ToolExecutor:
             return refused("order_not_found")
         amount = to_dh(amount_qar)
         reason = engine.claim_reason(order_facts(order), reason)
+        if not items:
+            # Models often quote with the items and then file without them. A quote in
+            # this turn already named them, so the claim keeps them, for that amount only.
+            quoted, quoted_dh = self._quotes.get((order.id, reason), ([], None))
+            if quoted and quoted_dh == amount:
+                items = quoted
         # Keyed on the order's own lines, not on the words used. The same unit is one
         # claim whatever it is called and whatever reason is given. The units are in the
         # key, so "now two are missing" is a new claim that pays only for the second.

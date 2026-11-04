@@ -1206,3 +1206,15 @@ def test_a_paid_failed_delivery_is_not_called_uncollected(db, layla):
     layla.execute("issue_refund", {"order_id": order.id, "amount_qar": 5.0, "reason": "failed_contact_refund"})
     quote = layla.execute("quote_refund", {"order_id": order.id, "reason": "failed_contact_refund"})
     assert quote["error"] == "already_refunded"
+
+
+def test_arabic_item_names_match_without_the_article(layla):
+    quote = layla.execute("quote_refund", {"order_id": "JB-700102", "reason": "missing_item", "items": [{"name": "الشاي"}]})
+    assert quote["amount_qar"] == 4.0
+
+
+def test_a_claim_keeps_the_items_its_quote_named(layla):
+    layla.execute("quote_refund", {"order_id": "JB-700102", "reason": "missing_item", "items": MISSING["items"]})
+    args = {k: v for k, v in MISSING.items() if k != "items"}
+    assert layla.execute("issue_refund", {**args, "amount_qar": 3.0})["error"] == "items_required"
+    assert layla.execute("issue_refund", args)["status"] == "done"
