@@ -284,7 +284,7 @@ class SupportAgent:
         return checks.check_reply(
             reply,
             source_count=len(passages),
-            evidence=[p["text"] for p in passages],
+            evidence=[f"{p.get('title', '')}\n{p['text']}" for p in passages],
             tool_results=[entry["result"] for entry in result.tool_log if entry["tool"] != SEARCH_TOOL],
             done=effects.done,
             offered=effects.offered,

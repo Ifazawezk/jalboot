@@ -725,3 +725,21 @@ def test_a_planted_search_result_is_checked_too(db):
     result = SupportAgent(script, poisoned).respond("How do refunds to a card work?", tools)
     assert all("security code" not in str(message) for message in script.seen[1])
     assert result.flags.count("dropped_source: XYZ-01") == 2
+
+
+def test_a_cited_rule_the_passage_never_states_is_held_back(layla):
+    invented = LLMReply(
+        "Plus can only be bought by the account holder and cannot be gifted or transferred to another person [1]."
+    )
+    script = Script(invented, LLMReply("I am not sure about that. I can connect you to a person."))
+    result = run(script, layla, "Can I gift a Plus membership to a friend?")
+    assert "gifted" not in result.reply
+    assert result.citations == []
+    assert "says things that passage does not" in script.seen[1][-1]["content"]
+
+
+def test_a_cited_sentence_in_the_passage_own_words_is_sent(layla):
+    script = Script(LLMReply("Plus costs QAR 29 a month and gives free delivery on orders of QAR 50 or more [1]."))
+    result = run(script, layla, "How much is Plus and what does it give me?")
+    assert result.finish == "complete"
+    assert result.citations
