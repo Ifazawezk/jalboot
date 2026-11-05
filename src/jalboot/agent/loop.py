@@ -36,6 +36,9 @@ HISTORY_TURNS = 8
 SEARCH_TOOL = consent.SEARCH_TOOL
 CITATION_FIELDS = ("id", "doc", "doc_title", "title", "text", "updated")
 FINISHED = {"done", "pending_approval"}
+# Fields a tool adds for the reply to cite. The model has no numbered source for them,
+# and reading a bare section id changed what it cited, so it never sees them.
+FOR_REPLY_ONLY = ("policy",)
 
 
 class Knowledge(Protocol):
@@ -239,7 +242,7 @@ class SupportAgent:
                     else:
                         outcome = self._run_tool(result, tools, call, emit)
                     outside_text = outside_text or consent.reads_outside_text(call.name, outcome)
-                    shown = outcome
+                    shown = {k: v for k, v in outcome.items() if k not in FOR_REPLY_ONLY}
                     if call.name == SEARCH_TOOL and outcome.get("ok"):
                         found = self._verified(outcome.get("passages") or [], result)
                         shown = _add_sources({**outcome, "passages": found}, passages)
