@@ -1227,3 +1227,9 @@ def test_a_finished_cancellation_names_the_section_it_followed(db, layla):
 
 def test_a_refund_names_its_section_only_when_one_section_covers_it(layla):
     assert "policy" not in layla.execute("issue_refund", MISSING)
+
+
+def test_a_late_cancellation_names_the_other_section_that_states_its_rule(db, layla):
+    very_late(db, minutes=50)
+    result = layla.execute("cancel_order", {"order_id": "JB-700101"})
+    assert (result["policy"], result["policy_also"]) == ("CAN-04", ["LAT-03"])

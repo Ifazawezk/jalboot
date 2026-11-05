@@ -752,3 +752,25 @@ def test_a_finished_action_cites_the_section_the_tool_applied(db, layla):
     result = run(script, layla, "please cancel JB-700101")
     assert [c["id"] for c in result.citations] == ["CAN-04"]
     assert result.reply.endswith(f"[{result.citations[0]['n']}]")
+
+
+def test_the_model_does_not_read_the_section_a_tool_applied(db, layla):
+    db.get(Order, "JB-700101").promised_at = ANCHOR - timedelta(minutes=125)
+    db.commit()
+    script = Script(call("cancel_order", order_id="JB-700101"), LLMReply("All done."))
+    result = run(script, layla, "please cancel JB-700101")
+    shown = next(m for m in script.seen[-1] if m["role"] == "tool")
+    assert "CAN-04" not in shown["content"]
+    assert result.tool_log[0]["result"]["policy"] == "CAN-04"
+    assert [c["id"] for c in result.citations] == ["CAN-04"]
+
+
+def test_an_action_adds_no_section_when_the_reply_cites_one_with_the_same_rule(db, layla):
+    db.get(Order, "JB-700101").promised_at = ANCHOR - timedelta(minutes=50)
+    db.commit()
+    text = "JB-700101 is 50 minutes late and still has not arrived, cancel it please"
+    number = [p["id"] for p in relevant(KB.search(text, "en", k=4))].index("LAT-03") + 1
+    script = Script(call("cancel_order", order_id="JB-700101"), LLMReply(f"Your order is cancelled [{number}]."))
+    result = run(script, layla, text)
+    assert result.tool_log[0]["result"]["policy"] == "CAN-04"
+    assert [c["id"] for c in result.citations] == ["LAT-03"]

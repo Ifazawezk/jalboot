@@ -256,6 +256,24 @@ SUP-0215, SUP-0952, SUP-0335 and SUP-1003 are model errors that the gates and ch
 
 The tool changes meant running the compromised-model test again. Its numbers did not move.
 
+## Why citation precision fell at `39dfcec`
+
+On the same 40 cases, citation precision went from 1.00 at `1d2bf61` to 0.88 at `39dfcec`. Both wrong citations were in SUP-0255, a cancellation 50 minutes late during a storm. Its gold is LAT-03.
+
+- CAN-04 was added by the reply code after `cancel_order`. CAN-04 does state the free cancel at 45 minutes, so it isn't the wrong section. But the model had already cited LAT-03, whose table states the same rule, so the reply ended up with two sections for one rule.
+- LAT-02 came from the model. The cancellation result now carried `"policy": "CAN-04"`, and that field was the only change in what the model read. With it the model cited [1][2]. Without it the request matches the one recorded at `1d2bf61` and the model cites [1].
+
+The scorer follows SCORING.md, and LAT-03 is the section that says the time limits hold in severe weather, so neither the scoring nor the gold changed. One trade is worth knowing about. SUP-0253 is the same rule without the storm, and its gold lists both sections, so a reply there that cites only LAT-03 now finds one of the two.
+
+What changed after `39dfcec`:
+
+- The section a tool applied goes to the reply code only. The model never reads it.
+- A late cancellation also names LAT-03, and the reply adds no section when it already cites either one.
+
+I measured this by replaying the recorded replies of the `39dfcec` run from the local cache, with no API calls. 35 of the 40 cases replay. The other 5 miss the cache even on the unchanged code, so they keep their recorded result. Precision goes from 0.88 to 1.00 (15 of 15) and recall stays at 0.65. Resolution and the list of failed cases didn't change. This is a replay, not a new run, so the published numbers above stay as they are.
+
+`cancel_order` now returns one more field, so I ran the compromised-model test again. Its numbers did not move.
+
 ## Reproducing a run
 
 ```bash

@@ -36,6 +36,9 @@ HISTORY_TURNS = 8
 SEARCH_TOOL = consent.SEARCH_TOOL
 CITATION_FIELDS = ("id", "doc", "doc_title", "title", "text", "updated")
 FINISHED = {"done", "pending_approval"}
+# Fields a tool adds for the reply to cite. The model has no numbered source for them,
+# and reading a bare section id changed what it cited, so it never sees them.
+FOR_REPLY_ONLY = ("policy", "policy_also")
 
 
 class Knowledge(Protocol):
@@ -239,7 +242,7 @@ class SupportAgent:
                     else:
                         outcome = self._run_tool(result, tools, call, emit)
                     outside_text = outside_text or consent.reads_outside_text(call.name, outcome)
-                    shown = outcome
+                    shown = {k: v for k, v in outcome.items() if k not in FOR_REPLY_ONLY}
                     if call.name == SEARCH_TOOL and outcome.get("ok"):
                         found = self._verified(outcome.get("passages") or [], result)
                         shown = _add_sources({**outcome, "passages": found}, passages)
@@ -312,7 +315,8 @@ class SupportAgent:
 
     def _cite_applied(self, result: TurnResult, passages: list[dict[str, Any]], citations: list[int]) -> list[str]:
         """A reply about a finished action shows the section the tool applied, from the
-        published policy, when the model has not cited it already. Returns the markers."""
+        published policy, unless the model already cited a section that states the same
+        rule. Returns the markers."""
         published = getattr(self.policy, "published", None)
         if published is None:
             return []
@@ -321,7 +325,9 @@ class SupportAgent:
         for entry in result.tool_log:
             outcome = entry["result"]
             section = outcome.get("policy")
-            if not section or section in cited or not outcome.get("ok") or outcome.get("status") not in FINISHED:
+            if not section or not outcome.get("ok") or outcome.get("status") not in FINISHED:
+                continue
+            if cited & {section, *outcome.get("policy_also", ())}:
                 continue
             passage = published(section, result.language)
             if passage is None:
