@@ -68,7 +68,7 @@ Escalation recall sits above precision on purpose. Sending a person to a case th
 ## Results
 
 <!-- results:status -->
-**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 40 of 259 cases, partial for the agent and 12 of 259 cases, partial for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `39dfcec`: 40 of 259 cases, partial for the agent and 40 of 259 cases, partial for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
 <!-- /results:status -->
 
 <!-- results:run -->
@@ -76,12 +76,12 @@ Escalation recall sits above precision on purpose. Sending a person to a case th
 | --- | --- |
 | Model | `openai-gpt-oss-20b` |
 | Dense search | e5-small |
-| Code version | `1d2bf61` |
-| Date | 2026-11-04 |
+| Code version | `39dfcec` |
+| Date | 2026-11-05 |
 | Development cases | 40 of 259 cases, partial |
-| Plain chatbot, development cases | 12 of 259 cases, partial |
+| Plain chatbot, development cases | 40 of 259 cases, partial |
 | Held-out cases | Not run |
-| Why a run stopped | plain chatbot: stopped at the provider's limit: provider returned HTTP 429; retry in 128s |
+| Why a run stopped | No run was stopped |
 <!-- /results:run -->
 
 These tables are written by `scripts/fill_results.py` from the files in `eval/results`, and nothing in them comes from mock mode. A figure from a partial run covers only the cases counted here.
@@ -91,18 +91,18 @@ These tables are written by `scripts/fill_results.py` from the files in `eval/re
 <!-- results:headline -->
 | Metric | Gate | Dev | 95% interval, dev | Held-out | 95% interval, held-out | Held-out, English | Held-out, Arabic | Gate met on held-out? |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Resolution rate | at least 0.80 | 0.65 | 0.41 to 0.83 | Not run | Not run | Not run | Not run | Not run |
-| Wrong-refund rate | at most 0.02 | 0.13 | 0.05 to 0.30 | Not run | Not run | Not run | Not run | Not run |
-| Missed-refund rate | at most 0.10 | 0.50 | 0.15 to 0.85 | Not run | Not run | Not run | Not run | Not run |
+| Resolution rate | at least 0.80 | 0.71 | 0.47 to 0.87 | Not run | Not run | Not run | Not run | Not run |
+| Wrong-refund rate | at most 0.02 | 0.10 | 0.03 to 0.26 | Not run | Not run | Not run | Not run | Not run |
+| Missed-refund rate | at most 0.10 | 0.25 | 0.05 to 0.70 | Not run | Not run | Not run | Not run | Not run |
 | Unauthorized data access, `exposed` | 0 events | 0 | n/a | Not run | Not run | Not run | Not run | Not run |
-| Citation precision | at least 0.90 | 1.00 | n/a | Not run | Not run | Not run | Not run | Not run |
-| Citation recall | at least 0.80 | 0.52 | n/a | Not run | Not run | Not run | Not run | Not run |
+| Citation precision | at least 0.90 | 0.88 | n/a | Not run | Not run | Not run | Not run | Not run |
+| Citation recall | at least 0.80 | 0.65 | n/a | Not run | Not run | Not run | Not run | Not run |
 | Invented citations | 0 | 0 | n/a | Not run | Not run | Not run | Not run | Not run |
-| Abstention accuracy | at least 0.85 | 0.00 | n/a | Not run | Not run | Not run | Not run | Not run |
+| Abstention accuracy | at least 0.85 | 1.00 | n/a | Not run | Not run | Not run | Not run | Not run |
 | Escalation recall | at least 0.95 | 1.00 | n/a | Not run | Not run | Not run | Not run | Not run |
 | Escalation precision | at least 0.80 | 0.71 | n/a | Not run | Not run | Not run | Not run | Not run |
-| Red team, `critical` severity | every case passes | 0.80 | n/a | Not run | Not run | Not run | Not run | Not run |
-| Red team, overall | at least 0.95 | 0.90 | n/a | Not run | Not run | Not run | Not run | Not run |
+| Red team, `critical` severity | every case passes | 1.00 | n/a | Not run | Not run | Not run | Not run | Not run |
+| Red team, overall | at least 0.95 | 1.00 | n/a | Not run | Not run | Not run | Not run | Not run |
 <!-- /results:headline -->
 
 ### Also reported
@@ -112,7 +112,7 @@ These have no gate, but a report without them would hide something.
 <!-- results:also -->
 | Measure | Dev | Held-out |
 | --- | --- | --- |
-| Refund attempts blocked by the tool layer | 4 | Not run |
+| Refund attempts blocked by the tool layer | 3 | Not run |
 | Wrong refunds actually paid | 0 | Not run |
 | QAR overpaid across the run | 0.00 | Not run |
 | Unauthorized access, `attempted` | 1 | Not run |
@@ -129,12 +129,12 @@ These have no gate, but a report without them would hide something.
 <!-- results:against -->
 | Measure | Jalboot | Plain chatbot |
 | --- | --- | --- |
-| Cases | 40 of 259 cases, partial | 12 of 259 cases, partial |
-| Resolution rate | 0.65 | Too few cases |
-| Wrong-refund rate | 0.13 | Too few cases |
-| QAR overpaid | 0.00 | Too few cases |
-| Unauthorized access, `exposed` | 0 | Too few cases |
-| Red team, overall | 0.90 | Too few cases |
+| Cases | 40 of 259 cases, partial | 40 of 259 cases, partial |
+| Resolution rate | 0.71 | 0.41 |
+| Wrong-refund rate | 0.10 | 0.10 |
+| QAR overpaid | 0.00 | 43.00 |
+| Unauthorized access, `exposed` | 0 | 0 |
+| Red team, overall | 1.00 | 0.60 |
 <!-- /results:against -->
 
 ### Retrieval

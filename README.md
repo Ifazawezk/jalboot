@@ -273,7 +273,7 @@ pytest
 The full tables and intervals are in [docs/evaluation.md](docs/evaluation.md). No figure here comes from mock mode.
 
 <!-- results:status -->
-**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `1d2bf61`: 40 of 259 cases, partial for the agent and 12 of 259 cases, partial for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
+**The held-out test has not been run.** **These are not final scores.** The development figures come from a partial run at frozen commit `39dfcec`: 40 of 259 cases, partial for the agent and 40 of 259 cases, partial for the plain chatbot, taken in a fixed order that spreads them evenly over every set. The full evaluation continues over several days, because the model's free tier allows only part of it each day. Later runs will be published the same way.
 <!-- /results:status -->
 
 <!-- results:run -->
@@ -281,12 +281,12 @@ The full tables and intervals are in [docs/evaluation.md](docs/evaluation.md). N
 | --- | --- |
 | Model | `openai-gpt-oss-20b` |
 | Dense search | e5-small |
-| Code version | `1d2bf61` |
-| Date | 2026-11-04 |
+| Code version | `39dfcec` |
+| Date | 2026-11-05 |
 | Development cases | 40 of 259 cases, partial |
-| Plain chatbot, development cases | 12 of 259 cases, partial |
+| Plain chatbot, development cases | 40 of 259 cases, partial |
 | Held-out cases | Not run |
-| Why a run stopped | plain chatbot: stopped at the provider's limit: provider returned HTTP 429; retry in 128s |
+| Why a run stopped | No run was stopped |
 <!-- /results:run -->
 
 The model has not been scored yet: a run with fewer than 20 cases shows no rates, and the held-out test has not run. [docs/evaluation.md](docs/evaluation.md#where-the-runs-stand) tracks where the runs stand. Every figure below comes from a file in [`eval/results`](eval/results), and each gate has to hold in each language, not only overall.
@@ -294,21 +294,23 @@ The model has not been scored yet: a run with fewer than 20 cases shows no rates
 <!-- results:agent -->
 | Metric | Gate | Dev | Held-out | Held-out, English | Held-out, Arabic |
 | --- | --- | --- | --- | --- | --- |
-| Resolution rate | at least 0.80 | 0.65 | Not run | Not run | Not run |
-| Wrong-refund rate | at most 0.02 | 0.13 | Not run | Not run | Not run |
-| Missed-refund rate | at most 0.10 | 0.50 | Not run | Not run | Not run |
+| Resolution rate | at least 0.80 | 0.71 | Not run | Not run | Not run |
+| Wrong-refund rate | at most 0.02 | 0.10 | Not run | Not run | Not run |
+| Missed-refund rate | at most 0.10 | 0.25 | Not run | Not run | Not run |
 | Unauthorized data access, `exposed` | 0 events | 0 | Not run | Not run | Not run |
-| Citation precision | at least 0.90 | 1.00 | Not run | Not run | Not run |
-| Citation recall | at least 0.80 | 0.52 | Not run | Not run | Not run |
+| Citation precision | at least 0.90 | 0.88 | Not run | Not run | Not run |
+| Citation recall | at least 0.80 | 0.65 | Not run | Not run | Not run |
 | Invented citations | 0 | 0 | Not run | Not run | Not run |
-| Abstention accuracy | at least 0.85 | 0.00 | Not run | Not run | Not run |
+| Abstention accuracy | at least 0.85 | 1.00 | Not run | Not run | Not run |
 | Escalation recall | at least 0.95 | 1.00 | Not run | Not run | Not run |
 | Escalation precision | at least 0.80 | 0.71 | Not run | Not run | Not run |
-| Red team, `critical` severity | every case passes | 0.80 | Not run | Not run | Not run |
-| Red team, overall | at least 0.95 | 0.90 | Not run | Not run | Not run |
+| Red team, `critical` severity | every case passes | 1.00 | Not run | Not run | Not run |
+| Red team, overall | at least 0.95 | 1.00 | Not run | Not run | Not run |
 <!-- /results:agent -->
 
-The first 40 development cases miss several targets, and they are the cases to work on next. The wrong-refund rate counts refunds the model asked for that the case marks as wrong. In this run all 4 were blocked by the tool layer, and no money was paid, so the misses are in the model's choices, not in what got through. The failed cases are listed in `failed_case_ids` in the result file.
+These are the same first 40 development cases as the run at `1d2bf61`, rerun after the fixes in `39dfcec`. Abstention went from 0.00 to 1.00, the critical red team cases from 4 of 5 to 5 of 5, citation recall from 0.52 to 0.65, missed refunds from 0.50 to 0.25 and resolution from 0.65 to 0.71. Citation precision fell from 1.00 to 0.88, and that is the next thing to fix. The wrong-refund rate counts refunds the model asked for that the case marks as wrong. All 3 were blocked by the tool layer, and nothing was paid.
+
+On the same 40 cases the plain chatbot, which has the same model and tools with the policy pasted into its prompt, resolved 0.41, missed 0.75 of the refunds it should have made, passed 0.60 of the red team cases and paid out QAR 43.00 it should not have. Failed cases are listed in `failed_case_ids` in each result file.
 
 Retrieval was measured on its own, with no language model, on 50 development questions in both languages ([`eval/results/retrieval-dev.json`](eval/results/retrieval-dev.json)). A question counts only if all of its gold sections are in the top results.
 
