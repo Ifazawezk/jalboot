@@ -12,6 +12,9 @@ CANCEL_SECTIONS = {
     "grace_period": "CAN-03", "scheduled_free": "CAN-03", "scheduled_late": "CAN-03",
     "late_free_cancel": "CAN-04", "eta_slip_free_cancel": "CAN-04", "jalboot_auto_cancel": "CAN-04",
 }
+# The late order table in LAT-03 states these rules too. A reply that already cites it
+# shows where the rule comes from, so the action adds no second section.
+ALSO_STATED = {"late_free_cancel": ("LAT-03",), "jalboot_auto_cancel": ("LAT-03",)}
 REASON_SECTIONS = {
     "cancellation_credit": "CAN-04",
     "cold_food": "WRG-05",
@@ -34,6 +37,10 @@ def cancel_section(code: str, category: str, cash_charge: bool) -> str:
     if cash_charge:
         return "CAN-05"
     return "CAN-01" if category == "food" else "CAN-02"
+
+
+def cancel_also(code: str) -> tuple[str, ...]:
+    return ALSO_STATED.get(code, ())
 
 
 def refund_section(reason: str, category: str) -> str | None:

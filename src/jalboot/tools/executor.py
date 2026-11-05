@@ -34,7 +34,7 @@ from jalboot.db.models import (
 from jalboot.policy import engine
 from jalboot.policy.engine import APPROVAL, DENY, ESCALATE, EXECUTE, HANDOFF_CODES, ItemFact
 from jalboot.policy.rules import Rules, percent_of, to_dh, to_qar
-from jalboot.policy.sections import cancel_section, refund_section
+from jalboot.policy.sections import cancel_also, cancel_section, refund_section
 from jalboot.security.redact import redact
 from jalboot.text.normalize import normalize
 from jalboot.tools import specs
@@ -137,9 +137,12 @@ def conflict(code: str) -> dict[str, Any]:
     return refused("needs_person", rule=code, handoff_required="rule_conflict")
 
 
-def applied(section: str | None) -> dict[str, Any]:
-    """The policy section a finished action followed, for the reply to cite."""
-    return {"policy": section} if section else {}
+def applied(section: str | None, also: tuple[str, ...] = ()) -> dict[str, Any]:
+    """The policy section a finished action followed, for the reply to cite, and any
+    other section that states the same rule."""
+    if not section:
+        return {}
+    return {"policy": section, **({"policy_also": list(also)} if also else {})}
 
 
 def item_label(text: str) -> str:
@@ -958,7 +961,7 @@ class ToolExecutor:
             "to_credit_qar": to_qar(credit_back),
             **applied(cancel_section(
                 terms["code"], order.category, order.payment_method == "cash" and terms["charge_dh"] > 0,
-            )),
+            ), cancel_also(terms["code"])),
         })
 
     def _charge_confirmed(self, order: Order, terms: dict[str, Any], confirm_charge: bool) -> bool:
